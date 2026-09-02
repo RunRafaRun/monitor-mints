@@ -258,15 +258,28 @@ export async function buildData({ pub = false } = {}) {
     }
   }
 
+  // slug de OpenSea por nombre (data/opensea-slugs.json, lo puebla resolve-slugs.mjs)
+  const slugsPath = join(ROOT, "data", "opensea-slugs.json");
+  const slugMap = existsSync(slugsPath) ? JSON.parse(readFileSync(slugsPath, "utf8")) : {};
+  const slugFor = (name) => {
+    if (slugMap[name] && !/^_/.test(name)) return slugMap[name];
+    const hit = Object.keys(slugMap).find((k) => !/^_/.test(k) && norm(k) === norm(name));
+    return hit ? slugMap[hit] : null;
+  };
+
   const ranking = db.collections
-    .map((c) => ({
+    .map((c) => {
+      const slug = slugFor(c.name);
+      return {
       name: c.name, priority: c.priority || "", tier: c.tier,
       floorEth: c.floor_eth, floorUsd: c.floor_usd, wlValue: c.wl_value,
       gtd: c.gtd || 0, fcfs: c.fcfs || 0, wl: c.wl || 0,
       util: demonstratedUtility(c), ce: costEfficiency(c), owned: !!c.owned,
       wallets: walletsByColl.get(norm(c.name)) || [],
       notes: c.notes || "",
-    }))
+      opensea: slug ? `https://opensea.io/collection/${slug}` : null,
+    };
+    })
     .sort((a, b) => (b.wlValue ?? -1) - (a.wlValue ?? -1) || b.util - a.util || (a.floorEth ?? 9e9) - (b.floorEth ?? 9e9));
 
   let alerts = [];
@@ -406,6 +419,7 @@ padding:22px 26px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 border-radius:8px;padding:7px 12px;font-size:13px}
 #q::placeholder{color:var(--mut)}
 .filtrow .chk{margin:0}
+.oslink{font-size:11px;white-space:nowrap}
 tr[hidden]{display:none}
 #alertMenu{position:fixed;z-index:60;background:var(--card);border:1px solid var(--line);border-radius:10px;
 padding:5px;box-shadow:0 12px 40px rgba(0,0,0,.45);min-width:150px}
@@ -711,6 +725,9 @@ function whenCell(ms){
   return '<b>'+rel(ms)+'</b><br><span class="muted" style="font-size:11px">'+utc+' · "'+loc+'"</span>';
 }
 const links = m => [m.x&&'<a href="'+m.x+'" target="_blank">X</a>', m.site&&'<a href="'+m.site+'" target="_blank">web</a>', m.opensea&&'<a href="'+m.opensea+'" target="_blank">OpenSea</a>'].filter(Boolean).join(' · ')||'—';
+// enlace a OpenSea para las filas de Llaves / Comprar / Floors
+const osA = url => url ? ' <a href="'+url+'" target="_blank" rel="noopener" class="oslink" title="Ver en OpenSea">OpenSea ↗</a>' : '';
+const rankOs = name => { const c = D.ranking.find(x=>norm(x.name)===norm(name)); return c ? c.opensea : null; };
 const priceOf = s => { if(!s) return null; if(/free/i.test(s)) return 0; const m=String(s).match(/([\\d.]+)\\s*ETH/i); return m?+m[1]:null; };
 const phases = arr => arr.map(x=>{
   let e=priceOf(x.p);
@@ -1008,7 +1025,7 @@ function render(){
    D.ranking.map((c,i)=>{const own=isOwned(c.name);return '<tr class="'+(own?'row-have':'')+'">'+
     cell(t('c_have'), '<input type="checkbox" class="ownchk" data-name="'+esc(c.name)+'"'+(own?' checked':'')+'>')+
     cell('#', (i+1), 'num')+
-    cell(t('c_coll'), esc(c.name)+(own?' ✅':'')+(c.wallets&&c.wallets.length?' <span class="wchip" title="'+t('in_wallet')+'">'+c.wallets.map(esc).join('/')+'</span>':''), own?'owned':'')+
+    cell(t('c_coll'), esc(c.name)+(own?' ✅':'')+(c.wallets&&c.wallets.length?' <span class="wchip" title="'+t('in_wallet')+'">'+c.wallets.map(esc).join('/')+'</span>':'')+osA(c.opensea), own?'owned':'')+
     cell(t('c_prio'), c.priority)+cell(t('c_tier'), c.tier)+
     cell(t('c_floor'), money(c.floorEth), 'num')+
     cell(t('c_wl'), (c.wlValue??'—'), 'num')+
@@ -1026,13 +1043,13 @@ function render(){
    '<tr><th>'+t('c_prio')+'</th><th>'+t('c_coll')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_wl')+'</th><th>'+t('c_note')+'</th></tr>'+
    buy.map(c=>{const own=isOwned(c.name);return '<tr'+(own?' class="row-have"':'')+'>'+
     cell(t('c_prio'), c.priority)+
-    cell(t('c_coll'), (own?'<span class="owned">✅ </span>':'')+'<b'+(own?' style="opacity:.55"':'')+'>'+esc(c.name)+'</b>'+(own?' <span class="v2">'+t('have_key')+'</span>':''))+
+    cell(t('c_coll'), (own?'<span class="owned">✅ </span>':'')+'<b'+(own?' style="opacity:.55"':'')+'>'+esc(c.name)+'</b>'+(own?' <span class="v2">'+t('have_key')+'</span>':'')+osA(c.opensea))+
     cell(t('c_floor'), money(c.floorEth), 'num')+
     cell(t('c_wl'), (c.wlValue??'—'), 'num')+cell(t('c_note'), esc(c.notes), 'muted')+'</tr>';}).join('');
 
   document.getElementById('tFloors').innerHTML =
    '<tr><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_before')+'</th><th>'+t('c_after')+'</th><th>Δ</th></tr>'+
-   (D.alerts.map(a=>'<tr>'+cell(t('c_coll'), esc(a.name))+cell(t('c_prio'), a.priority)+
+   (D.alerts.map(a=>'<tr>'+cell(t('c_coll'), esc(a.name)+osA(rankOs(a.name)))+cell(t('c_prio'), a.priority)+
     cell(t('c_before'), money(a.from), 'num')+cell(t('c_after'), money(a.to), 'num')+
     cell('Δ', a.change.toFixed(0)+'%'+(a.change<=-15&&['👑','💎','🥇','🥈'].includes(a.priority)?' 🛒':''), 'num '+(a.change<0?'drop':'rise'))+'</tr>').join('')
     || '<tr><td colspan=5 class=muted>'+t('no_hist')+'</td></tr>');
