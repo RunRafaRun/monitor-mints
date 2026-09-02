@@ -151,7 +151,7 @@ export async function buildData({ pub = false } = {}) {
         pop: popularityVerdict(c),
         priceEth: c.priceEth ?? null, free: !!c.free,
         when: (openGate || nextGate)?.startMs ?? c.startMs ?? null,
-        phases: c.gates.filter((g) => g.kind !== "OTHER").map((g) => ({ k: g.kind, p: g.price || g.priceText || "?", s: g.state, a: g.startMs, e: g.endMs, lim: g.perWallet })),
+        phases: c.gates.filter((g) => g.kind !== "OTHER").map((g) => ({ k: g.kind, n: (g.label || g.name || "").trim() || null, p: g.price || g.priceText || "?", s: g.state, a: g.startMs, e: g.endMs, lim: g.perWallet })),
         need, haveKey: need.some((n) => n.owned),
         x: c.x, site: c.site, opensea: c.opensea, slug: c.openseaSlug || null,
         contract: (c.contract || "").toLowerCase() || null,
@@ -210,7 +210,8 @@ export async function buildData({ pub = false } = {}) {
           priceEth: null, free: e.phases.some((p) => p.free),
           when: (live || next)?.startMs ?? e.mintDate ?? null,
           phases: e.phases.filter((p) => p.kind !== "OTHER").map((p) => ({
-            k: p.kind, p: p.free ? "FREE" : p.priceEth != null ? p.priceEth + " ETH" : "?",
+            k: p.kind, n: (p.label || "").trim() || null,
+            p: p.free ? "FREE" : p.priceEth != null ? p.priceEth + " ETH" : "?",
             s: p.startMs && p.startMs <= now && (p.endMs ?? 1e18) > now ? "live" : p.endMs && p.endMs < now ? "ended" : "upcoming",
             a: p.startMs, e: p.endMs, lim: p.allocation, usd: p.priceUsd,
           })),
@@ -708,7 +709,12 @@ const phases = arr => arr.map(x=>{
   else if(x.s==='upcoming' && x.a) when=localShort(x.a)+' ('+rel(x.a)+')';
   const lim = x.lim ? '<span class="phlim" title="'+t('limit_tip')+'">×'+x.lim+'</span>' : '';
   const sub = when ? ' <span class="phwhen">'+when+'</span>' : '';
-  return '<span class="phwrap"><span class="pill ph-'+x.k+st+'" title="'+(x.s||'')+'">'+dot+x.k+' '+(e==null?esc(x.p):money(e))+lim+'</span>'+sub+'</span>';
+  // nombre real de la fase (como en OpenSea) si aporta algo sobre el tipo
+  const nm = x.n && x.n.trim();
+  const label = !nm ? x.k
+    : new RegExp(x.k,'i').test(nm.replace(/\\s+/g,'')) ? esc(nm)
+    : '<b>'+x.k+'</b> · '+esc(nm);
+  return '<span class="phwrap"><span class="pill ph-'+x.k+st+'" title="'+x.k+(x.s?' — '+x.s:'')+'">'+dot+label+' '+(e==null?esc(x.p):money(e))+lim+'</span>'+sub+'</span>';
 }).join(' ');
 
 function popClass(p){ if(/ALTO|ALTA|HIGH/i.test(p)) return 'pop-hi'; if(/MEDIO|MEDIA|MEDIUM/i.test(p)) return 'pop-mid'; return 'pop-lo'; }
@@ -945,13 +951,16 @@ function render(){
    '</tr>';}).join('');
 
   const order=['🥇','🥈','💎','👑'];
-  const buy = D.ranking.filter(c=>order.includes(c.priority) && !isOwned(c.name))
-    .sort((a,b)=>order.indexOf(a.priority)-order.indexOf(b.priority) || (b.wlValue??0)-(a.wlValue??0));
+  const buy = D.ranking.filter(c=>order.includes(c.priority))
+    .sort((a,b)=>(isOwned(a.name)?1:0)-(isOwned(b.name)?1:0)   // las que ya tienes, al final
+      || order.indexOf(a.priority)-order.indexOf(b.priority) || (b.wlValue??0)-(a.wlValue??0));
   document.getElementById('tBuy').innerHTML =
    '<tr><th>'+t('c_prio')+'</th><th>'+t('c_coll')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_wl')+'</th><th>'+t('c_note')+'</th></tr>'+
-   buy.map(c=>'<tr>'+cell(t('c_prio'), c.priority)+cell(t('c_coll'), '<b>'+esc(c.name)+'</b>')+
+   buy.map(c=>{const own=isOwned(c.name);return '<tr'+(own?' class="row-have"':'')+'>'+
+    cell(t('c_prio'), c.priority)+
+    cell(t('c_coll'), (own?'<span class="owned">✅ </span>':'')+'<b'+(own?' style="opacity:.55"':'')+'>'+esc(c.name)+'</b>'+(own?' <span class="v2">'+t('have_key')+'</span>':''))+
     cell(t('c_floor'), money(c.floorEth), 'num')+
-    cell(t('c_wl'), (c.wlValue??'—'), 'num')+cell(t('c_note'), esc(c.notes), 'muted')+'</tr>').join('');
+    cell(t('c_wl'), (c.wlValue??'—'), 'num')+cell(t('c_note'), esc(c.notes), 'muted')+'</tr>';}).join('');
 
   document.getElementById('tFloors').innerHTML =
    '<tr><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_before')+'</th><th>'+t('c_after')+'</th><th>Δ</th></tr>'+
