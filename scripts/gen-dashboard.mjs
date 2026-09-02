@@ -44,18 +44,31 @@ async function openseaForSlugs(items, ethUsd) {
   const stale = [...bySlug.keys()].filter((s) => !cache[s] || now - cache[s].at > FLOOR_TTL);
   if (key && stale.length) {
     for (const slug of stale.slice(0, 60)) {
-      const rec = { usd: null, eth: null, sym: null, minted: null, sales: 0, at: now, samples: cache[slug]?.samples || [], bad: false };
+      const rec = { usd: null, eth: null, sym: null, minted: null, sales: 0, at: now, samples: cache[slug]?.samples || [], bad: false,
+        owners: null, fee: null, vol24: null, volTotal: null, listed: null };
       try {
         const [s, c] = await Promise.all([
           fetch(`https://api.opensea.io/api/v2/collections/${slug}/stats`, H),
           fetch(`https://api.opensea.io/api/v2/collections/${slug}`, H),
         ]);
         let fp = null, sym = null, curUsd = null;
-        if (s.ok) { const tt = (await s.json())?.total || {}; fp = tt.floor_price ?? null; sym = tt.floor_price_symbol || null; rec.sales = tt.sales ?? 0; }
+        if (s.ok) {
+          const st = await s.json();
+          const tt = st?.total || {};
+          fp = tt.floor_price ?? null; sym = tt.floor_price_symbol || null;
+          rec.sales = tt.sales ?? 0;
+          rec.owners = tt.num_owners ?? null;
+          rec.volTotal = tt.volume ?? null;
+          const d1 = (st?.intervals || []).find((x) => x.interval === "one_day");
+          rec.vol24 = d1?.volume ?? null;
+        }
         if (c.ok) {
           const j = await c.json();
           rec.minted = j?.total_supply ?? j?.unique_item_count ?? null;
           curUsd = Number(j?.pricing_currencies?.listing_currency?.usd_price) || null;
+          // creator fee: suma de las fees declaradas (RH Chain OpenSea = 0% marketplace)
+          const fees = Array.isArray(j?.fees) ? j.fees : [];
+          if (fees.length) rec.fee = Math.round(fees.reduce((a, f) => a + (Number(f.fee) || 0), 0) * 100) / 100;
           const want = bySlug.get(slug);
           const got = (j?.contracts || []).map((x) => (x.address || "").toLowerCase());
           if (want && got.length && !got.includes(want)) rec.bad = true;
@@ -66,7 +79,7 @@ async function openseaForSlugs(items, ethUsd) {
           else { const u = fp * (curUsd || 1); rec.usd = u; rec.eth = ethUsd ? u / ethUsd : null; } // stablecoin
         }
       } catch {}
-      if (rec.bad) { rec.usd = rec.eth = rec.minted = null; }
+      if (rec.bad) { rec.usd = rec.eth = rec.minted = rec.owners = rec.fee = rec.vol24 = rec.volTotal = null; }
       if (rec.minted != null) rec.samples = [...rec.samples, { m: rec.minted, at: now }].slice(-6);
       cache[slug] = rec;
       await new Promise((r) => setTimeout(r, 90));
@@ -225,6 +238,15 @@ export async function buildData({ pub = false } = {}) {
     m.floorThin = !!(o && o.usd && o.sales < 3);
     // minted solo sube: nos quedamos con el mayor de (feed, OpenSea)
     if (o && o.minted != null) { m.mintedLive = o.minted; m.minted = Math.max(m.minted || 0, o.minted); }
+    // mercado / concentración / fee del creador (de las mismas llamadas a OpenSea)
+    m.owners = o?.owners ?? null;
+    m.fee = o?.fee ?? null;
+    m.vol24 = o?.vol24 ?? null;
+    m.volTotal = o?.volTotal ?? null;
+    const base = m.mintedLive || m.minted || 0;
+    m.ownersPct = m.owners != null && base > 0 ? m.owners / base : null;
+    // NFTs "extra" concentrados fuera de las wallets únicas (proxy de acumulación)
+    m.whaleHint = m.owners != null && base > 0 ? Math.max(0, base - m.owners) : null;
     // ritmo propio: minteados por 15 min a partir del histórico de muestras
     const sm = o?.samples || [];
     if (sm.length >= 2) {
@@ -485,6 +507,10 @@ const STR = {
   rate_tip15:'Ritmo real: minteados en los últimos ~15 min (calculado por el monitor con datos de OpenSea)',
   no_market:'sin mercado',thin_market:'mercado mínimo',closes:'cierra',
   limit_tip:'NFTs máximos por wallet en esta fase',two_src:'confirmado en 2 fuentes',
+  owners_tip:'Wallets únicas que poseen algún NFT, y qué % son del total minteado. Cerca del 100% = muy repartido. Bajo = pocas wallets acumulan muchos (🐳 si <45%).',
+  fee_tip:'Creator fee / royalty: % que se lleva el proyecto en cada reventa',
+  fee_lbl:'💸 royalty',
+  vol_tip:'Volumen de ventas en las últimas 24 h (moneda del floor)',
   legend:'Fases: <b class="ph-GTD">GTD</b> plaza garantizada · <b class="ph-FCFS">FCFS</b> por orden de llegada · <b class="ph-WL">WL/Holder</b> lista genérica · <b>TEAM/PUBLIC</b> equipo / abierto a todos.  <b>●</b> = abierta ahora · <s>tachada</s> = terminada · <b>×N</b> = NFTs por wallet'},
  en:{tab_radar:'Radar',tab_keys:'Keys',tab_buy:'Buy',tab_floors:'Floors',
   h_now:'Minting now / open phase',h_soon:'Next 72 h',
@@ -512,6 +538,10 @@ const STR = {
   rate_tip15:'Real rate: minted in the last ~15 min (computed by the monitor from OpenSea data)',
   no_market:'no market',thin_market:'thin market',closes:'closes',
   limit_tip:'Max NFTs per wallet in this phase',two_src:'confirmed by 2 sources',
+  owners_tip:'Unique wallets holding at least one NFT, and what % of total minted that is. Near 100% = well spread. Low = few wallets hoarding many (🐳 if <45%).',
+  fee_tip:'Creator fee / royalty: % the project takes on every resale',
+  fee_lbl:'💸 royalty',
+  vol_tip:'Sales volume in the last 24 h (floor currency)',
   legend:'Phases: <b class="ph-GTD">GTD</b> guaranteed spot · <b class="ph-FCFS">FCFS</b> first come first served · <b class="ph-WL">WL/Holder</b> generic list · <b>TEAM/PUBLIC</b> team / open to all.  <b>●</b> = open now · <s>struck</s> = ended · <b>×N</b> = NFTs per wallet'}
 };
 let L = localStorage.getItem('mints_lang') || (navigator.language||'es').slice(0,2);
@@ -600,16 +630,28 @@ function mintRows(list){
   if(!list.length) return '';
   return list.map(m=>'<tr'+(m.need&&m.need.some(n=>isOwned(n.name))?' class="row-have"':'')+'>'+
     '<td><b>'+esc(m.name)+'</b> '+(m.status==='now'?'<span class="badge b-now">'+t('now')+'</span>':'')+(m.srcs===2?' <span class="v2" title="'+t('two_src')+'">✓✓</span>':'')+'<br><span class="muted" style="font-size:12px">'+links(m)+'</span></td>'+
-    '<td class="num">'+nf(m.minted)+' / '+nf(m.supply)+rateCell(m)+'</td>'+
+    '<td class="num">'+nf(m.minted)+' / '+nf(m.supply)+rateCell(m)+ownersCell(m)+'</td>'+
     '<td class="num">'+m.hype+'</td>'+
     '<td>'+popTxt(m)+'</td>'+
     '<td>'+xCell(m)+'</td>'+
     '<td>'+(phases(m.phases)||'<span class="muted">—</span>')+'</td>'+
     '<td>'+needCell(m)+'</td>'+
-    '<td class="num">'+money(publicPrice(m))+'</td>'+
+    '<td class="num">'+money(publicPrice(m))+feeCell(m)+'</td>'+
     '<td class="num">'+floorRadar(m)+'</td>'+
     '<td class="num">'+whenCell(m.when)+'</td>'+
   '</tr>').join('');
+}
+// concentración: dueños únicos vs minteado. % alto = repartido; % bajo = acumulado.
+function ownersCell(m){
+  if(m.owners==null) return '';
+  const pct = m.ownersPct!=null ? Math.round(m.ownersPct*100) : null;
+  const cls = pct==null?'muted':pct>=70?'rise':pct>=45?'pop-mid':'drop';
+  const whale = pct!=null && pct<45 ? ' 🐳' : '';
+  return '<br><span class="'+cls+'" style="font-size:11px" title="'+t('owners_tip')+'">👤 '+nf(m.owners)+(pct!=null?' ('+pct+'%)':'')+whale+'</span>';
+}
+// creator fee (royalty) que cobra el proyecto en cada reventa
+function feeCell(m){
+  return m.fee!=null ? '<br><span class="eth" title="'+t('fee_tip')+'">'+t('fee_lbl')+' '+(+m.fee)+'%</span>' : '';
 }
 function rateCell(m){
   // ritmo real (muestras de OpenSea) si lo hay; si no, estimación desde el feed (2h/8)
