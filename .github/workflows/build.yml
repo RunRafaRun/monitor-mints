@@ -4,6 +4,11 @@ name: build-dashboard
 # en GitHub Pages. Las claves van como "Secrets" del repo, nunca en el HTML.
 
 on:
+  push:
+    branches: [master]        # se reconstruye también al subir cambios
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
   schedule:
     # cada 15 min. GitHub Actions puede retrasar/agrupar ejecuciones programadas
     # unos minutos si hay carga; el intervalo real suele ser 15-25 min.
