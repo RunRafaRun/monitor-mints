@@ -346,6 +346,7 @@ export function html(data, { served = false } = {}) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 ${data.public ? '<meta http-equiv="refresh" content="600">' : ""}
 <title>Monitor MINTS — Robinhood Chain</title>
+<link rel="icon" id="fav" href="data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><text x="6" y="52" font-size="52">🚨</text></svg>')}">
 <style>
 :root{color-scheme:light dark;--bg:#0f1115;--card:#191d24;--fg:#e7e9ee;--mut:#9aa4b2;--line:#2a2f3a;
 --now:#2ecc71;--soon:#4aa3ff;--warn:#ff6b6b;--gold:#f1c40f;--accent:#7aa2ff}
@@ -852,17 +853,18 @@ function beep(){
     });
   }catch(e){}
 }
+const favEl = document.getElementById('fav');
+const FAV_DEFAULT = favEl ? favEl.getAttribute('href') : null;
 function setBadge(){
   const n = alertQ.length;
   document.title = n ? '🔔('+n+') '+BASE_TITLE : BASE_TITLE;
-  let l = document.getElementById('dynfav');
-  if(!n){ if(l) l.remove(); return; }
-  if(!l){ l=document.createElement('link'); l.id='dynfav'; l.rel='icon'; document.head.appendChild(l); }
+  if(!favEl) return;
+  if(!n){ favEl.href = FAV_DEFAULT; return; }
   try{
     const c=document.createElement('canvas'); c.width=c.height=32; const x=c.getContext('2d');
     x.fillStyle='#ff3b30'; x.beginPath(); x.arc(16,16,15,0,7); x.fill();
     x.fillStyle='#fff'; x.font='bold 24px system-ui'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('!',16,18);
-    l.href=c.toDataURL('image/png');
+    favEl.href=c.toDataURL('image/png');
   }catch(e){}
 }
 function evText(a){
