@@ -330,7 +330,7 @@ export function html(data, { served = false } = {}) {
   const J = JSON.stringify(data).replace(/</g, "\\u003c");
   return `<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-${data.public ? '<meta http-equiv="refresh" content="900">' : ""}
+${data.public ? '<meta http-equiv="refresh" content="600">' : ""}
 <title>Monitor MINTS — Robinhood Chain</title>
 <style>
 :root{color-scheme:light dark;--bg:#0f1115;--card:#191d24;--fg:#e7e9ee;--mut:#9aa4b2;--line:#2a2f3a;
@@ -400,10 +400,22 @@ padding:22px 26px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .hm-box code{background:color-mix(in srgb,var(--fg) 13%,transparent);padding:0 4px;border-radius:4px;font-size:11.5px}
 .bell{background:transparent;border:0;cursor:pointer;font-size:13px;opacity:.45;padding:0 4px;line-height:1;vertical-align:middle}
 .bell:hover{opacity:.9}.bell.on{opacity:1}
+#q{margin-top:10px;width:100%;max-width:440px;background:var(--card);color:var(--fg);border:1px solid var(--line);
+border-radius:8px;padding:7px 12px;font-size:13px}
+#q::placeholder{color:var(--mut)}
+tr[hidden]{display:none}
+#alertMenu{position:fixed;z-index:60;background:var(--card);border:1px solid var(--line);border-radius:10px;
+padding:5px;box-shadow:0 12px 40px rgba(0,0,0,.45);min-width:150px}
+#alertMenu .am-h{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;padding:4px 8px 2px}
+#alertMenu button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--fg);
+font-size:12.5px;padding:6px 8px;border-radius:6px;cursor:pointer}
+#alertMenu button:hover{background:color-mix(in srgb,var(--accent) 22%,transparent)}
+#alertMenu button.sel{color:var(--now);font-weight:700}
 
 /* ---- móvil: cada fila pasa a ficha ---- */
 @media (max-width:860px){
   header{padding:10px}
+  #q{max-width:none}
   h1{font-size:15px}
   h2{margin:16px 10px 6px}
   .note{margin:8px 10px}
@@ -440,6 +452,7 @@ padding:22px 26px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)}
     <button data-t="buy">🛒 <span data-k="tab_buy"></span></button>
     <button data-t="floors">📉 <span data-k="tab_floors"></span></button>
   </div>
+  <input id="q" type="search" autocomplete="off" spellcheck="false">
 </header>
 
 <section data-p="radar">
@@ -545,7 +558,7 @@ const STR = {
   cartera:'llaves en tus wallets',cartera_none:'ninguna llave detectada en tus wallets',
   save_hint:'Marcado en este navegador. Para guardarlo en el fichero ejecuta:',
   save_local:'Guardado en este navegador (solo tú lo ves).',
-  sys_update:'se actualiza solo cada 15 min',
+  sys_update:'se actualiza solo cada 10 min',
   refresh:'Actualizar',saved:'Guardado en colecciones.json',refreshing:'Actualizando…',updated_ok:'Datos actualizados ✓',
   rate_tip:'Estimación /15 min a partir del ritmo de 2 h de NFT Trencher (÷8). Se vuelve exacto (sin ~) cuando el monitor lleva ≥15 min en marcha con serve.mjs.',
   rate_tip15:'Ritmo real: minteados en los últimos ~15 min (calculado por el monitor con datos de OpenSea)',
@@ -555,14 +568,17 @@ const STR = {
   fee_tip:'Creator fee / royalty: % que se lleva el proyecto en cada reventa',
   fee_lbl:'💸 royalty',
   vol_tip:'Volumen de ventas en las últimas 24 h (moneda del floor)',
-  alert_tip:'Avisarme ~10 min antes del próximo cambio de fase (deja la pestaña abierta)',
+  alert_tip:'Avisarme ~10 min antes de un cambio de fase — elige qué fase (deja la pestaña abierta)',
   alert_set:'🔔 Alerta activada. Te avisaré ~10 min antes. Deja esta pestaña abierta.',
   alert_set_toast:'🔔 Alerta activada (aviso en la propia página; las notificaciones del navegador están bloqueadas).',
   alert_off:'🔕 Alerta quitada',
   alert_body:'cambio de fase en ~{m} min',
+  alert_body_ph:'fase {p} en ~{m} min',
+  search_ph:'Buscar… (nombre, fase, llave, nota…)',
+  alert_pick:'¿De qué fase te aviso?',alert_any:'cualquier cambio de fase',
   legend:'Fases: <b class="ph-GTD">GTD</b> plaza garantizada · <b class="ph-FCFS">FCFS</b> por orden de llegada · <b class="ph-WL">WL/Holder</b> lista genérica · <b>TEAM/PUBLIC</b> equipo / abierto a todos.  <b>●</b> = abierta ahora · <s>tachada</s> = terminada · <b>×N</b> = NFTs por wallet',
   help:'<h3>Cómo leer Monitor MINTS</h3>'+
-   '<p>Seguimiento en vivo de los mints de Robinhood Chain. Se actualiza solo cada 15 min. Lo que marques se guarda solo en tu navegador.</p>'+
+   '<p>Seguimiento en vivo de los mints de Robinhood Chain. Se actualiza solo cada 10 min. Lo que marques se guarda solo en tu navegador. El buscador de arriba filtra las filas por cualquier texto (nombre, fase, llave, nota…).</p>'+
    '<h4>Una fila del Radar</h4><ul>'+
    '<li><b>Proyecto</b> — nombre + enlaces (X / web / OpenSea). <code>live</code> = minteando ahora, <code>SOON</code> = en menos de 72 h, <b>✓✓</b> = confirmado en 2 fuentes.</li>'+
    '<li><b>Minteado</b> — <code>373 / 4.4K</code> = minteados / supply total. <b>⚡ +N/15m</b> = ritmo en los últimos 15 min (<code>~</code> = estimación). <b>👤 294 (79%)</b> = wallets únicas con algún NFT y su % sobre lo minteado: verde ≥70% repartido, ámbar 45–70%, rojo + 🐳 por debajo de 45% = pocas wallets acumulan.</li>'+
@@ -571,7 +587,7 @@ const STR = {
    '<li><b>Llaves</b> — qué colecciones te dan acceso a ese mint. <b>⭐ TIENES LLAVE</b> si posees una; <i>elegibilidad sin investigar</i> = aún sin averiguar (las listas se anuncian en X/Discord).</li>'+
    '<li><b>Precio public</b> — precio de mint público ($ + ETH). <b>💸 royalty X%</b> = comisión del creador en cada reventa.</li>'+
    '<li><b>Floor</b> — floor del mercado secundario. <code>· 2.8×</code> = floor frente al precio de mint (verde sube / rojo baja); <code>FREE→$X</code> en mints gratis; <i>sin mercado / mercado mínimo</i> cuando hay pocas ventas.</li>'+
-   '<li><b>Cuándo</b> — cuenta atrás + hora exacta (UTC y tu hora local). El icono <b>🔕/🔔</b> activa un aviso ~10 min antes del siguiente cambio de fase (solo funciona con la pestaña abierta).</li>'+
+   '<li><b>Cuándo</b> — cuenta atrás + hora exacta (UTC y tu hora local). Pulsa <b>🔕/🔔</b> y elige la fase (p.ej. solo PUBLIC): te avisa ~10 min antes de ese cambio de fase (solo con la pestaña abierta).</li>'+
    '</ul><h4>Otras pestañas</h4><ul>'+
    '<li><b>🔑 Llaves</b> — todas las colecciones llave ordenadas por utilidad WL frente al precio. <code>wl_value</code> criterio editorial 0–10 · <code>util</code> GTD/FCFS/WL ponderado del registro de mints · <code>ce</code> = util ÷ floor (alto = infravalorada). Marca aquí lo que tienes.</li>'+
    '<li><b>🛒 Comprar</b> — lista corta de llaves top que aún no tienes, por prioridad y wl_value.</li>'+
@@ -597,7 +613,7 @@ const STR = {
   cartera:'keys across your wallets',cartera_none:'no keys detected in your wallets',
   save_hint:'Checked in this browser only. To save it to the file run:',
   save_local:'Saved in this browser (only you can see it).',
-  sys_update:'auto-updates every 15 min',
+  sys_update:'auto-updates every 10 min',
   refresh:'Refresh',saved:'Saved to colecciones.json',refreshing:'Refreshing…',updated_ok:'Data updated ✓',
   rate_tip:'/15 min estimate from NFT Trencher 2 h rate (÷8). Becomes exact (no ~) once the monitor has run ≥15 min with serve.mjs.',
   rate_tip15:'Real rate: minted in the last ~15 min (computed by the monitor from OpenSea data)',
@@ -607,14 +623,17 @@ const STR = {
   fee_tip:'Creator fee / royalty: % the project takes on every resale',
   fee_lbl:'💸 royalty',
   vol_tip:'Sales volume in the last 24 h (floor currency)',
-  alert_tip:'Notify me ~10 min before the next phase change (keep this tab open)',
+  alert_tip:'Alert me ~10 min before a phase change — pick which phase (keep this tab open)',
   alert_set:'🔔 Alert on. I will warn you ~10 min before. Keep this tab open.',
   alert_set_toast:'🔔 Alert on (in-page only; browser notifications are blocked).',
   alert_off:'🔕 Alert removed',
   alert_body:'phase change in ~{m} min',
+  alert_body_ph:'{p} phase in ~{m} min',
+  search_ph:'Search… (name, phase, key, note…)',
+  alert_pick:'Which phase should I alert on?',alert_any:'any phase change',
   legend:'Phases: <b class="ph-GTD">GTD</b> guaranteed spot · <b class="ph-FCFS">FCFS</b> first come first served · <b class="ph-WL">WL/Holder</b> generic list · <b>TEAM/PUBLIC</b> team / open to all.  <b>●</b> = open now · <s>struck</s> = ended · <b>×N</b> = NFTs per wallet',
   help:'<h3>How to read Monitor MINTS</h3>'+
-   '<p>Live tracker for Robinhood Chain mints. Auto-updates every 15 min. Anything you tick is saved only in your browser.</p>'+
+   '<p>Live tracker for Robinhood Chain mints. Auto-updates every 10 min. Anything you tick is saved only in your browser. The search box up top filters rows by any text (name, phase, key, note…).</p>'+
    '<h4>A Radar row</h4><ul>'+
    '<li><b>Project</b> — name + links (X / site / OpenSea). <code>live</code> = minting now, <code>SOON</code> = within 72 h, <b>✓✓</b> = confirmed by 2 sources.</li>'+
    '<li><b>Minted</b> — <code>373 / 4.4K</code> = minted / total supply. <b>⚡ +N/15m</b> = mint rate in the last 15 min (<code>~</code> = estimate). <b>👤 294 (79%)</b> = unique holder wallets and their share of minted: green ≥70% spread, amber 45–70%, red + 🐳 under 45% = few wallets hoarding.</li>'+
@@ -623,7 +642,7 @@ const STR = {
    '<li><b>Keys</b> — which collections make you eligible for that mint. <b>⭐ YOU HAVE A KEY</b> if you own one; <i>eligibility not researched</i> = not figured out yet (allowlists are announced on X/Discord).</li>'+
    '<li><b>Public price</b> — public mint price ($ + ETH). <b>💸 royalty X%</b> = creator fee taken on every resale.</li>'+
    '<li><b>Floor</b> — secondary-market floor. <code>· 2.8×</code> = floor vs mint price (green up / red down); <code>FREE→$X</code> for free mints; <i>no / thin market</i> when sales are too few to trust.</li>'+
-   '<li><b>When</b> — countdown + exact time (UTC and your local time). The <b>🔕/🔔</b> icon arms a heads-up ~10 min before the next phase change (only works while the tab is open).</li>'+
+   '<li><b>When</b> — countdown + exact time (UTC and your local time). Click <b>🔕/🔔</b> and pick a phase (e.g. PUBLIC only): you get a heads-up ~10 min before that phase change (only while the tab is open).</li>'+
    '</ul><h4>Other tabs</h4><ul>'+
    '<li><b>🔑 Keys</b> — every key collection ranked by WL utility vs price. <code>wl_value</code> editorial 0–10 · <code>util</code> weighted GTD/FCFS/WL from the mint log · <code>ce</code> = util ÷ floor (high = underpriced). Tick what you own here.</li>'+
    '<li><b>🛒 Buy</b> — shortlist of top-tier keys you do not own yet, by priority and wl_value.</li>'+
@@ -713,10 +732,14 @@ function needCell(m){
 }
 
 // ---- alertas por fila (solo mientras la pestaña esté abierta) ----
+// armed: Map  nombreNorm -> filtro de fase  ('*' = cualquier cambio, o 'GTD'/'FCFS'/'WL'/'HOLDER'/'PUBLIC'/'TEAM')
 const ALERT_LEAD = 10*60000;               // avisa 10 min antes
 const aKey = name => norm(name);
-let armed = new Set(); let firedAt = {};
-try{ armed = new Set(JSON.parse(localStorage.getItem('mints_alerts')||'[]')); }catch(e){}
+let armed = new Map(); let firedAt = {};
+try{
+  const raw = JSON.parse(localStorage.getItem('mints_alerts')||'[]');
+  for(const it of raw) Array.isArray(it) ? armed.set(it[0], it[1]||'*') : armed.set(it, '*'); // migra formato viejo
+}catch(e){}
 try{ firedAt = JSON.parse(localStorage.getItem('mints_alerts_fired')||'{}'); }catch(e){}
 const saveArmed = () => { try{ localStorage.setItem('mints_alerts', JSON.stringify([...armed])); }catch(e){} };
 function saveFired(){
@@ -725,36 +748,45 @@ function saveFired(){
   try{ localStorage.setItem('mints_alerts_fired', JSON.stringify(firedAt)); }catch(e){}
 }
 const isArmed = m => armed.has(aKey(m.name));
-function futureTimes(m){
-  const now=Date.now(), ts=[];
-  for(const p of m.phases||[]){ if(p.a>now) ts.push(p.a); if(p.e>now) ts.push(p.e); }
-  if(m.when>now) ts.push(m.when);
-  return [...new Set(ts)].sort((a,b)=>a-b);
+const armedFilter = m => armed.get(aKey(m.name)) || '*';
+// fases futuras de un mint que pasan el filtro -> [{ts, k}]
+function futureEvents(m, filter='*'){
+  const now=Date.now(), out=[];
+  for(const p of m.phases||[]){
+    if(filter!=='*' && p.k!==filter) continue;
+    if(p.a>now) out.push({ts:p.a, k:p.k});
+    if(p.e>now) out.push({ts:p.e, k:p.k});
+  }
+  if(filter==='*' && m.when>now && !out.some(e=>e.ts===m.when)) out.push({ts:m.when, k:null});
+  return out.sort((a,b)=>a.ts-b.ts);
 }
-const nextTs = m => futureTimes(m)[0] || null;
-async function toggleAlert(name){
-  const k=aKey(name);
-  if(armed.has(k)){ armed.delete(k); saveArmed(); render(); toast(t('alert_off')); return; }
+// tipos de fase con algún evento futuro (para el menú)
+const alertableKinds = m => [...new Set((m.phases||[]).filter(p=>p.a>Date.now()||p.e>Date.now()).map(p=>p.k))];
+const canAlert = m => alertableKinds(m).length>0 || m.when>Date.now();
+
+async function armAlert(name, filter){
   if('Notification' in window && Notification.permission==='default'){
     try{ await Notification.requestPermission(); }catch(e){}
   }
-  armed.add(k); saveArmed(); render();
+  armed.set(aKey(name), filter); saveArmed(); render();
   toast(('Notification' in window && Notification.permission==='denied') ? t('alert_set_toast') : t('alert_set'));
 }
+function disarmAlert(name){ armed.delete(aKey(name)); saveArmed(); render(); toast(t('alert_off')); }
+
 function checkAlerts(){
   const now=Date.now();
   for(const m of D.mints){
     if(!isArmed(m)) continue;
-    for(const ts of futureTimes(m)){
-      const key=aKey(m.name)+'|'+ts;
+    for(const ev of futureEvents(m, armedFilter(m))){
+      const key=aKey(m.name)+'|'+ev.ts;
       if(firedAt[key]) continue;
-      if(now>=ts-ALERT_LEAD && now<ts){ firedAt[key]=now; saveFired(); fireAlert(m,ts); }
+      if(now>=ev.ts-ALERT_LEAD && now<ev.ts){ firedAt[key]=now; saveFired(); fireAlert(m,ev); }
     }
   }
 }
-function fireAlert(m,ts){
-  const mins=Math.max(1,Math.round((ts-Date.now())/60000));
-  const msg=m.name+' — '+t('alert_body').replace('{m}',mins);
+function fireAlert(m,ev){
+  const mins=Math.max(1,Math.round((ev.ts-Date.now())/60000));
+  const msg=m.name+' — '+(ev.k ? t('alert_body_ph').replace('{p}',ev.k) : t('alert_body')).replace('{m}',mins);
   if('Notification' in window && Notification.permission==='granted'){
     try{ new Notification('🚨 Monitor MINTS', { body: msg }); }catch(e){}
   }
@@ -762,8 +794,30 @@ function fireAlert(m,ts){
   let n=0; const orig=document.title;
   const iv=setInterval(()=>{ document.title=(n%2?'🔔 ':'')+orig; if(++n>10){ clearInterval(iv); document.title=orig; } },1000);
 }
-const bellBtn = m => nextTs(m)==null ? '' :
-  '<button class="bell'+(isArmed(m)?' on':'')+'" data-alert="'+esc(m.name)+'" title="'+t('alert_tip')+'">'+(isArmed(m)?'🔔':'🔕')+'</button> ';
+function bellBtn(m){
+  if(!canAlert(m)) return '';
+  const on=isArmed(m), f=on?armedFilter(m):null;
+  const tag = on && f!=='*' ? '<sub style="font-size:8px">'+esc(f)+'</sub>' : '';
+  return '<button class="bell'+(on?' on':'')+'" data-alert="'+esc(m.name)+'" title="'+t('alert_tip')+'">'+(on?'🔔':'🔕')+tag+'</button> ';
+}
+// menú flotante para elegir la fase de la alerta
+function openAlertMenu(name, x, y){
+  closeAlertMenu();
+  const m = D.mints.find(mm=>aKey(mm.name)===aKey(name)); if(!m) return;
+  const on = armed.has(aKey(name));
+  const rows = [];
+  if(on) rows.push('<button data-f="__off">✕ '+t('alert_off').replace('🔕 ','')+'</button>');
+  rows.push('<button data-f="*">🔔 '+t('alert_any')+'</button>');
+  for(const k of alertableKinds(m)) rows.push('<button data-f="'+esc(k)+'"'+(on&&armedFilter(m)===k?' class="sel"':'')+'>'+esc(k)+'</button>');
+  const el = document.createElement('div');
+  el.id='alertMenu'; el.dataset.name=name;
+  el.innerHTML = '<div class="am-h">'+t('alert_pick')+'</div>'+rows.join('');
+  document.body.appendChild(el);
+  const w=el.offsetWidth, h=el.offsetHeight;
+  el.style.left = Math.max(6, Math.min(x, innerWidth-w-6))+'px';
+  el.style.top  = Math.max(6, Math.min(y, innerHeight-h-6))+'px';
+}
+function closeAlertMenu(){ const e=document.getElementById('alertMenu'); if(e) e.remove(); }
 
 const cell = (label,html,cls) => '<td'+(cls?' class="'+cls+'"':'')+' data-label="'+esc(label)+'">'+html+'</td>';
 function mintRows(list){
@@ -827,9 +881,20 @@ function floorRadar(m){
   return head+' <span class="'+(mult>=1?'rise':'drop')+'" style="font-size:11px">· '+mult.toFixed(1)+'×</span>';
 }
 
+// filtro de texto (subcadena, sin acentos) sobre cualquier texto de la fila
+const sNorm = s => String(s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+function applyFilter(){
+  const q = sNorm((document.getElementById('q').value||'').trim());
+  document.querySelectorAll('section[data-p] table tr').forEach(tr=>{
+    if(tr.querySelector('th')) return;
+    tr.hidden = q ? !sNorm(tr.textContent).includes(q) : false;
+  });
+}
+
 function render(){
   document.documentElement.lang = L;
   document.querySelectorAll('[data-k]').forEach(el=>el.textContent = t(el.dataset.k));
+  document.getElementById('q').placeholder = t('search_ph');
   document.getElementById('legend').innerHTML = t('legend');
   document.querySelectorAll('#lang button').forEach(b=>b.classList.toggle('on',b.dataset.l===L));
   const cart = D.holdings
@@ -881,6 +946,8 @@ function render(){
     cell(t('c_before'), money(a.from), 'num')+cell(t('c_after'), money(a.to), 'num')+
     cell('Δ', a.change.toFixed(0)+'%'+(a.change<=-15&&['👑','💎','🥇','🥈'].includes(a.priority)?' 🛒':''), 'num '+(a.change<0?'drop':'rise'))+'</tr>').join('')
     || '<tr><td colspan=5 class=muted>'+t('no_hist')+'</td></tr>');
+
+  applyFilter();
 }
 
 document.getElementById('lang').addEventListener('click',e=>{
@@ -889,15 +956,31 @@ document.getElementById('lang').addEventListener('click',e=>{
   if(!helpM.hidden) fillHelp();
 });
 document.getElementById('hideLow').addEventListener('change',render);
+document.getElementById('q').addEventListener('input',applyFilter);
 document.addEventListener('change',e=>{
   const chk=e.target.closest('.ownchk'); if(!chk) return;
   setOwned(chk.dataset.name, chk.checked);
 });
 document.addEventListener('click',e=>{
-  const b=e.target.closest('.bell'); if(!b) return;
-  e.stopPropagation();
-  toggleAlert(b.dataset.alert);
+  const item=e.target.closest('#alertMenu button');
+  if(item){
+    const name=document.getElementById('alertMenu').dataset.name;
+    const f=item.dataset.f;
+    closeAlertMenu();
+    if(f==='__off') disarmAlert(name); else armAlert(name, f);
+    return;
+  }
+  if(e.target.closest('#alertMenu')) return;
+  const b=e.target.closest('.bell');
+  if(b){
+    e.stopPropagation();
+    const r=b.getBoundingClientRect();
+    openAlertMenu(b.dataset.alert, r.left, r.bottom+4);
+    return;
+  }
+  closeAlertMenu();
 });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeAlertMenu(); });
 const rb=document.getElementById('refreshBtn');
 if(rb) rb.addEventListener('click',()=>reload(true));
 const helpM=document.getElementById('helpModal');

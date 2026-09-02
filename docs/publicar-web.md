@@ -12,11 +12,12 @@ Objetivo: una URL que puedas pasar a un grupo, donde **todos ven los mismos dato
   visitante NO llama a ninguna API ni puede forzar un refresco — **no hay botón de
   Actualizar** en esta versión (solo aparece en el servidor local `serve.mjs`).
 - La actualización la hace **el sistema**: un workflow de GitHub Actions
-  (`.github/workflows/build.yml`) regenera el HTML **cada 15 min** con tus claves
+  (`.github/workflows/build.yml`) regenera el HTML **cada 10 min** con tus claves
   (guardadas como *Secrets*, nunca en el HTML) y lo republica. Coste: 0 € en repo
-  público (Actions ilimitado; ~2-3 min/run).
-- La página lleva un `<meta http-equiv="refresh" content="900">`: si alguien deja
-  la pestaña abierta, se recarga sola cada 15 min y coge la última versión.
+  público (Actions ilimitado; ~2-3 min/run). GitHub estrangula los cron con carga,
+  así que el intervalo real suele quedar en 10-20 min.
+- La página lleva un `<meta http-equiv="refresh" content="600">`: si alguien deja
+  la pestaña abierta, se recarga sola cada 10 min y coge la última versión.
 - Cada visitante puede marcar "lo que tiene" en la pestaña **Llaves**: se guarda
   solo en el `localStorage` de su navegador, no se comparte ni se sube a ningún sitio.
 
@@ -50,18 +51,19 @@ Objetivo: una URL que puedas pasar a un grupo, donde **todos ven los mismos dato
    Al terminar, la URL sale en el job `deploy`:
    `https://<usuario>.github.io/monitor-mints/`
 
-A partir de ahí se regenera solo cada 15 min. Para cambiar la frecuencia, edita el
-`cron` en `.github/workflows/build.yml` (y el `content="900"` del meta-refresh en
+A partir de ahí se regenera solo cada 10 min. Para cambiar la frecuencia, edita el
+`cron` en `.github/workflows/build.yml` (y el `content="600"` del meta-refresh en
 `gen-dashboard.mjs` si quieres que la recarga del navegador vaya al mismo ritmo).
+`*/5` es el mínimo que admite GitHub pero rara vez lo cumple; `*/10` es el punto dulce.
 
-> GitHub Actions puede retrasar las ejecuciones programadas unos minutos cuando hay
-> carga; en la práctica el intervalo real suele ser de 15 a 25 min.
+> GitHub Actions puede retrasar las ejecuciones programadas cuando hay carga (sobre
+> todo al inicio de cada hora); en la práctica el intervalo real suele ser 10-20 min.
 
 ## Si prefieres repo PRIVADO
 
 GitHub Pages desde repo privado necesita plan de pago. Además, en repo privado los
-minutos de Actions gratis son 2000/mes: a un build cada 15 min **no caben** (harían
-falta ~8600). Opciones: subir el `cron` a `"*/45 * * * *"`, o —mejor— usar repo
+minutos de Actions gratis son 2000/mes: a un build cada 10-15 min **no caben**.
+Opciones: subir el `cron` a `"*/45 * * * *"`, o —mejor— usar repo
 **público** solo para que Actions sea ilimitado y desplegar a un host externo.
 
 Alternativas gratis: quita del workflow los dos jobs `build`/`deploy` y usa **un

@@ -10,11 +10,11 @@ on:
       - "docs/**"
       - "**/*.md"
   schedule:
-    # cada 15 min. GitHub Actions puede retrasar/agrupar ejecuciones programadas
-    # unos minutos si hay carga; el intervalo real suele ser 15-25 min.
-    # Repo PÚBLICO: minutos de Actions ilimitados. Repo PRIVADO: 2000 min/mes
-    # gratis -> a este ritmo NO caben; usa repo público o sube el cron a "*/45".
-    - cron: "*/15 * * * *"
+    # cada 10 min. GitHub Actions puede retrasar/agrupar ejecuciones programadas
+    # si hay carga (sobre todo al inicio de cada hora); el intervalo real suele
+    # quedar en 10-20 min. Repo PÚBLICO: minutos de Actions ilimitados.
+    # Repo PRIVADO: 2000 min/mes gratis -> a este ritmo NO caben; sube a "*/45".
+    - cron: "*/10 * * * *"
   workflow_dispatch: {}       # botón "Run workflow" manual
 
 permissions:
