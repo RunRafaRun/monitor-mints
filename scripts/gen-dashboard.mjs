@@ -29,6 +29,12 @@ import {
 const FLOOR_CACHE = join(ROOT, "data", "mint-floors.json");
 const FLOOR_TTL = 20 * 60 * 1000; // 20 min
 
+// agenda oficial del drop en OpenSea (SeaDrop). gql.opensea.io acepta queries
+// ad-hoc; devuelve null en dropBySlug si el mint no usa SeaDrop.
+const DROP_Q = `query($s:String!){dropBySlug(slug:$s){__typename` +
+  ` ...on Erc721SeaDropV1{stages{label stageType startTime endTime maxTotalMintableByWallet price{usd token{unit symbol}}}}` +
+  ` ...on Erc1155SeaDropV2{stages{label stageType startTime endTime maxTotalMintableByWallet price{usd token{unit symbol}}}}}}`;
+
 // Floor actual (ETH) + minteados EN VIVO de cada slug de OpenSea, con caché en disco.
 // El feed de NFT Trencher trae el "minted" a veces desfasado; OpenSea va al día.
 async function openseaForSlugs(items, ethUsd) {
@@ -45,7 +51,8 @@ async function openseaForSlugs(items, ethUsd) {
   if (key && stale.length) {
     for (const slug of stale.slice(0, 60)) {
       const rec = { usd: null, eth: null, sym: null, minted: null, sales: 0, at: now, samples: cache[slug]?.samples || [], bad: false,
-        owners: null, fee: null, vol24: null, volTotal: null, listed: null };
+        owners: null, fee: null, vol24: null, volTotal: null, listed: null,
+        stages: cache[slug]?.stages ?? null, stagesAt: cache[slug]?.stagesAt ?? 0 };
       try {
         const [s, c] = await Promise.all([
           fetch(`https://api.opensea.io/api/v2/collections/${slug}/stats`, H),
@@ -79,7 +86,7 @@ async function openseaForSlugs(items, ethUsd) {
           else { const u = fp * (curUsd || 1); rec.usd = u; rec.eth = ethUsd ? u / ethUsd : null; } // stablecoin
         }
       } catch {}
-      if (rec.bad) { rec.usd = rec.eth = rec.minted = rec.owners = rec.fee = rec.vol24 = rec.volTotal = null; }
+      if (rec.bad) { rec.usd = rec.eth = rec.minted = rec.owners = rec.fee = rec.vol24 = rec.volTotal = rec.stages = null; }
       if (rec.minted != null) rec.samples = [...rec.samples, { m: rec.minted, at: now }].slice(-6);
       cache[slug] = rec;
       await new Promise((r) => setTimeout(r, 90));
@@ -87,6 +94,54 @@ async function openseaForSlugs(items, ethUsd) {
     try { writeFileSync(FLOOR_CACHE, JSON.stringify(cache) + "\n"); } catch {}
   }
   return cache;
+}
+
+// Agenda oficial del drop (SeaDrop) vía gql.opensea.io. Se consulta SOLO para los
+// mints en curso / inminentes (no los ~60 slugs del floor) y con su propio TTL,
+// porque el endpoint tiene un límite de ráfaga bajo. Muta y reescribe `cache`.
+// dropBySlug devuelve null si el mint no usa SeaDrop -> nos quedamos sin agenda OS.
+const STAGES_TTL = 30 * 60 * 1000; // 30 min (la agenda no cambia tan a menudo)
+async function openseaDropStages(slugs, cache) {
+  if (process.env.OS_DROP_STAGES === "0") return;
+  const key = process.env.OPENSEA_API_KEY;
+  const now = Date.now();
+  // gql.opensea.io tiene un límite de ráfaga POR IP y persistente (~min). Si nos
+  // penalizó hace poco, ni lo intentamos hasta que pase el cooldown.
+  if ((cache.__gqlCooldown || 0) > now) return;
+  const want = [...new Set(slugs.filter(Boolean))]
+    .filter((s) => !(cache[s] && cache[s].bad) && now - ((cache[s] && cache[s].stagesAt) || 0) > STAGES_TTL);
+  if (!want.length) return;
+  let wrote = false;
+  for (const slug of want.slice(0, 12)) {
+    let r;
+    try {
+      r = await fetch("https://gql.opensea.io/graphql", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json", ...(key ? { "x-api-key": key } : {}) },
+        body: JSON.stringify({ query: DROP_Q, variables: { s: slug } }),
+      });
+    } catch { cache.__gqlCooldown = now + 15 * 60000; wrote = true; break; }
+    if (r.status === 429) { cache.__gqlCooldown = now + 30 * 60000; wrote = true; break; } // corta y espera 30 min
+    if (r.ok) {
+      try {
+        const st = (await r.json())?.data?.dropBySlug?.stages;
+        const rec = cache[slug] || (cache[slug] = { at: 0 });
+        rec.stagesAt = now;
+        rec.stages = Array.isArray(st) && st.length ? st.map((x) => ({
+          label: (x.label || "").trim() || null,
+          type: x.stageType || null,
+          a: Date.parse(x.startTime) || null,
+          e: Date.parse(x.endTime) || null,
+          lim: x.maxTotalMintableByWallet ?? null,
+          unit: x.price?.token?.unit ?? null,
+          usd: x.price?.usd ?? null,
+        })) : null;
+        wrote = true;
+      } catch {}
+    }
+    await new Promise((res) => setTimeout(res, 500));
+  }
+  if (wrote) { try { writeFileSync(FLOOR_CACHE, JSON.stringify(cache) + "\n"); } catch {} }
 }
 
 // Construye el objeto de datos del dashboard (lo usan gen-dashboard.mjs y serve.mjs).
@@ -196,11 +251,29 @@ export async function buildData({ pub = false } = {}) {
         if (!hit.supply && e.supply) hit.supply = e.supply;
         if (!hit.contract && e.contract) hit.contract = e.contract;
         if (!hit.slug && e.slug) hit.slug = e.slug;
-        // completar precio USD / allocation por tipo de fase
+        // completar precio USD / allocation + cruzar HORARIOS por tipo de fase
         for (const ep of e.phases) {
           const tp = hit.phases.find((p) => p.k === ep.kind);
-          if (tp) { if (ep.priceUsd != null && tp.usd == null) tp.usd = ep.priceUsd; if (ep.allocation != null && tp.lim == null) tp.lim = ep.allocation; }
+          if (!tp) continue;
+          if (ep.priceUsd != null && tp.usd == null) tp.usd = ep.priceUsd;
+          if (ep.allocation != null && tp.lim == null) tp.lim = ep.allocation;
+          // Las 2 fuentes discrepan a menudo en las horas (una queda desfasada tras
+          // un cambio de agenda). Los mints casi siempre se retrasan o se alargan,
+          // nunca se adelantan -> nos quedamos con la hora más TARDÍA de las dos.
+          if (ep.startMs && (tp.a == null || ep.startMs > tp.a)) tp.a = ep.startMs;
+          if (ep.endMs && (tp.e == null || ep.endMs > tp.e)) tp.e = ep.endMs;
         }
+        // recalcula estado de cada fase + "when" + status con los horarios ya cruzados
+        for (const p of hit.phases) {
+          if (p.a != null || p.e != null)
+            p.s = (p.a ?? 0) <= now && (p.e ?? 1e18) > now ? "live"
+              : p.e != null && p.e < now ? "ended" : "upcoming";
+        }
+        const openK2 = hit.phases.find((p) => KEYPHASE.includes(p.k) && (p.a ?? 0) <= now && (p.e ?? 0) > now);
+        const liveP2 = hit.phases.find((p) => (p.a ?? 0) <= now && (p.e ?? 1e18) > now);
+        const nextP2 = hit.phases.filter((p) => (p.a ?? 0) > now).sort((a, b) => a.a - b.a)[0];
+        hit.when = (openK2 || liveP2 || nextP2)?.a ?? hit.when;
+        if (liveP2 && hit.status !== "now") hit.status = "now";
         // colecciones elegibles si esta fuente las trae
         const elg = [...new Set(e.phases.flatMap((p) => p.eligible || []))];
         if (elg.length && !hit.need.length) {
@@ -247,6 +320,8 @@ export async function buildData({ pub = false } = {}) {
   const ETHUSD = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
     .then((r) => r.json()).then((j) => j.ethereum.usd).catch(() => db.meta.eth_usd_ref || 2400);
   const os = await openseaForSlugs(mints.map((m) => ({ slug: m.slug, contract: m.contract })), ETHUSD);
+  // agenda oficial del drop: solo para los mints en curso / inminentes
+  await openseaDropStages(mints.filter((m) => m.status === "now" || m.status === "soon").map((m) => m.slug), os);
   for (const m of mints) {
     const o = m.slug ? os[m.slug] : null;
     // floor solo fiable si hay mercado real (>=3 ventas)
@@ -274,6 +349,46 @@ export async function buildData({ pub = false } = {}) {
       const mins = (last.at - ref.at) / 60000;
       if (mins >= 5) m.rate15 = Math.max(0, Math.round(((last.m - ref.m) / mins) * 15));
     }
+  }
+
+  // ── OpenSea MANDA ─────────────────────────────────────────────────────────
+  // Si el mint usa SeaDrop, gql.opensea.io da la agenda oficial (la misma que se
+  // ve en la web de Robinhood). Sustituye a la del feed / WLMT, que se quedan
+  // desfasadas cuando el proyecto cambia horarios a mitad del drop.
+  const osStageKind = (type, label) => {
+    const u = (label || "").toUpperCase();
+    if (type === "PUBLIC_SALE" || /PUBLIC/.test(u)) return "PUBLIC";
+    if (/FCFS/.test(u)) return "FCFS";
+    if (/\bGTD\b|GUARANTEED/.test(u)) return "GTD";
+    if (/TEAM|TREASURY|PARTNER|VAULT|RESERVE/.test(u)) return "TEAM";
+    if (/HOLDER/.test(u)) return "HOLDER";
+    return "WL"; // SIGNED_PRESALE genérico -> lista de acceso
+  };
+  for (const m of mints) {
+    const oo = m.slug ? os[m.slug] : null;
+    const stg = oo && !oo.bad ? oo.stages : null;
+    if (!Array.isArray(stg) || !stg.length) continue;
+    const prev = m.phases || [];
+    m.phases = stg
+      .slice()
+      .sort((a, b) => (a.a ?? 0) - (b.a ?? 0))
+      .map((x) => {
+        const k = osStageKind(x.type, x.label);
+        const free = x.unit === 0 || (x.unit == null && x.usd === 0);
+        return {
+          k, n: x.label || prev.find((p) => p.k === k)?.n || null,
+          p: free ? "FREE" : x.unit != null ? x.unit + " ETH" : "?",
+          s: (x.a ?? 0) <= now && (x.e ?? 1e18) > now ? "live" : x.e && x.e < now ? "ended" : "upcoming",
+          a: x.a, e: x.e, lim: x.lim, usd: x.usd,
+        };
+      });
+    m.schedSrc = "opensea";
+    const openK = m.phases.find((p) => KEYPHASE.includes(p.k) && (p.a ?? 0) <= now && (p.e ?? 0) > now);
+    const liveP = m.phases.find((p) => (p.a ?? 0) <= now && (p.e ?? 1e18) > now);
+    const nextP = m.phases.filter((p) => (p.a ?? 0) > now).sort((a, b) => a.a - b.a)[0];
+    m.when = (openK || liveP || nextP)?.a ?? m.when;
+    if (liveP) m.status = "now";
+    else if (nextP && nextP.a <= soonCut && m.status === "later") m.status = "soon";
   }
 
   // slug de OpenSea por nombre (data/opensea-slugs.json, lo puebla resolve-slugs.mjs)
@@ -479,9 +594,15 @@ padding:3px 11px;cursor:pointer;font-size:12px}
 .chpill{font-size:9px;padding:1px 4px;border:1px solid var(--line);border-radius:4px;color:var(--mut);
 vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
 
+#hdrToggle{display:none}
+
 /* ---- móvil: cada fila pasa a ficha ---- */
 @media (max-width:860px){
   header{padding:10px}
+  #hdrToggle{display:inline-flex}
+  header.hcollapsed .sub,
+  header.hcollapsed .chains,
+  header.hcollapsed .filtrow{display:none}
   #q{max-width:none}
   h1{font-size:15px}
   h2{margin:16px 10px 6px}
@@ -508,6 +629,7 @@ vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
     <h1 id="h1">🚨 Monitor MINTS</h1>
     <div style="display:flex;gap:8px;align-items:center">
       ${served ? '<button id="refreshBtn" class="chk" style="border-radius:8px"><span data-k="refresh"></span></button>' : ""}
+      <button id="hdrToggle" class="chk" style="border-radius:8px;font-weight:700">☰</button>
       <button id="helpBtn" class="chk" style="border-radius:8px;font-weight:700" title="?">?</button>
       <div class="lang" id="lang"><button data-l="es">ES</button><button data-l="en">EN</button></div>
     </div>
@@ -615,6 +737,8 @@ const STR = {
   h_now:'Minteando ahora / fase abierta',h_soon:'Próximas 72 h',
   hide_low:'ocultar sin señal (sin X y hype 0)',
   only_keys:'solo mis llaves',
+  hdr_show:'mostrar filtros',hdr_hide:'ocultar filtros',
+  sched_os:'agenda oficial de OpenSea (SeaDrop) — sustituye a la del feed',
   all_chains:'Todas',
   note_elig:'El feed no trae los nombres de las colecciones elegibles para GTD/FCFS/WL: investígalos en X / web / OpenSea y regístralos con  node log-mint.mjs.',
   h_keys:'Ranking de llaves — utilidad WL/GTD/FCFS frente al precio',
@@ -673,6 +797,8 @@ const STR = {
   h_now:'Minting now / open phase',h_soon:'Next 72 h',
   hide_low:'hide no-signal (no X, hype 0)',
   only_keys:'only my keys',
+  hdr_show:'show filters',hdr_hide:'hide filters',
+  sched_os:'official OpenSea drop schedule (SeaDrop) — overrides the feed',
   all_chains:'All',
   note_elig:'The feed does not include the eligible collection names for GTD/FCFS/WL: research them on X / site / OpenSea and log them with  node log-mint.mjs.',
   h_keys:'Key ranking — WL/GTD/FCFS utility vs. price',
@@ -998,7 +1124,7 @@ function mintRows(list){
     cell(t('c_hype'), m.hype, 'num', m.hype||0)+
     cell(t('c_pop'), popTxt(m))+
     cell(t('c_x'), xCell(m), null, m.xFollowers||0)+
-    cell(t('c_phases'), phases(m.phases)||'<span class="muted">—</span>')+
+    cell(t('c_phases'), (phases(m.phases)||'<span class="muted">—</span>')+(m.schedSrc==='opensea'?' <span class="phwhen" title="'+t('sched_os')+'">· OpenSea</span>':''))+
     cell(t('c_keys'), needCell(m), null, keyRank(m))+
     cell(t('c_price'), money(publicPrice(m))+feeCell(m), 'num', publicPrice(m)??-1)+
     cell(t('c_floor'), floorRadar(m), 'num', m.floorUsd??-1)+
@@ -1094,17 +1220,17 @@ function render(){
     ' · ' + MINTS.length + ' mints · ' + RANKING.length + (L==='es'?' colecciones':' collections') + cart +
     (D.public ? ' · ' + t('sys_update') : '');
 
-  const HNOW='<tr><th>'+t('c_project')+'</th><th>'+t('c_supply')+'</th><th>'+t('c_hype')+'</th><th>'+t('c_pop')+
-    '</th><th>'+t('c_x')+'</th><th>'+t('c_phases')+'</th><th>'+t('c_keys')+'</th><th>'+t('c_price')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_when')+'</th></tr>';
+  const HNOW='<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_supply')+'</th><th>'+t('c_hype')+'</th><th>'+t('c_pop')+
+    '</th><th>'+t('c_x')+'</th><th>'+t('c_phases')+'</th><th>'+t('c_keys')+'</th><th>'+t('c_price')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_when')+'</th></tr></thead>';
   const nowL = MINTS.filter(m=>m.status==='now');
   let soonL = MINTS.filter(m=>m.status==='soon');
   if(document.getElementById('hideLow').checked) soonL = soonL.filter(m=>m.x || m.hype>0);
-  document.getElementById('tNow').innerHTML = HNOW + (mintRows(nowL) || '<tr><td colspan=10 class=muted>'+t('nothing_now')+'</td></tr>');
-  document.getElementById('tSoon').innerHTML = HNOW + (mintRows(soonL) || '<tr><td colspan=10 class=muted>'+t('nothing_soon')+'</td></tr>');
+  document.getElementById('tNow').innerHTML = HNOW + '<tbody>' + (mintRows(nowL) || '<tr><td colspan=10 class=muted>'+t('nothing_now')+'</td></tr>') + '</tbody>';
+  document.getElementById('tSoon').innerHTML = HNOW + '<tbody>' + (mintRows(soonL) || '<tr><td colspan=10 class=muted>'+t('nothing_soon')+'</td></tr>') + '</tbody>';
 
   document.getElementById('tKeys').innerHTML =
-   '<tr><th>'+t('c_have')+'</th><th>#</th><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_tier')+'</th><th>'+t('c_floor')+
-   '</th><th>'+t('c_wl')+'</th><th>'+t('c_ev')+'</th><th>util</th><th>ce</th><th>'+t('c_note')+'</th></tr>'+
+   '<thead><tr><th>'+t('c_have')+'</th><th>#</th><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_tier')+'</th><th>'+t('c_floor')+
+   '</th><th>'+t('c_wl')+'</th><th>'+t('c_ev')+'</th><th>util</th><th>ce</th><th>'+t('c_note')+'</th></tr></thead><tbody>'+
    RANKING.map((c,i)=>{const own=isOwned(c.name);return '<tr class="'+(own?'row-have':'')+'">'+
     cell(t('c_have'), '<input type="checkbox" class="ownchk" data-name="'+esc(c.name)+'"'+(own?' checked':'')+'>')+
     cell('#', (i+1), 'num')+
@@ -1116,28 +1242,29 @@ function render(){
     cell('util', c.util.toFixed(1), 'num')+
     cell('ce', (c.ce==null?'—':Math.round(c.ce)), 'num')+
     cell(t('c_note'), esc(c.notes), 'muted')+
-   '</tr>';}).join('');
+   '</tr>';}).join('')+'</tbody>';
 
   const order=['🥇','🥈','💎','👑'];
   const buy = RANKING.filter(c=>order.includes(c.priority))
     .sort((a,b)=>(isOwned(a.name)?1:0)-(isOwned(b.name)?1:0)   // las que ya tienes, al final
       || order.indexOf(a.priority)-order.indexOf(b.priority) || (b.wlValue??0)-(a.wlValue??0));
   document.getElementById('tBuy').innerHTML =
-   '<tr><th>'+t('c_prio')+'</th><th>'+t('c_coll')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_wl')+'</th><th>'+t('c_note')+'</th></tr>'+
+   '<thead><tr><th>'+t('c_prio')+'</th><th>'+t('c_coll')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_wl')+'</th><th>'+t('c_note')+'</th></tr></thead><tbody>'+
    buy.map(c=>{const own=isOwned(c.name);return '<tr'+(own?' class="row-have"':'')+'>'+
     cell(t('c_prio'), c.priority)+
     cell(t('c_coll'), chainPill(c.chain)+(own?'<span class="owned">✅ </span>':'')+'<b'+(own?' style="opacity:.55"':'')+'>'+esc(c.name)+'</b>'+(own?' <span class="v2">'+t('have_key')+'</span>':'')+osA(c.opensea))+
     cell(t('c_floor'), money(c.floorEth), 'num')+
-    cell(t('c_wl'), (c.wlValue??'—'), 'num')+cell(t('c_note'), esc(c.notes), 'muted')+'</tr>';}).join('');
+    cell(t('c_wl'), (c.wlValue??'—'), 'num')+cell(t('c_note'), esc(c.notes), 'muted')+'</tr>';}).join('')+'</tbody>';
 
   document.getElementById('tFloors').innerHTML =
-   '<tr><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_before')+'</th><th>'+t('c_after')+'</th><th>Δ</th></tr>'+
+   '<thead><tr><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_before')+'</th><th>'+t('c_after')+'</th><th>Δ</th></tr></thead><tbody>'+
    (D.alerts.map(a=>'<tr>'+cell(t('c_coll'), esc(a.name)+osA(rankOs(a.name)))+cell(t('c_prio'), a.priority)+
     cell(t('c_before'), money(a.from), 'num')+cell(t('c_after'), money(a.to), 'num')+
     cell('Δ', a.change.toFixed(0)+'%'+(a.change<=-15&&['👑','💎','🥇','🥈'].includes(a.priority)?' 🛒':''), 'num '+(a.change<0?'drop':'rise'))+'</tr>').join('')
-    || '<tr><td colspan=5 class=muted>'+t('no_hist')+'</td></tr>');
+    || '<tr><td colspan=5 class=muted>'+t('no_hist')+'</td></tr>')+'</tbody>';
 
   applyFilter();
+  if(typeof applyHdr==='function') applyHdr();
 }
 
 document.getElementById('lang').addEventListener('click',e=>{
@@ -1193,6 +1320,23 @@ document.getElementById('helpBtn').addEventListener('click',()=>{ fillHelp(); he
 document.getElementById('helpClose').addEventListener('click',()=>helpM.hidden=true);
 helpM.addEventListener('click',e=>{ if(e.target===helpM) helpM.hidden=true; });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') helpM.hidden=true; });
+
+// cabecera plegable (solo afecta a móvil vía CSS). Estado en localStorage.
+const hdrEl=document.querySelector('header'), hdrTog=document.getElementById('hdrToggle');
+function applyHdr(){
+  let v; try{ v=localStorage.getItem('mints_hdr'); }catch(e){}
+  const collapsed = v==='1';
+  hdrEl.classList.toggle('hcollapsed', collapsed);
+  hdrTog.textContent = collapsed ? '☰' : '✕';
+  hdrTog.title = t(collapsed ? 'hdr_show' : 'hdr_hide');
+}
+hdrTog.addEventListener('click',()=>{
+  const next = !hdrEl.classList.contains('hcollapsed');
+  try{ localStorage.setItem('mints_hdr', next?'1':'0'); }catch(e){}
+  applyHdr();
+});
+applyHdr();
+
 document.getElementById('tabs').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
   document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
@@ -1201,7 +1345,8 @@ document.getElementById('tabs').addEventListener('click',e=>{
 document.addEventListener('click',e=>{
   const th=e.target.closest('th'); if(!th) return;
   const tb=th.closest('table'), i=[...th.parentNode.children].indexOf(th);
-  const rows=[...tb.querySelectorAll('tr')].slice(1);
+  const body=tb.tBodies[0]||tb;
+  const rows=body===tb ? [...tb.querySelectorAll('tr')].slice(1) : [...body.rows];
   const asc=th.dataset.asc==='1'; th.dataset.asc=asc?'0':'1';
   rows.sort((a,b)=>{
     const ca=a.children[i], cb=b.children[i];
@@ -1217,7 +1362,7 @@ document.addEventListener('click',e=>{
     }
     return asc?-v:v;
   });
-  rows.forEach(r=>tb.appendChild(r));
+  rows.forEach(r=>body.appendChild(r));
 });
 render();
 renderAlertBanner();            // re-muestra avisos pendientes tras recargar
