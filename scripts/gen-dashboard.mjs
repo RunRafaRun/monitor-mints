@@ -398,6 +398,30 @@ padding:22px 26px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .hm-box ul{margin:.2em 0 .4em;padding-left:1.1em}
 .hm-box li{font-size:12.5px;line-height:1.65;margin-bottom:.35em}
 .hm-box code{background:color-mix(in srgb,var(--fg) 13%,transparent);padding:0 4px;border-radius:4px;font-size:11.5px}
+.bell{background:transparent;border:0;cursor:pointer;font-size:13px;opacity:.45;padding:0 4px;line-height:1;vertical-align:middle}
+.bell:hover{opacity:.9}.bell.on{opacity:1}
+
+/* ---- móvil: cada fila pasa a ficha ---- */
+@media (max-width:860px){
+  header{padding:10px}
+  h1{font-size:15px}
+  h2{margin:16px 10px 6px}
+  .note{margin:8px 10px}
+  .wrap{padding-bottom:40px}
+  .scroll{overflow:visible}
+  table{width:auto;margin:0 10px;font-size:13px}
+  thead{display:none}
+  table,tbody,tr,td{display:block}
+  tr{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 10px;padding:8px 12px}
+  tr:hover td{background:transparent}
+  td{border:0;padding:4px 0;text-align:left!important}
+  td::before{content:attr(data-label);display:block;color:var(--mut);font-weight:600;font-size:10px;
+    text-transform:uppercase;letter-spacing:.03em;margin-bottom:1px}
+  td[data-label=""]::before,td:not([data-label])::before{display:none}
+  td:first-child{font-size:15px;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:4px}
+  tr.row-have{outline:2px solid color-mix(in srgb,var(--now) 45%,transparent)}
+  .hm-box{padding:18px 16px}
+}
 </style></head><body>
 <div class="wrap">
 <header>
@@ -531,6 +555,11 @@ const STR = {
   fee_tip:'Creator fee / royalty: % que se lleva el proyecto en cada reventa',
   fee_lbl:'💸 royalty',
   vol_tip:'Volumen de ventas en las últimas 24 h (moneda del floor)',
+  alert_tip:'Avisarme ~10 min antes del próximo cambio de fase (deja la pestaña abierta)',
+  alert_set:'🔔 Alerta activada. Te avisaré ~10 min antes. Deja esta pestaña abierta.',
+  alert_set_toast:'🔔 Alerta activada (aviso en la propia página; las notificaciones del navegador están bloqueadas).',
+  alert_off:'🔕 Alerta quitada',
+  alert_body:'cambio de fase en ~{m} min',
   legend:'Fases: <b class="ph-GTD">GTD</b> plaza garantizada · <b class="ph-FCFS">FCFS</b> por orden de llegada · <b class="ph-WL">WL/Holder</b> lista genérica · <b>TEAM/PUBLIC</b> equipo / abierto a todos.  <b>●</b> = abierta ahora · <s>tachada</s> = terminada · <b>×N</b> = NFTs por wallet',
   help:'<h3>Cómo leer Monitor MINTS</h3>'+
    '<p>Seguimiento en vivo de los mints de Robinhood Chain. Se actualiza solo cada 15 min. Lo que marques se guarda solo en tu navegador.</p>'+
@@ -542,7 +571,7 @@ const STR = {
    '<li><b>Llaves</b> — qué colecciones te dan acceso a ese mint. <b>⭐ TIENES LLAVE</b> si posees una; <i>elegibilidad sin investigar</i> = aún sin averiguar (las listas se anuncian en X/Discord).</li>'+
    '<li><b>Precio public</b> — precio de mint público ($ + ETH). <b>💸 royalty X%</b> = comisión del creador en cada reventa.</li>'+
    '<li><b>Floor</b> — floor del mercado secundario. <code>· 2.8×</code> = floor frente al precio de mint (verde sube / rojo baja); <code>FREE→$X</code> en mints gratis; <i>sin mercado / mercado mínimo</i> cuando hay pocas ventas.</li>'+
-   '<li><b>Cuándo</b> — cuenta atrás + hora exacta (UTC y tu hora local).</li>'+
+   '<li><b>Cuándo</b> — cuenta atrás + hora exacta (UTC y tu hora local). El icono <b>🔕/🔔</b> activa un aviso ~10 min antes del siguiente cambio de fase (solo funciona con la pestaña abierta).</li>'+
    '</ul><h4>Otras pestañas</h4><ul>'+
    '<li><b>🔑 Llaves</b> — todas las colecciones llave ordenadas por utilidad WL frente al precio. <code>wl_value</code> criterio editorial 0–10 · <code>util</code> GTD/FCFS/WL ponderado del registro de mints · <code>ce</code> = util ÷ floor (alto = infravalorada). Marca aquí lo que tienes.</li>'+
    '<li><b>🛒 Comprar</b> — lista corta de llaves top que aún no tienes, por prioridad y wl_value.</li>'+
@@ -578,6 +607,11 @@ const STR = {
   fee_tip:'Creator fee / royalty: % the project takes on every resale',
   fee_lbl:'💸 royalty',
   vol_tip:'Sales volume in the last 24 h (floor currency)',
+  alert_tip:'Notify me ~10 min before the next phase change (keep this tab open)',
+  alert_set:'🔔 Alert on. I will warn you ~10 min before. Keep this tab open.',
+  alert_set_toast:'🔔 Alert on (in-page only; browser notifications are blocked).',
+  alert_off:'🔕 Alert removed',
+  alert_body:'phase change in ~{m} min',
   legend:'Phases: <b class="ph-GTD">GTD</b> guaranteed spot · <b class="ph-FCFS">FCFS</b> first come first served · <b class="ph-WL">WL/Holder</b> generic list · <b>TEAM/PUBLIC</b> team / open to all.  <b>●</b> = open now · <s>struck</s> = ended · <b>×N</b> = NFTs per wallet',
   help:'<h3>How to read Monitor MINTS</h3>'+
    '<p>Live tracker for Robinhood Chain mints. Auto-updates every 15 min. Anything you tick is saved only in your browser.</p>'+
@@ -589,7 +623,7 @@ const STR = {
    '<li><b>Keys</b> — which collections make you eligible for that mint. <b>⭐ YOU HAVE A KEY</b> if you own one; <i>eligibility not researched</i> = not figured out yet (allowlists are announced on X/Discord).</li>'+
    '<li><b>Public price</b> — public mint price ($ + ETH). <b>💸 royalty X%</b> = creator fee taken on every resale.</li>'+
    '<li><b>Floor</b> — secondary-market floor. <code>· 2.8×</code> = floor vs mint price (green up / red down); <code>FREE→$X</code> for free mints; <i>no / thin market</i> when sales are too few to trust.</li>'+
-   '<li><b>When</b> — countdown + exact time (UTC and your local time).</li>'+
+   '<li><b>When</b> — countdown + exact time (UTC and your local time). The <b>🔕/🔔</b> icon arms a heads-up ~10 min before the next phase change (only works while the tab is open).</li>'+
    '</ul><h4>Other tabs</h4><ul>'+
    '<li><b>🔑 Keys</b> — every key collection ranked by WL utility vs price. <code>wl_value</code> editorial 0–10 · <code>util</code> weighted GTD/FCFS/WL from the mint log · <code>ce</code> = util ÷ floor (high = underpriced). Tick what you own here.</li>'+
    '<li><b>🛒 Buy</b> — shortlist of top-tier keys you do not own yet, by priority and wl_value.</li>'+
@@ -678,19 +712,73 @@ function needCell(m){
       }).join(' ');
 }
 
+// ---- alertas por fila (solo mientras la pestaña esté abierta) ----
+const ALERT_LEAD = 10*60000;               // avisa 10 min antes
+const aKey = name => norm(name);
+let armed = new Set(); let firedAt = {};
+try{ armed = new Set(JSON.parse(localStorage.getItem('mints_alerts')||'[]')); }catch(e){}
+try{ firedAt = JSON.parse(localStorage.getItem('mints_alerts_fired')||'{}'); }catch(e){}
+const saveArmed = () => { try{ localStorage.setItem('mints_alerts', JSON.stringify([...armed])); }catch(e){} };
+function saveFired(){
+  const cut=Date.now()-2*864e5;
+  for(const k in firedAt){ if(firedAt[k]<cut) delete firedAt[k]; }
+  try{ localStorage.setItem('mints_alerts_fired', JSON.stringify(firedAt)); }catch(e){}
+}
+const isArmed = m => armed.has(aKey(m.name));
+function futureTimes(m){
+  const now=Date.now(), ts=[];
+  for(const p of m.phases||[]){ if(p.a>now) ts.push(p.a); if(p.e>now) ts.push(p.e); }
+  if(m.when>now) ts.push(m.when);
+  return [...new Set(ts)].sort((a,b)=>a-b);
+}
+const nextTs = m => futureTimes(m)[0] || null;
+async function toggleAlert(name){
+  const k=aKey(name);
+  if(armed.has(k)){ armed.delete(k); saveArmed(); render(); toast(t('alert_off')); return; }
+  if('Notification' in window && Notification.permission==='default'){
+    try{ await Notification.requestPermission(); }catch(e){}
+  }
+  armed.add(k); saveArmed(); render();
+  toast(('Notification' in window && Notification.permission==='denied') ? t('alert_set_toast') : t('alert_set'));
+}
+function checkAlerts(){
+  const now=Date.now();
+  for(const m of D.mints){
+    if(!isArmed(m)) continue;
+    for(const ts of futureTimes(m)){
+      const key=aKey(m.name)+'|'+ts;
+      if(firedAt[key]) continue;
+      if(now>=ts-ALERT_LEAD && now<ts){ firedAt[key]=now; saveFired(); fireAlert(m,ts); }
+    }
+  }
+}
+function fireAlert(m,ts){
+  const mins=Math.max(1,Math.round((ts-Date.now())/60000));
+  const msg=m.name+' — '+t('alert_body').replace('{m}',mins);
+  if('Notification' in window && Notification.permission==='granted'){
+    try{ new Notification('🚨 Monitor MINTS', { body: msg }); }catch(e){}
+  }
+  toast('🔔 '+msg, 12000);
+  let n=0; const orig=document.title;
+  const iv=setInterval(()=>{ document.title=(n%2?'🔔 ':'')+orig; if(++n>10){ clearInterval(iv); document.title=orig; } },1000);
+}
+const bellBtn = m => nextTs(m)==null ? '' :
+  '<button class="bell'+(isArmed(m)?' on':'')+'" data-alert="'+esc(m.name)+'" title="'+t('alert_tip')+'">'+(isArmed(m)?'🔔':'🔕')+'</button> ';
+
+const cell = (label,html,cls) => '<td'+(cls?' class="'+cls+'"':'')+' data-label="'+esc(label)+'">'+html+'</td>';
 function mintRows(list){
   if(!list.length) return '';
   return list.map(m=>'<tr'+(m.need&&m.need.some(n=>isOwned(n.name))?' class="row-have"':'')+'>'+
-    '<td><b>'+esc(m.name)+'</b> '+(m.status==='now'?'<span class="badge b-now">'+t('now')+'</span>':'')+(m.srcs===2?' <span class="v2" title="'+t('two_src')+'">✓✓</span>':'')+'<br><span class="muted" style="font-size:12px">'+links(m)+'</span></td>'+
-    '<td class="num">'+nf(m.minted)+' / '+nf(m.supply)+rateCell(m)+ownersCell(m)+'</td>'+
-    '<td class="num">'+m.hype+'</td>'+
-    '<td>'+popTxt(m)+'</td>'+
-    '<td>'+xCell(m)+'</td>'+
-    '<td>'+(phases(m.phases)||'<span class="muted">—</span>')+'</td>'+
-    '<td>'+needCell(m)+'</td>'+
-    '<td class="num">'+money(publicPrice(m))+feeCell(m)+'</td>'+
-    '<td class="num">'+floorRadar(m)+'</td>'+
-    '<td class="num">'+whenCell(m.when)+'</td>'+
+    cell('', '<b>'+esc(m.name)+'</b> '+(m.status==='now'?'<span class="badge b-now">'+t('now')+'</span>':'')+(m.srcs===2?' <span class="v2" title="'+t('two_src')+'">✓✓</span>':'')+'<br><span class="muted" style="font-size:12px">'+links(m)+'</span>')+
+    cell(t('c_supply'), nf(m.minted)+' / '+nf(m.supply)+rateCell(m)+ownersCell(m), 'num')+
+    cell(t('c_hype'), m.hype, 'num')+
+    cell(t('c_pop'), popTxt(m))+
+    cell(t('c_x'), xCell(m))+
+    cell(t('c_phases'), phases(m.phases)||'<span class="muted">—</span>')+
+    cell(t('c_keys'), needCell(m))+
+    cell(t('c_price'), money(publicPrice(m))+feeCell(m), 'num')+
+    cell(t('c_floor'), floorRadar(m), 'num')+
+    cell(t('c_when'), bellBtn(m)+whenCell(m.when), 'num')+
   '</tr>').join('');
 }
 // concentración: dueños únicos vs minteado. % alto = repartido; % bajo = acumulado.
@@ -766,16 +854,16 @@ function render(){
    '<tr><th>'+t('c_have')+'</th><th>#</th><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_tier')+'</th><th>'+t('c_floor')+
    '</th><th>'+t('c_wl')+'</th><th>'+t('c_ev')+'</th><th>util</th><th>ce</th><th>'+t('c_note')+'</th></tr>'+
    D.ranking.map((c,i)=>{const own=isOwned(c.name);return '<tr class="'+(own?'row-have':'')+'">'+
-    '<td><input type="checkbox" class="ownchk" data-name="'+esc(c.name)+'"'+(own?' checked':'')+'></td>'+
-    '<td class="num">'+(i+1)+'</td>'+
-    '<td class="'+(own?'owned':'')+'">'+esc(c.name)+(own?' ✅':'')+(c.wallets&&c.wallets.length?' <span class="wchip" title="'+t('in_wallet')+'">'+c.wallets.map(esc).join('/')+'</span>':'')+'</td>'+
-    '<td>'+c.priority+'</td><td>'+c.tier+'</td>'+
-    '<td class="num">'+money(c.floorEth)+'</td>'+
-    '<td class="num">'+(c.wlValue??'—')+'</td>'+
-    '<td class="num">'+c.gtd+'/'+c.fcfs+'/'+c.wl+'</td>'+
-    '<td class="num">'+c.util.toFixed(1)+'</td>'+
-    '<td class="num">'+(c.ce==null?'—':Math.round(c.ce))+'</td>'+
-    '<td class="muted">'+esc(c.notes)+'</td>'+
+    cell(t('c_have'), '<input type="checkbox" class="ownchk" data-name="'+esc(c.name)+'"'+(own?' checked':'')+'>')+
+    cell('#', (i+1), 'num')+
+    cell(t('c_coll'), esc(c.name)+(own?' ✅':'')+(c.wallets&&c.wallets.length?' <span class="wchip" title="'+t('in_wallet')+'">'+c.wallets.map(esc).join('/')+'</span>':''), own?'owned':'')+
+    cell(t('c_prio'), c.priority)+cell(t('c_tier'), c.tier)+
+    cell(t('c_floor'), money(c.floorEth), 'num')+
+    cell(t('c_wl'), (c.wlValue??'—'), 'num')+
+    cell(t('c_ev'), c.gtd+'/'+c.fcfs+'/'+c.wl, 'num')+
+    cell('util', c.util.toFixed(1), 'num')+
+    cell('ce', (c.ce==null?'—':Math.round(c.ce)), 'num')+
+    cell(t('c_note'), esc(c.notes), 'muted')+
    '</tr>';}).join('');
 
   const order=['🥇','🥈','💎','👑'];
@@ -783,15 +871,15 @@ function render(){
     .sort((a,b)=>order.indexOf(a.priority)-order.indexOf(b.priority) || (b.wlValue??0)-(a.wlValue??0));
   document.getElementById('tBuy').innerHTML =
    '<tr><th>'+t('c_prio')+'</th><th>'+t('c_coll')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_wl')+'</th><th>'+t('c_note')+'</th></tr>'+
-   buy.map(c=>'<tr><td>'+c.priority+'</td><td><b>'+esc(c.name)+'</b></td>'+
-    '<td class="num">'+money(c.floorEth)+'</td>'+
-    '<td class="num">'+(c.wlValue??'—')+'</td><td class="muted">'+esc(c.notes)+'</td></tr>').join('');
+   buy.map(c=>'<tr>'+cell(t('c_prio'), c.priority)+cell(t('c_coll'), '<b>'+esc(c.name)+'</b>')+
+    cell(t('c_floor'), money(c.floorEth), 'num')+
+    cell(t('c_wl'), (c.wlValue??'—'), 'num')+cell(t('c_note'), esc(c.notes), 'muted')+'</tr>').join('');
 
   document.getElementById('tFloors').innerHTML =
    '<tr><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_before')+'</th><th>'+t('c_after')+'</th><th>Δ</th></tr>'+
-   (D.alerts.map(a=>'<tr><td>'+esc(a.name)+'</td><td>'+a.priority+'</td>'+
-    '<td class="num">'+money(a.from)+'</td><td class="num">'+money(a.to)+'</td>'+
-    '<td class="num '+(a.change<0?'drop':'rise')+'">'+a.change.toFixed(0)+'%'+(a.change<=-15&&['👑','💎','🥇','🥈'].includes(a.priority)?' 🛒':'')+'</td></tr>').join('')
+   (D.alerts.map(a=>'<tr>'+cell(t('c_coll'), esc(a.name))+cell(t('c_prio'), a.priority)+
+    cell(t('c_before'), money(a.from), 'num')+cell(t('c_after'), money(a.to), 'num')+
+    cell('Δ', a.change.toFixed(0)+'%'+(a.change<=-15&&['👑','💎','🥇','🥈'].includes(a.priority)?' 🛒':''), 'num '+(a.change<0?'drop':'rise'))+'</tr>').join('')
     || '<tr><td colspan=5 class=muted>'+t('no_hist')+'</td></tr>');
 }
 
@@ -804,6 +892,11 @@ document.getElementById('hideLow').addEventListener('change',render);
 document.addEventListener('change',e=>{
   const chk=e.target.closest('.ownchk'); if(!chk) return;
   setOwned(chk.dataset.name, chk.checked);
+});
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.bell'); if(!b) return;
+  e.stopPropagation();
+  toggleAlert(b.dataset.alert);
 });
 const rb=document.getElementById('refreshBtn');
 if(rb) rb.addEventListener('click',()=>reload(true));
@@ -830,6 +923,8 @@ document.addEventListener('click',e=>{
 });
 render();
 setInterval(render, 60000); // los contadores bajan solos
+checkAlerts();
+setInterval(checkAlerts, 30000);
 </script>
 </body></html>`;
 }
