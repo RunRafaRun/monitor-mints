@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "updated": "2026-09-02",
+    "chain": "ethereum",
+    "notes": "AVISO: en Ethereum mainnet la WL NO se consigue holdeando colecciones-llave como en Robinhood Chain. De los ~23 mints activos vistos en el feed, la practica totalidad son solo 'FCFS | Public'. La WL se farmea via Premint/Alphabot/raffles/Discord. La unica gate por coleccion que se repite es 'OH NFT + PFP Holders' (Overhated). Esta lista es minima y honesta; se ampliara con log-mint.mjs si alguna coleccion empieza a aparecer de verdad en fases GTD/FCFS.",
+    "wl_value_scale": "10 = da WL de forma recurrente y fiable. En ETH mainnet casi nada llega a 6."
+  },
+  "collections": [
+    { "name": "Overhated", "aliases": ["OH NFT", "OH NFT + PFP Holders", "Overhated PFP"], "tier": "B+", "priority": "🥈", "floor_eth": null, "floor_usd": null, "wl_value": 6, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "La unica gate por coleccion que se repite en los mints de ETH del feed (Royal Pains, The Odyssey, Cyclops, Interstellar Inn). Holdear OH NFT o su PFP da fase reservada en esos mints." },
+    { "name": "CryptoPunks", "slug": "cryptopunks", "aliases": ["Punks"], "tier": "S+", "priority": "👑", "floor_eth": null, "floor_usd": null, "wl_value": 3, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "Blue chip de referencia. Da WL en colabs puntuales pero no de forma sistematica y el coste de entrada es prohibitivo como 'llave'." },
+    { "name": "Pudgy Penguins", "slug": "pudgypenguins", "aliases": ["Pudgys"], "tier": "S", "priority": "👑", "floor_eth": null, "floor_usd": null, "wl_value": 4, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "Blue chip con comunidad muy activa; aparece en allowlists de partners con cierta frecuencia. Cara como llave." },
+    { "name": "Milady Maker", "slug": "milady", "aliases": ["Miladys", "Milady"], "tier": "A", "priority": "🥇", "floor_eth": null, "floor_usd": null, "wl_value": 5, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "Ecosistema Remilia enorme; muchos mints derivados dan WL a holders de Milady. La mas 'llave' de las blue chips por relacion coste/uso." }
+  ]
+}

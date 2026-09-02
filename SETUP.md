@@ -104,6 +104,19 @@ El dashboard cruzará esos nombres con tus `owned` y marcará **⭐ TIENES LLAVE
 
 **El fichero suelto `dashboard.html` NO se actualiza solo** — es una foto. Regenéralo.
 
+### Varias redes (RH · ETH · Ink · Base)
+El radar recorre esas 4 redes en el feed de NFT Trencher + WLMT. El selector de arriba
+del dashboard filtra por red (por defecto **RobinHood**); solo aparecen las redes con
+mints o colecciones.
+
+Cada red tiene su fichero de colecciones-llave:
+- `data/colecciones.json` — RobinHood (el de siempre)
+- `data/colecciones-eth.json` / `-ink.json` / `-base.json` — mismo esquema. Cada
+  entrada puede llevar `slug` (el trozo final de `opensea.io/collection/XXX`).
+
+⚠️ `fetch-floors.mjs` y `rank.mjs` **solo tocan `colecciones.json`**: los `floor_eth`
+de las redes nuevas se ponen a mano en su JSON por ahora (o se dejan `null` → "—").
+
 ### Todo de golpe
 ```
 actualizar.cmd            (doble clic)   ó   node scripts/update.mjs

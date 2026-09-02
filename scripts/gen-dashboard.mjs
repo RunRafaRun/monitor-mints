@@ -100,14 +100,27 @@ export async function buildData({ pub = false } = {}) {
   const KEYPHASE = ["GTD", "FCFS", "WL", "HOLDER"];
   const relevant = (g) => KEYPHASE.includes(g.kind) && (g.endMs ?? 0) > now;
 
-  let cards = [];
-  try { cards = await fetchFeed("robinhood"); }
-  catch (e) { console.error("No pude bajar el feed de NFT Trencher:", e.message); }
+  // redes soportadas (id del feed/WLMT -> etiqueta corta para el dashboard)
+  const CHAINS = [
+    { id: "robinhood", label: "RH", name: "Robinhood Chain" },
+    { id: "ethereum", label: "ETH", name: "Ethereum" },
+    { id: "ink", label: "Ink", name: "Ink" },
+    { id: "base", label: "Base", name: "Base" },
+  ];
 
-  // dedup por nombre: la tarjeta con más señal
+  let cards = [];
+  for (const { id } of CHAINS) {
+    try {
+      const cc = await fetchFeed(id);
+      for (const c of cc) c.chain = c.chain || id;
+      cards.push(...cc);
+    } catch (e) { console.error(`feed ${id}:`, e.message); }
+  }
+
+  // dedup por (red + nombre): la tarjeta con más señal
   const seen = new Map();
   for (const c of cards) {
-    const k = c.name.toLowerCase();
+    const k = (c.chain || "robinhood") + "|" + c.name.toLowerCase();
     const score = (x) => (x.hype ?? 0) + (x.x ? 5 : 0) + x.gates.length;
     if (!seen.has(k) || score(c) > score(seen.get(k))) seen.set(k, c);
   }
@@ -144,7 +157,7 @@ export async function buildData({ pub = false } = {}) {
       const openGate = openKey || liveGate;
       const need = (elig[c.name] || []).map(need1);
       return {
-        name: c.name, status,
+        name: c.name, status, chain: c.chain || "robinhood",
         minted: c.minted, supply: c.supply, mintRate: c.mintRate,
         hype: c.hype ?? 0, tier: c.tier, team: c.team,
         xFollowers: c.xFollowers, xPosts: c.xPosts, xAgeDays: c.xAgeDays, socials: c.socials,
@@ -161,9 +174,14 @@ export async function buildData({ pub = false } = {}) {
     .filter((m) => m.status !== "later");
 
   // --- fuente secundaria: cruce y complemento ---
-  const extra = await fetchDailyMints().catch(() => []);
+  let extra = [];
+  for (const { id } of CHAINS) {
+    const rows = await fetchDailyMints(id).catch(() => []);
+    for (const r of rows) r.chain = r.chain || id;
+    extra.push(...rows);
+  }
   if (extra.length) {
-    const byName = new Map(mints.map((m) => [norm(m.name), m]));
+    const byName = new Map(mints.map((m) => [m.chain + "|" + norm(m.name), m]));
     const bySlug = new Map(mints.filter((m) => m.slug).map((m) => [m.slug, m]));
     const KEYK = ["GTD", "FCFS", "WL", "HOLDER", "TEAM"];
     const phaseWhen = (ph) => {
@@ -172,7 +190,7 @@ export async function buildData({ pub = false } = {}) {
       return { live, next };
     };
     for (const e of extra) {
-      const hit = (e.slug && bySlug.get(e.slug)) || byName.get(norm(e.name));
+      const hit = (e.slug && bySlug.get(e.slug)) || byName.get(e.chain + "|" + norm(e.name));
       if (hit) {
         hit.srcs = 2;
         if (!hit.supply && e.supply) hit.supply = e.supply;
@@ -202,7 +220,7 @@ export async function buildData({ pub = false } = {}) {
         if (status === "later") continue;
         const need = [...new Set(e.phases.flatMap((p) => p.eligible || []))].map(need1);
         mints.push({
-          name: e.name, status,
+          name: e.name, status, chain: e.chain || "robinhood",
           minted: null, supply: e.supply, mintRate: null,
           hype: 0, tier: null, team: null,
           xFollowers: null, xPosts: null, xAgeDays: -1, socials: 0,
@@ -267,11 +285,23 @@ export async function buildData({ pub = false } = {}) {
     return hit ? slugMap[hit] : null;
   };
 
-  const ranking = db.collections
+  // colecciones-llave: RH en colecciones.json + un fichero por red extra
+  const collFiles = { ethereum: "colecciones-eth.json", ink: "colecciones-ink.json", base: "colecciones-base.json" };
+  const allColls = db.collections.map((c) => ({ ...c, chain: c.chain || "robinhood" }));
+  for (const [ch, f] of Object.entries(collFiles)) {
+    const p = join(ROOT, "data", f);
+    if (!existsSync(p)) continue;
+    try {
+      const j = JSON.parse(readFileSync(p, "utf8"));
+      for (const c of j.collections || []) allColls.push({ ...c, chain: ch });
+    } catch (e) { console.error(`${f}:`, e.message); }
+  }
+
+  const ranking = allColls
     .map((c) => {
-      const slug = slugFor(c.name);
+      const slug = c.slug || slugFor(c.name);
       return {
-      name: c.name, priority: c.priority || "", tier: c.tier,
+      name: c.name, chain: c.chain, priority: c.priority || "", tier: c.tier,
       floorEth: c.floor_eth, floorUsd: c.floor_usd, wlValue: c.wl_value,
       gtd: c.gtd || 0, fcfs: c.fcfs || 0, wl: c.wl || 0,
       util: demonstratedUtility(c), ce: costEfficiency(c), owned: !!c.owned,
@@ -313,7 +343,10 @@ export async function buildData({ pub = false } = {}) {
       }
     : null;
 
-  const out = { updated: new Date().toISOString(), ethUsd: ETHUSD, mints, ranking, alerts, holdings: holdSummary, public: !!pub };
+  // solo ofrecemos en el selector las redes que traen algo
+  const present = new Set([...mints.map((m) => m.chain), ...ranking.map((r) => r.chain)]);
+  const chains = CHAINS.filter((c) => present.has(c.id));
+  const out = { updated: new Date().toISOString(), ethUsd: ETHUSD, mints, ranking, alerts, holdings: holdSummary, chains, public: !!pub };
   return pub ? stripPersonal(out) : out;
 }
 
@@ -345,7 +378,7 @@ export function html(data, { served = false } = {}) {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 ${data.public ? '<meta http-equiv="refresh" content="600">' : ""}
-<title>Monitor MINTS — Robinhood Chain</title>
+<title>Monitor MINTS</title>
 <link rel="icon" id="fav" href="data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><text x="6" y="52" font-size="52">🚨</text></svg>')}">
 <style>
 :root{color-scheme:light dark;--bg:#0f1115;--card:#191d24;--fg:#e7e9ee;--mut:#9aa4b2;--line:#2a2f3a;
@@ -438,6 +471,13 @@ box-shadow:0 6px 24px rgba(0,0,0,.5);animation:abflash .8s ease-in-out 4}
 #alertBanner button{background:rgba(255,255,255,.22);border:0;color:#fff;border-radius:6px;cursor:pointer;
 padding:3px 9px;font-size:12px;font-weight:700;flex:none}
 #alertBanner .ab-all{align-self:flex-end}
+.chains{display:flex;gap:5px;margin-top:10px;flex-wrap:wrap}
+.chains[hidden]{display:none}
+.chains button{background:var(--card);color:var(--mut);border:1px solid var(--line);border-radius:999px;
+padding:3px 11px;cursor:pointer;font-size:12px}
+.chains button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.chpill{font-size:9px;padding:1px 4px;border:1px solid var(--line);border-radius:4px;color:var(--mut);
+vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
 
 /* ---- móvil: cada fila pasa a ficha ---- */
 @media (max-width:860px){
@@ -465,7 +505,7 @@ padding:3px 9px;font-size:12px;font-weight:700;flex:none}
 <div class="wrap">
 <header>
   <div class="hrow">
-    <h1>🚨 Monitor MINTS — Robinhood Chain</h1>
+    <h1 id="h1">🚨 Monitor MINTS</h1>
     <div style="display:flex;gap:8px;align-items:center">
       ${served ? '<button id="refreshBtn" class="chk" style="border-radius:8px"><span data-k="refresh"></span></button>' : ""}
       <button id="helpBtn" class="chk" style="border-radius:8px;font-weight:700" title="?">?</button>
@@ -479,6 +519,7 @@ padding:3px 9px;font-size:12px;font-weight:700;flex:none}
     <button data-t="buy">🛒 <span data-k="tab_buy"></span></button>
     <button data-t="floors">📉 <span data-k="tab_floors"></span></button>
   </div>
+  <div class="chains" id="chains" hidden></div>
   <div class="filtrow">
     <input id="q" type="search" autocomplete="off" spellcheck="false">
     <label class="chk"><input type="checkbox" id="onlyKeys"> <span data-k="only_keys"></span></label>
@@ -574,6 +615,7 @@ const STR = {
   h_now:'Minteando ahora / fase abierta',h_soon:'Próximas 72 h',
   hide_low:'ocultar sin señal (sin X y hype 0)',
   only_keys:'solo mis llaves',
+  all_chains:'Todas',
   note_elig:'El feed no trae los nombres de las colecciones elegibles para GTD/FCFS/WL: investígalos en X / web / OpenSea y regístralos con  node log-mint.mjs.',
   h_keys:'Ranking de llaves — utilidad WL/GTD/FCFS frente al precio',
   note_keys:'wl_value = criterio editorial 0–10 (relación llave/precio). util = 1·GTD + 0.6·FCFS + 0.4·WL sobre mints registrados. ce = util/floor (alto = infravalorada).',
@@ -631,6 +673,7 @@ const STR = {
   h_now:'Minting now / open phase',h_soon:'Next 72 h',
   hide_low:'hide no-signal (no X, hype 0)',
   only_keys:'only my keys',
+  all_chains:'All',
   note_elig:'The feed does not include the eligible collection names for GTD/FCFS/WL: research them on X / site / OpenSea and log them with  node log-mint.mjs.',
   h_keys:'Key ranking — WL/GTD/FCFS utility vs. price',
   note_keys:'wl_value = editorial score 0–10 (key value per price). util = 1·GTD + 0.6·FCFS + 0.4·WL over logged mints. ce = util/floor (high = underpriced).',
@@ -688,6 +731,9 @@ const STR = {
 let L = localStorage.getItem('mints_lang') || (navigator.language||'es').slice(0,2);
 if(!STR[L]) L='es';
 const t = k => (STR[L][k] ?? k);
+let chainSel = localStorage.getItem('mints_chain') || 'robinhood';
+const chainLabel = id => { const c=(D.chains||[]).find(x=>x.id===(id||'robinhood')); return c?c.label:null; };
+const chainPill = id => { if((D.chains||[]).length<2) return ''; const l=chainLabel(id); return l?'<span class="chpill">'+esc(l)+'</span> ':''; };
 
 // --- X-style icons (line style, similar to x.com) ---
 const IC = {
@@ -818,7 +864,19 @@ async function armAlert(name, filter){
 }
 function disarmAlert(name){ armed.delete(aKey(name)); saveArmed(); render(); toast(t('alert_off')); }
 
+// quita alertas armadas cuyo mint ya no tiene ningún cambio de fase futuro
+function pruneArmed(){
+  let changed=false;
+  for(const key of [...armed.keys()]){
+    const m = D.mints.find(x=>aKey(x.name)===key);
+    if(m && !futureEvents(m,'*').length){ armed.delete(key); changed=true; }
+  }
+  if(changed) saveArmed();
+  return changed;
+}
+
 function checkAlerts(){
+  pruneArmed();
   const now=Date.now();
   for(const m of D.mints){
     if(!isArmed(m)) continue;
@@ -833,7 +891,12 @@ function checkAlerts(){
 let alertQ = [];
 try{ alertQ = JSON.parse(localStorage.getItem('mints_alerts_pending')||'[]'); }catch(e){}
 const saveQ = () => { try{ localStorage.setItem('mints_alerts_pending', JSON.stringify(alertQ)); }catch(e){} };
-const BASE_TITLE = 'Monitor MINTS — Robinhood Chain';
+// título según la red seleccionada
+function chainName(id){ const c=(D.chains||[]).find(x=>x.id===id); return c ? (c.name||c.label) : null; }
+function baseTitle(){
+  const n = chainSel==='all' ? null : chainName(chainSel);
+  return n ? 'Monitor MINTS — '+n : 'Monitor MINTS';
+}
 
 // pitido corto (Web Audio, sin fichero). Se "desbloquea" con un gesto del usuario.
 let actx = null;
@@ -857,7 +920,9 @@ const favEl = document.getElementById('fav');
 const FAV_DEFAULT = favEl ? favEl.getAttribute('href') : null;
 function setBadge(){
   const n = alertQ.length;
-  document.title = n ? '🔔('+n+') '+BASE_TITLE : BASE_TITLE;
+  const bt = baseTitle();
+  document.title = n ? '🔔('+n+') '+bt : bt;
+  const h1 = document.getElementById('h1'); if(h1) h1.textContent = '🚨 '+bt;
   if(!favEl) return;
   if(!n){ favEl.href = FAV_DEFAULT; return; }
   try{
@@ -876,7 +941,9 @@ function evText(a){
 }
 function renderAlertBanner(){
   const now=Date.now();
-  alertQ = alertQ.filter(a=>now-a.at < 2*3600e3);   // caduca a las 2 h
+  // fuera avisos viejos: >2 h desde que saltó, o la fase ya pasó hace >30 min
+  alertQ = alertQ.filter(a=>now-a.at < 2*3600e3 && a.ts > now - 30*60000);
+  saveQ();
   const el=document.getElementById('alertBanner');
   if(!alertQ.length){ el.hidden=true; setBadge(); return; }
   el.hidden=false;
@@ -926,7 +993,7 @@ const haveKeyRow = m => (m.need||[]).some(n=>isOwned(n.name));
 function mintRows(list){
   if(!list.length) return '';
   return list.map(m=>'<tr'+(haveKeyRow(m)?' class="row-have"':'')+'>'+
-    cell('', '<b>'+esc(m.name)+'</b> '+(m.status==='now'?'<span class="badge b-now">'+t('now')+'</span>':'')+(m.srcs===2?' <span class="v2" title="'+t('two_src')+'">✓✓</span>':'')+'<br><span class="muted" style="font-size:12px">'+links(m)+'</span>', null, esc(m.name).toLowerCase())+
+    cell('', chainPill(m.chain)+'<b>'+esc(m.name)+'</b> '+(m.status==='now'?'<span class="badge b-now">'+t('now')+'</span>':'')+(m.srcs===2?' <span class="v2" title="'+t('two_src')+'">✓✓</span>':'')+'<br><span class="muted" style="font-size:12px">'+links(m)+'</span>', null, esc(m.name).toLowerCase())+
     cell(t('c_supply'), nf(m.minted)+' / '+nf(m.supply)+rateCell(m)+ownersCell(m), 'num', m.minted||0)+
     cell(t('c_hype'), m.hype, 'num', m.hype||0)+
     cell(t('c_pop'), popTxt(m))+
@@ -998,11 +1065,25 @@ function applyFilter(){
 }
 
 function render(){
+  pruneArmed();
   document.documentElement.lang = L;
   document.querySelectorAll('[data-k]').forEach(el=>el.textContent = t(el.dataset.k));
   document.getElementById('q').placeholder = t('search_ph');
   document.getElementById('legend').innerHTML = t('legend');
   document.querySelectorAll('#lang button').forEach(b=>b.classList.toggle('on',b.dataset.l===L));
+
+  // selector de red (solo si hay más de una)
+  const chEl=document.getElementById('chains');
+  if((D.chains||[]).length>1){
+    if(chainSel!=='all' && !D.chains.some(c=>c.id===chainSel)) chainSel = D.chains[0].id;
+    chEl.hidden=false;
+    chEl.innerHTML='<button data-c="all"'+(chainSel==='all'?' class="on"':'')+'>'+t('all_chains')+'</button>'+
+      D.chains.map(c=>'<button data-c="'+c.id+'"'+(chainSel===c.id?' class="on"':'')+'>'+esc(c.label)+'</button>').join('');
+  } else chEl.hidden=true;
+  const inChain = x => chainSel==='all' || (x.chain||'robinhood')===chainSel;
+  const MINTS = D.mints.filter(inChain);
+  const RANKING = D.ranking.filter(inChain);
+  setBadge();   // título + h1 según la red seleccionada
   const cart = D.holdings
     ? ' · 👛 ' + (D.holdings.keys.length
         ? D.holdings.keys.length + ' ' + t('cartera') + ' (' + D.holdings.wallets.join(', ') + ')'
@@ -1010,13 +1091,13 @@ function render(){
     : '';
   document.getElementById('upd').textContent =
     (L==='es'?'Actualizado: ':'Updated: ') + new Date(D.updated).toLocaleString(L==='es'?'es-ES':'en-US') +
-    ' · ' + D.mints.length + ' mints · ' + D.ranking.length + (L==='es'?' colecciones':' collections') + cart +
+    ' · ' + MINTS.length + ' mints · ' + RANKING.length + (L==='es'?' colecciones':' collections') + cart +
     (D.public ? ' · ' + t('sys_update') : '');
 
   const HNOW='<tr><th>'+t('c_project')+'</th><th>'+t('c_supply')+'</th><th>'+t('c_hype')+'</th><th>'+t('c_pop')+
     '</th><th>'+t('c_x')+'</th><th>'+t('c_phases')+'</th><th>'+t('c_keys')+'</th><th>'+t('c_price')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_when')+'</th></tr>';
-  const nowL = D.mints.filter(m=>m.status==='now');
-  let soonL = D.mints.filter(m=>m.status==='soon');
+  const nowL = MINTS.filter(m=>m.status==='now');
+  let soonL = MINTS.filter(m=>m.status==='soon');
   if(document.getElementById('hideLow').checked) soonL = soonL.filter(m=>m.x || m.hype>0);
   document.getElementById('tNow').innerHTML = HNOW + (mintRows(nowL) || '<tr><td colspan=10 class=muted>'+t('nothing_now')+'</td></tr>');
   document.getElementById('tSoon').innerHTML = HNOW + (mintRows(soonL) || '<tr><td colspan=10 class=muted>'+t('nothing_soon')+'</td></tr>');
@@ -1024,10 +1105,10 @@ function render(){
   document.getElementById('tKeys').innerHTML =
    '<tr><th>'+t('c_have')+'</th><th>#</th><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_tier')+'</th><th>'+t('c_floor')+
    '</th><th>'+t('c_wl')+'</th><th>'+t('c_ev')+'</th><th>util</th><th>ce</th><th>'+t('c_note')+'</th></tr>'+
-   D.ranking.map((c,i)=>{const own=isOwned(c.name);return '<tr class="'+(own?'row-have':'')+'">'+
+   RANKING.map((c,i)=>{const own=isOwned(c.name);return '<tr class="'+(own?'row-have':'')+'">'+
     cell(t('c_have'), '<input type="checkbox" class="ownchk" data-name="'+esc(c.name)+'"'+(own?' checked':'')+'>')+
     cell('#', (i+1), 'num')+
-    cell(t('c_coll'), esc(c.name)+(own?' ✅':'')+(c.wallets&&c.wallets.length?' <span class="wchip" title="'+t('in_wallet')+'">'+c.wallets.map(esc).join('/')+'</span>':'')+osA(c.opensea), own?'owned':'')+
+    cell(t('c_coll'), chainPill(c.chain)+esc(c.name)+(own?' ✅':'')+(c.wallets&&c.wallets.length?' <span class="wchip" title="'+t('in_wallet')+'">'+c.wallets.map(esc).join('/')+'</span>':'')+osA(c.opensea), own?'owned':'')+
     cell(t('c_prio'), c.priority)+cell(t('c_tier'), c.tier)+
     cell(t('c_floor'), money(c.floorEth), 'num')+
     cell(t('c_wl'), (c.wlValue??'—'), 'num')+
@@ -1038,14 +1119,14 @@ function render(){
    '</tr>';}).join('');
 
   const order=['🥇','🥈','💎','👑'];
-  const buy = D.ranking.filter(c=>order.includes(c.priority))
+  const buy = RANKING.filter(c=>order.includes(c.priority))
     .sort((a,b)=>(isOwned(a.name)?1:0)-(isOwned(b.name)?1:0)   // las que ya tienes, al final
       || order.indexOf(a.priority)-order.indexOf(b.priority) || (b.wlValue??0)-(a.wlValue??0));
   document.getElementById('tBuy').innerHTML =
    '<tr><th>'+t('c_prio')+'</th><th>'+t('c_coll')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_wl')+'</th><th>'+t('c_note')+'</th></tr>'+
    buy.map(c=>{const own=isOwned(c.name);return '<tr'+(own?' class="row-have"':'')+'>'+
     cell(t('c_prio'), c.priority)+
-    cell(t('c_coll'), (own?'<span class="owned">✅ </span>':'')+'<b'+(own?' style="opacity:.55"':'')+'>'+esc(c.name)+'</b>'+(own?' <span class="v2">'+t('have_key')+'</span>':'')+osA(c.opensea))+
+    cell(t('c_coll'), chainPill(c.chain)+(own?'<span class="owned">✅ </span>':'')+'<b'+(own?' style="opacity:.55"':'')+'>'+esc(c.name)+'</b>'+(own?' <span class="v2">'+t('have_key')+'</span>':'')+osA(c.opensea))+
     cell(t('c_floor'), money(c.floorEth), 'num')+
     cell(t('c_wl'), (c.wlValue??'—'), 'num')+cell(t('c_note'), esc(c.notes), 'muted')+'</tr>';}).join('');
 
@@ -1067,6 +1148,11 @@ document.getElementById('lang').addEventListener('click',e=>{
 document.getElementById('hideLow').addEventListener('change',render);
 document.getElementById('q').addEventListener('input',applyFilter);
 document.getElementById('onlyKeys').addEventListener('change',applyFilter);
+document.getElementById('chains').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  chainSel=b.dataset.c; try{ localStorage.setItem('mints_chain',chainSel); }catch(err){}
+  render();
+});
 document.addEventListener('change',e=>{
   const chk=e.target.closest('.ownchk'); if(!chk) return;
   setOwned(chk.dataset.name, chk.checked);

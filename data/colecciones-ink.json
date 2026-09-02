@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "updated": "2026-09-02",
+    "chain": "ink",
+    "notes": "Colecciones-llave de INK (L2 de Kraken). Sembrado a partir de las fases GTD/FCFS observadas en los mints del feed (p.ej. INK-BRUH GTD = 'Wl, InkBrokers, Rekt Ink, Krak Mask, BOINK, Templars'; TheInklingsINK GTD INKLINGS; teddys/Ink Hornet/VOTS con GTD propio). Ecosistema muy nuevo: floors bajos o sin mercado, wl_value orientativo. `slug` verificado en OpenSea (chain=ink) donde consta.",
+    "wl_value_scale": "10 = mejor relacion utilidad/coste como llave en INK. Orientativo, ecosistema joven."
+  },
+  "collections": [
+    { "name": "InkBrokers", "slug": "inkbrokers", "aliases": ["Ink Brokers"], "tier": "A", "priority": "🥇", "floor_eth": null, "floor_usd": null, "wl_value": 8, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "Aparece en la GTD de INK-BRUH. Una de las colecciones de referencia del ecosistema INK." },
+    { "name": "Rekt Ink", "slug": "rekt-ink", "aliases": ["RektInk"], "tier": "A", "priority": "🥇", "floor_eth": 0.025, "floor_usd": null, "wl_value": 8, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "Aparece en la GTD de INK-BRUH. Con mercado real (floor ~0.025 ETH)." },
+    { "name": "Krak Mask", "aliases": ["KrakMask"], "tier": "A-", "priority": "🥈", "floor_eth": null, "floor_usd": null, "wl_value": 7, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "En la GTD de INK-BRUH. Colisiona con una coleccion homonima en Base — verificar contrato antes de comprar." },
+    { "name": "BOINK", "aliases": [], "tier": "A-", "priority": "🥈", "floor_eth": null, "floor_usd": null, "wl_value": 7, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "En la GTD de INK-BRUH. Slug de OpenSea sin verificar en chain=ink." },
+    { "name": "Templars", "aliases": [], "tier": "B+", "priority": "🥈", "floor_eth": null, "floor_usd": null, "wl_value": 6, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "En la GTD de INK-BRUH. Nombre muy generico — verificar que es el de INK." },
+    { "name": "Inklings", "slug": "inklings-ink", "aliases": ["TheInklingsINK", "the INKlings"], "tier": "A", "priority": "🥇", "floor_eth": null, "floor_usd": null, "wl_value": 8, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "TheInklingsINK reserva fases GTD/FCFS 'INKLINGS'. Coleccion identitaria del chain." },
+    { "name": "Ink Hornet", "slug": "ink-hornet", "aliases": [], "tier": "B+", "priority": "🥈", "floor_eth": null, "floor_usd": null, "wl_value": 6, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "Mint con fases Team/GTD/FCFS propias. Aun sin mercado secundario." },
+    { "name": "KRAK HEADS", "slug": "krak-heads", "aliases": ["KrakHeads"], "tier": "B", "priority": "💎", "floor_eth": null, "floor_usd": null, "wl_value": 5, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "Ecosistema Krak (Kraken). Reserva fase de equipo." },
+    { "name": "teddys", "aliases": ["teddy bear", "Teddys"], "tier": "B", "priority": "💎", "floor_eth": null, "floor_usd": null, "wl_value": 5, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "Mint con fase GTD propia. Colisiona con 'Teddys' en Base." },
+    { "name": "VOTS : ORIGINS", "aliases": ["VOTS ORIGINS"], "tier": "B", "priority": "💎", "floor_eth": null, "floor_usd": null, "wl_value": 5, "gtd": 0, "fcfs": 0, "wl": 0, "owned": false, "notes": "Mint con Team/GTD Freemint/GTD Paidmint/FCFS. Marca de ecosistema INK." }
+  ]
+}
