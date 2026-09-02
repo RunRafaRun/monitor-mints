@@ -386,6 +386,18 @@ tr.row-have td{background:color-mix(in srgb,var(--now) 9%,transparent)}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--card);color:var(--fg);
 border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:12px;white-space:pre-wrap;max-width:90vw;
 box-shadow:0 8px 30px rgba(0,0,0,.35);opacity:0;transition:opacity .3s;z-index:20}
+#helpModal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;
+padding:40px 16px;z-index:50;overflow:auto}
+#helpModal[hidden]{display:none}
+.hm-box{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:760px;width:100%;
+padding:22px 26px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.hm-x{position:absolute;top:8px;right:10px;background:transparent;border:0;color:var(--mut);font-size:17px;cursor:pointer}
+.hm-box h3{margin:.1em 0 .5em;font-size:16px}
+.hm-box h4{margin:1.1em 0 .35em;font-size:13px;color:var(--accent);text-transform:uppercase;letter-spacing:.04em}
+.hm-box p{font-size:12.5px;line-height:1.6}
+.hm-box ul{margin:.2em 0 .4em;padding-left:1.1em}
+.hm-box li{font-size:12.5px;line-height:1.65;margin-bottom:.35em}
+.hm-box code{background:color-mix(in srgb,var(--fg) 13%,transparent);padding:0 4px;border-radius:4px;font-size:11.5px}
 </style></head><body>
 <div class="wrap">
 <header>
@@ -393,6 +405,7 @@ box-shadow:0 8px 30px rgba(0,0,0,.35);opacity:0;transition:opacity .3s;z-index:2
     <h1>🚨 Monitor MINTS — Robinhood Chain</h1>
     <div style="display:flex;gap:8px;align-items:center">
       ${served ? '<button id="refreshBtn" class="chk" style="border-radius:8px"><span data-k="refresh"></span></button>' : ""}
+      <button id="helpBtn" class="chk" style="border-radius:8px;font-weight:700" title="?">?</button>
       <div class="lang" id="lang"><button data-l="es">ES</button><button data-l="en">EN</button></div>
     </div>
   </div>
@@ -431,6 +444,13 @@ box-shadow:0 8px 30px rgba(0,0,0,.35);opacity:0;transition:opacity .3s;z-index:2
   <div class="scroll"><table id="tFloors"></table></div>
   <p class="note" data-k="note_floors"></p>
 </section>
+</div>
+
+<div id="helpModal" hidden>
+  <div class="hm-box">
+    <button id="helpClose" class="hm-x" title="✕">✕</button>
+    <div id="helpBody"></div>
+  </div>
 </div>
 
 <script>
@@ -511,7 +531,23 @@ const STR = {
   fee_tip:'Creator fee / royalty: % que se lleva el proyecto en cada reventa',
   fee_lbl:'💸 royalty',
   vol_tip:'Volumen de ventas en las últimas 24 h (moneda del floor)',
-  legend:'Fases: <b class="ph-GTD">GTD</b> plaza garantizada · <b class="ph-FCFS">FCFS</b> por orden de llegada · <b class="ph-WL">WL/Holder</b> lista genérica · <b>TEAM/PUBLIC</b> equipo / abierto a todos.  <b>●</b> = abierta ahora · <s>tachada</s> = terminada · <b>×N</b> = NFTs por wallet'},
+  legend:'Fases: <b class="ph-GTD">GTD</b> plaza garantizada · <b class="ph-FCFS">FCFS</b> por orden de llegada · <b class="ph-WL">WL/Holder</b> lista genérica · <b>TEAM/PUBLIC</b> equipo / abierto a todos.  <b>●</b> = abierta ahora · <s>tachada</s> = terminada · <b>×N</b> = NFTs por wallet',
+  help:'<h3>Cómo leer Monitor MINTS</h3>'+
+   '<p>Seguimiento en vivo de los mints de Robinhood Chain. Se actualiza solo cada 15 min. Lo que marques se guarda solo en tu navegador.</p>'+
+   '<h4>Una fila del Radar</h4><ul>'+
+   '<li><b>Proyecto</b> — nombre + enlaces (X / web / OpenSea). <code>live</code> = minteando ahora, <code>SOON</code> = en menos de 72 h, <b>✓✓</b> = confirmado en 2 fuentes.</li>'+
+   '<li><b>Minteado</b> — <code>373 / 4.4K</code> = minteados / supply total. <b>⚡ +N/15m</b> = ritmo en los últimos 15 min (<code>~</code> = estimación). <b>👤 294 (79%)</b> = wallets únicas con algún NFT y su % sobre lo minteado: verde ≥70% repartido, ámbar 45–70%, rojo + 🐳 por debajo de 45% = pocas wallets acumulan.</li>'+
+   '<li><b>Hype / Popularidad / Actividad X</b> — hype del feed, lectura ALTA/MEDIA/BAJA de la cuenta de X, y los números en crudo: seguidores · posts · antigüedad. Antigüedad marcada = cuenta con menos de 30 días.</li>'+
+   '<li><b>Fases</b> — una pastilla por fase con su precio. <b class="ph-GTD">GTD</b> plaza garantizada · <b class="ph-FCFS">FCFS</b> por orden de llegada · <b class="ph-WL">WL/Holder</b> lista genérica · <b>TEAM/PUBLIC</b> equipo / abierto a todos. <b>●</b> abierta ahora · <s>tachada</s> terminada · <code>×N</code> máximo de NFTs por wallet.</li>'+
+   '<li><b>Llaves</b> — qué colecciones te dan acceso a ese mint. <b>⭐ TIENES LLAVE</b> si posees una; <i>elegibilidad sin investigar</i> = aún sin averiguar (las listas se anuncian en X/Discord).</li>'+
+   '<li><b>Precio public</b> — precio de mint público ($ + ETH). <b>💸 royalty X%</b> = comisión del creador en cada reventa.</li>'+
+   '<li><b>Floor</b> — floor del mercado secundario. <code>· 2.8×</code> = floor frente al precio de mint (verde sube / rojo baja); <code>FREE→$X</code> en mints gratis; <i>sin mercado / mercado mínimo</i> cuando hay pocas ventas.</li>'+
+   '<li><b>Cuándo</b> — cuenta atrás + hora exacta (UTC y tu hora local).</li>'+
+   '</ul><h4>Otras pestañas</h4><ul>'+
+   '<li><b>🔑 Llaves</b> — todas las colecciones llave ordenadas por utilidad WL frente al precio. <code>wl_value</code> criterio editorial 0–10 · <code>util</code> GTD/FCFS/WL ponderado del registro de mints · <code>ce</code> = util ÷ floor (alto = infravalorada). Marca aquí lo que tienes.</li>'+
+   '<li><b>🛒 Comprar</b> — lista corta de llaves top que aún no tienes, por prioridad y wl_value.</li>'+
+   '<li><b>📉 Floors</b> — llaves cuyo floor se movió ±15% en 7 días. <b>🛒</b> marca una caída fuerte en una llave prioritaria.</li>'+
+   '</ul>'},
  en:{tab_radar:'Radar',tab_keys:'Keys',tab_buy:'Buy',tab_floors:'Floors',
   h_now:'Minting now / open phase',h_soon:'Next 72 h',
   hide_low:'hide no-signal (no X, hype 0)',
@@ -542,7 +578,23 @@ const STR = {
   fee_tip:'Creator fee / royalty: % the project takes on every resale',
   fee_lbl:'💸 royalty',
   vol_tip:'Sales volume in the last 24 h (floor currency)',
-  legend:'Phases: <b class="ph-GTD">GTD</b> guaranteed spot · <b class="ph-FCFS">FCFS</b> first come first served · <b class="ph-WL">WL/Holder</b> generic list · <b>TEAM/PUBLIC</b> team / open to all.  <b>●</b> = open now · <s>struck</s> = ended · <b>×N</b> = NFTs per wallet'}
+  legend:'Phases: <b class="ph-GTD">GTD</b> guaranteed spot · <b class="ph-FCFS">FCFS</b> first come first served · <b class="ph-WL">WL/Holder</b> generic list · <b>TEAM/PUBLIC</b> team / open to all.  <b>●</b> = open now · <s>struck</s> = ended · <b>×N</b> = NFTs per wallet',
+  help:'<h3>How to read Monitor MINTS</h3>'+
+   '<p>Live tracker for Robinhood Chain mints. Auto-updates every 15 min. Anything you tick is saved only in your browser.</p>'+
+   '<h4>A Radar row</h4><ul>'+
+   '<li><b>Project</b> — name + links (X / site / OpenSea). <code>live</code> = minting now, <code>SOON</code> = within 72 h, <b>✓✓</b> = confirmed by 2 sources.</li>'+
+   '<li><b>Minted</b> — <code>373 / 4.4K</code> = minted / total supply. <b>⚡ +N/15m</b> = mint rate in the last 15 min (<code>~</code> = estimate). <b>👤 294 (79%)</b> = unique holder wallets and their share of minted: green ≥70% spread, amber 45–70%, red + 🐳 under 45% = few wallets hoarding.</li>'+
+   '<li><b>Hype / Popularity / X activity</b> — feed hype score, a HIGH/MED/LOW read of the X account, and raw followers · posts · account age. A flagged age = account under 30 days old.</li>'+
+   '<li><b>Phases</b> — one pill per phase with its price. <b class="ph-GTD">GTD</b> guaranteed spot · <b class="ph-FCFS">FCFS</b> first come first served · <b class="ph-WL">WL/Holder</b> generic list · <b>TEAM/PUBLIC</b> team / open to all. <b>●</b> open now · <s>struck</s> ended · <code>×N</code> max NFTs per wallet.</li>'+
+   '<li><b>Keys</b> — which collections make you eligible for that mint. <b>⭐ YOU HAVE A KEY</b> if you own one; <i>eligibility not researched</i> = not figured out yet (allowlists are announced on X/Discord).</li>'+
+   '<li><b>Public price</b> — public mint price ($ + ETH). <b>💸 royalty X%</b> = creator fee taken on every resale.</li>'+
+   '<li><b>Floor</b> — secondary-market floor. <code>· 2.8×</code> = floor vs mint price (green up / red down); <code>FREE→$X</code> for free mints; <i>no / thin market</i> when sales are too few to trust.</li>'+
+   '<li><b>When</b> — countdown + exact time (UTC and your local time).</li>'+
+   '</ul><h4>Other tabs</h4><ul>'+
+   '<li><b>🔑 Keys</b> — every key collection ranked by WL utility vs price. <code>wl_value</code> editorial 0–10 · <code>util</code> weighted GTD/FCFS/WL from the mint log · <code>ce</code> = util ÷ floor (high = underpriced). Tick what you own here.</li>'+
+   '<li><b>🛒 Buy</b> — shortlist of top-tier keys you do not own yet, by priority and wl_value.</li>'+
+   '<li><b>📉 Floors</b> — keys whose floor moved ±15% over 7 days. <b>🛒</b> marks a big drop on a high-priority key.</li>'+
+   '</ul>'}
 };
 let L = localStorage.getItem('mints_lang') || (navigator.language||'es').slice(0,2);
 if(!STR[L]) L='es';
@@ -746,6 +798,7 @@ function render(){
 document.getElementById('lang').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
   L=b.dataset.l; localStorage.setItem('mints_lang',L); render();
+  if(!helpM.hidden) fillHelp();
 });
 document.getElementById('hideLow').addEventListener('change',render);
 document.addEventListener('change',e=>{
@@ -754,6 +807,12 @@ document.addEventListener('change',e=>{
 });
 const rb=document.getElementById('refreshBtn');
 if(rb) rb.addEventListener('click',()=>reload(true));
+const helpM=document.getElementById('helpModal');
+function fillHelp(){ document.getElementById('helpBody').innerHTML = t('help'); }
+document.getElementById('helpBtn').addEventListener('click',()=>{ fillHelp(); helpM.hidden=false; });
+document.getElementById('helpClose').addEventListener('click',()=>helpM.hidden=true);
+helpM.addEventListener('click',e=>{ if(e.target===helpM) helpM.hidden=true; });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') helpM.hidden=true; });
 document.getElementById('tabs').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
   document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
