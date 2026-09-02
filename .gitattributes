@@ -1,0 +1,10 @@
+# Normaliza saltos de línea: LF en el repo para todo lo de texto,
+# CRLF solo para los scripts de Windows.
+* text=auto eol=lf
+
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.gif binary
