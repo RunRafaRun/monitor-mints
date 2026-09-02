@@ -1,0 +1,22 @@
+{
+  "name": "monitor-mints",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Monitor de mints en Robinhood Chain: ranking de llaves WL/GTD/FCFS, floors y popularidad.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "serve": "node serve.mjs",
+    "update": "node update.mjs --open",
+    "quick": "node update.mjs --quick --open",
+    "dashboard": "node gen-dashboard.mjs --open",
+    "owned": "node set-owned.mjs",
+    "radar": "node gen-radar.mjs --write",
+    "rank": "node rank.mjs --write",
+    "slugs": "node resolve-slugs.mjs",
+    "floors": "node fetch-floors.mjs",
+    "alerts": "node floor-alerts.mjs",
+    "log": "node log-mint.mjs",
+    "pop": "node x-popularity.mjs"
+  }
+}

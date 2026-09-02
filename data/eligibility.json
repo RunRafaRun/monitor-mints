@@ -1,0 +1,7 @@
+{
+  "_comment": "Manual. Nombre EXACTO del proyecto (como sale en el radar) -> colecciones que dan GTD/FCFS/WL/HOLDER. El dashboard lo cruza con tus 'owned' / wallets y marca la fila con ⭐ TIENES LLAVE. Ejemplo:  \"MiProyecto\": [\"H00dle\", \"Broker Punks\"]",
+  "The Ossuary": ["PePe Portraits", "The Owlery"],
+  "PonsBunz": ["PonsGuy", "PonsGirl"],
+  "DegenPrinters": ["RH MACHINES"],
+  "Nasterious": ["Nasbela", "Nasient"]
+}

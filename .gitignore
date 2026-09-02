@@ -1,0 +1,10 @@
+scripts/.env
+node_modules/
+*.log
+.DS_Store
+data/radar.md
+data/mints-cache.json
+data/dashboard.html
+data/mint-floors.json
+data/wallets.json
+data/holdings.json

@@ -1,0 +1,60 @@
+name: build-dashboard
+
+# Regenera data/dashboard.html (modo público, sin datos personales) y lo publica
+# en GitHub Pages. Las claves van como "Secrets" del repo, nunca en el HTML.
+
+on:
+  schedule:
+    # cada 15 min. GitHub Actions puede retrasar/agrupar ejecuciones programadas
+    # unos minutos si hay carga; el intervalo real suele ser 15-25 min.
+    # Repo PÚBLICO: minutos de Actions ilimitados. Repo PRIVADO: 2000 min/mes
+    # gratis -> a este ritmo NO caben; usa repo público o sube el cron a "*/45".
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}       # botón "Run workflow" manual
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generar dashboard público
+        working-directory: scripts
+        env:
+          PUBLIC: "1"
+          OPENSEA_API_KEY: ${{ secrets.OPENSEA_API_KEY }}
+          WLMT_URL: ${{ secrets.WLMT_URL }}
+          WLMT_KEY: ${{ secrets.WLMT_KEY }}
+        run: node update.mjs
+
+      - name: Preparar carpeta de publicación
+        run: |
+          mkdir -p public
+          cp data/dashboard.html public/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
