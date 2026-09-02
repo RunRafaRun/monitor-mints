@@ -414,6 +414,15 @@ padding:5px;box-shadow:0 12px 40px rgba(0,0,0,.45);min-width:150px}
 font-size:12.5px;padding:6px 8px;border-radius:6px;cursor:pointer}
 #alertMenu button:hover{background:color-mix(in srgb,var(--accent) 22%,transparent)}
 #alertMenu button.sel{color:var(--now);font-weight:700}
+#alertBanner{position:fixed;top:0;left:0;right:0;z-index:70;background:var(--warn);color:#fff;
+padding:10px 14px;font-size:13.5px;font-weight:600;display:flex;flex-direction:column;gap:5px;
+box-shadow:0 6px 24px rgba(0,0,0,.5);animation:abflash .8s ease-in-out 4}
+#alertBanner[hidden]{display:none}
+@keyframes abflash{0%,100%{filter:brightness(1)}50%{filter:brightness(1.35)}}
+#alertBanner .ab-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+#alertBanner button{background:rgba(255,255,255,.22);border:0;color:#fff;border-radius:6px;cursor:pointer;
+padding:3px 9px;font-size:12px;font-weight:700;flex:none}
+#alertBanner .ab-all{align-self:flex-end}
 
 /* ---- móvil: cada fila pasa a ficha ---- */
 @media (max-width:860px){
@@ -488,6 +497,8 @@ font-size:12.5px;padding:6px 8px;border-radius:6px;cursor:pointer}
   <p class="note" data-k="note_floors"></p>
 </section>
 </div>
+
+<div id="alertBanner" hidden></div>
 
 <div id="helpModal" hidden>
   <div class="hm-box">
@@ -579,6 +590,7 @@ const STR = {
   alert_set:'🔔 Alerta activada. Te avisaré ~10 min antes. Deja esta pestaña abierta.',
   alert_set_toast:'🔔 Alerta activada (aviso en la propia página; las notificaciones del navegador están bloqueadas).',
   alert_off:'🔕 Alerta quitada',
+  alert_clear_all:'descartar todo',
   alert_body:'cambio de fase en ~{m} min',
   alert_body_ph:'fase {p} en ~{m} min',
   search_ph:'Buscar… (nombre, fase, llave, nota…)',
@@ -594,7 +606,7 @@ const STR = {
    '<li><b>Llaves</b> — qué colecciones te dan acceso a ese mint. <b>⭐ TIENES LLAVE</b> si posees una; <i>elegibilidad sin investigar</i> = aún sin averiguar (las listas se anuncian en X/Discord).</li>'+
    '<li><b>Precio public</b> — precio de mint público ($ + ETH). <b>💸 royalty X%</b> = comisión del creador en cada reventa.</li>'+
    '<li><b>Floor</b> — floor del mercado secundario. <code>· 2.8×</code> = floor frente al precio de mint (verde sube / rojo baja); <code>FREE→$X</code> en mints gratis; <i>sin mercado / mercado mínimo</i> cuando hay pocas ventas.</li>'+
-   '<li><b>Cuándo</b> — cuenta atrás + hora exacta (UTC y tu hora local). Pulsa <b>🔕/🔔</b> y elige la fase (p.ej. solo PUBLIC): te avisa ~10 min antes de ese cambio de fase (solo con la pestaña abierta).</li>'+
+   '<li><b>Cuándo</b> — cuenta atrás + hora exacta (UTC y tu hora local). Pulsa <b>🔕/🔔</b> y elige la fase (p.ej. solo PUBLIC): ~10 min antes de ese cambio salta un <b>banner rojo arriba + pitido</b> (y notificación del sistema si la permites). Solo con la pestaña abierta.</li>'+
    '</ul><h4>Otras pestañas</h4><ul>'+
    '<li><b>🔑 Llaves</b> — todas las colecciones llave ordenadas por utilidad WL frente al precio. <code>wl_value</code> criterio editorial 0–10 · <code>util</code> GTD/FCFS/WL ponderado del registro de mints · <code>ce</code> = util ÷ floor (alto = infravalorada). Marca aquí lo que tienes.</li>'+
    '<li><b>🛒 Comprar</b> — lista corta de llaves top que aún no tienes, por prioridad y wl_value.</li>'+
@@ -635,6 +647,7 @@ const STR = {
   alert_set:'🔔 Alert on. I will warn you ~10 min before. Keep this tab open.',
   alert_set_toast:'🔔 Alert on (in-page only; browser notifications are blocked).',
   alert_off:'🔕 Alert removed',
+  alert_clear_all:'dismiss all',
   alert_body:'phase change in ~{m} min',
   alert_body_ph:'{p} phase in ~{m} min',
   search_ph:'Search… (name, phase, key, note…)',
@@ -650,7 +663,7 @@ const STR = {
    '<li><b>Keys</b> — which collections make you eligible for that mint. <b>⭐ YOU HAVE A KEY</b> if you own one; <i>eligibility not researched</i> = not figured out yet (allowlists are announced on X/Discord).</li>'+
    '<li><b>Public price</b> — public mint price ($ + ETH). <b>💸 royalty X%</b> = creator fee taken on every resale.</li>'+
    '<li><b>Floor</b> — secondary-market floor. <code>· 2.8×</code> = floor vs mint price (green up / red down); <code>FREE→$X</code> for free mints; <i>no / thin market</i> when sales are too few to trust.</li>'+
-   '<li><b>When</b> — countdown + exact time (UTC and your local time). Click <b>🔕/🔔</b> and pick a phase (e.g. PUBLIC only): you get a heads-up ~10 min before that phase change (only while the tab is open).</li>'+
+   '<li><b>When</b> — countdown + exact time (UTC and your local time). Click <b>🔕/🔔</b> and pick a phase (e.g. PUBLIC only): ~10 min before that change you get a <b>red banner on top + a beep</b> (plus a system notification if you allow it). Only while the tab is open.</li>'+
    '</ul><h4>Other tabs</h4><ul>'+
    '<li><b>🔑 Keys</b> — every key collection ranked by WL utility vs price. <code>wl_value</code> editorial 0–10 · <code>util</code> weighted GTD/FCFS/WL from the mint log · <code>ce</code> = util ÷ floor (high = underpriced). Tick what you own here.</li>'+
    '<li><b>🛒 Buy</b> — shortlist of top-tier keys you do not own yet, by priority and wl_value.</li>'+
@@ -778,6 +791,7 @@ const alertableKinds = m => [...new Set((m.phases||[]).filter(p=>p.a>Date.now()|
 const canAlert = m => alertableKinds(m).length>0 || m.when>Date.now();
 
 async function armAlert(name, filter){
+  unlockAudio();
   if('Notification' in window && Notification.permission==='default'){
     try{ await Notification.requestPermission(); }catch(e){}
   }
@@ -797,15 +811,69 @@ function checkAlerts(){
     }
   }
 }
+// ---- cola de avisos disparados y sin descartar (persiste al recargar) ----
+let alertQ = [];
+try{ alertQ = JSON.parse(localStorage.getItem('mints_alerts_pending')||'[]'); }catch(e){}
+const saveQ = () => { try{ localStorage.setItem('mints_alerts_pending', JSON.stringify(alertQ)); }catch(e){} };
+const BASE_TITLE = 'Monitor MINTS — Robinhood Chain';
+
+// pitido corto (Web Audio, sin fichero). Se "desbloquea" con un gesto del usuario.
+let actx = null;
+function unlockAudio(){ try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume(); }catch(e){} }
+function beep(){
+  if(!actx) return;
+  try{
+    const t0=actx.currentTime;
+    [[0,740],[0.16,988],[0.32,740]].forEach(([off,f])=>{
+      const o=actx.createOscillator(), g=actx.createGain();
+      o.type='sine'; o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,t0+off);
+      g.gain.exponentialRampToValueAtTime(0.3,t0+off+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+off+0.14);
+      o.connect(g); g.connect(actx.destination);
+      o.start(t0+off); o.stop(t0+off+0.15);
+    });
+  }catch(e){}
+}
+function setBadge(){
+  const n = alertQ.length;
+  document.title = n ? '🔔('+n+') '+BASE_TITLE : BASE_TITLE;
+  let l = document.getElementById('dynfav');
+  if(!n){ if(l) l.remove(); return; }
+  if(!l){ l=document.createElement('link'); l.id='dynfav'; l.rel='icon'; document.head.appendChild(l); }
+  try{
+    const c=document.createElement('canvas'); c.width=c.height=32; const x=c.getContext('2d');
+    x.fillStyle='#ff3b30'; x.beginPath(); x.arc(16,16,15,0,7); x.fill();
+    x.fillStyle='#fff'; x.font='bold 24px system-ui'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('!',16,18);
+    l.href=c.toDataURL('image/png');
+  }catch(e){}
+}
+function evText(a){
+  const mins=Math.round((a.ts-Date.now())/60000);
+  const es = L==='es';
+  const what = a.k ? (es?'fase '+a.k:a.k+' phase') : (es?'cambio de fase':'phase change');
+  const when = mins<=0 ? (es?'ahora':'now') : (es?'en ~'+mins+' min':'in ~'+mins+' min');
+  return a.name+' — '+what+' '+when;
+}
+function renderAlertBanner(){
+  const now=Date.now();
+  alertQ = alertQ.filter(a=>now-a.at < 2*3600e3);   // caduca a las 2 h
+  const el=document.getElementById('alertBanner');
+  if(!alertQ.length){ el.hidden=true; setBadge(); return; }
+  el.hidden=false;
+  el.innerHTML =
+    alertQ.map((a,i)=>'<div class="ab-row"><span>🔔 '+esc(evText(a))+'</span><button data-abi="'+i+'">✕</button></div>').join('')
+    + (alertQ.length>1 ? '<button class="ab-all" data-abi="all">'+t('alert_clear_all')+'</button>' : '');
+  setBadge();
+}
 function fireAlert(m,ev){
-  const mins=Math.max(1,Math.round((ev.ts-Date.now())/60000));
-  const msg=m.name+' — '+(ev.k ? t('alert_body_ph').replace('{p}',ev.k) : t('alert_body')).replace('{m}',mins);
+  const msg = evText({name:m.name, k:ev.k, ts:ev.ts});
   if('Notification' in window && Notification.permission==='granted'){
-    try{ new Notification('🚨 Monitor MINTS', { body: msg }); }catch(e){}
+    try{ new Notification('🚨 Monitor MINTS', { body: msg, requireInteraction:true, tag:aKey(m.name)+ev.ts }); }catch(e){}
   }
+  alertQ.push({ name:m.name, k:ev.k, ts:ev.ts, at:Date.now() });
+  saveQ(); renderAlertBanner(); beep();
   toast('🔔 '+msg, 12000);
-  let n=0; const orig=document.title;
-  const iv=setInterval(()=>{ document.title=(n%2?'🔔 ':'')+orig; if(++n>10){ clearInterval(iv); document.title=orig; } },1000);
 }
 function bellBtn(m){
   if(!canAlert(m)) return '';
@@ -985,6 +1053,13 @@ document.addEventListener('change',e=>{
   setOwned(chk.dataset.name, chk.checked);
 });
 document.addEventListener('click',e=>{
+  const ab=e.target.closest('#alertBanner button');
+  if(ab){
+    const v=ab.dataset.abi;
+    if(v==='all') alertQ=[]; else alertQ.splice(+v,1);
+    saveQ(); renderAlertBanner();
+    return;
+  }
   const item=e.target.closest('#alertMenu button');
   if(item){
     const name=document.getElementById('alertMenu').dataset.name;
@@ -997,6 +1072,7 @@ document.addEventListener('click',e=>{
   const b=e.target.closest('.bell');
   if(b){
     e.stopPropagation();
+    unlockAudio();
     const r=b.getBoundingClientRect();
     openAlertMenu(b.dataset.alert, r.left, r.bottom+4);
     return;
@@ -1039,9 +1115,10 @@ document.addEventListener('click',e=>{
   rows.forEach(r=>tb.appendChild(r));
 });
 render();
+renderAlertBanner();            // re-muestra avisos pendientes tras recargar
 setInterval(render, 60000); // los contadores bajan solos
 checkAlerts();
-setInterval(checkAlerts, 30000);
+setInterval(()=>{ checkAlerts(); renderAlertBanner(); }, 30000);
 </script>
 </body></html>`;
 }
