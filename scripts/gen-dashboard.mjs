@@ -400,9 +400,11 @@ padding:22px 26px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .hm-box code{background:color-mix(in srgb,var(--fg) 13%,transparent);padding:0 4px;border-radius:4px;font-size:11.5px}
 .bell{background:transparent;border:0;cursor:pointer;font-size:13px;opacity:.45;padding:0 4px;line-height:1;vertical-align:middle}
 .bell:hover{opacity:.9}.bell.on{opacity:1}
-#q{margin-top:10px;width:100%;max-width:440px;background:var(--card);color:var(--fg);border:1px solid var(--line);
+.filtrow{margin-top:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+#q{width:100%;max-width:440px;background:var(--card);color:var(--fg);border:1px solid var(--line);
 border-radius:8px;padding:7px 12px;font-size:13px}
 #q::placeholder{color:var(--mut)}
+.filtrow .chk{margin:0}
 tr[hidden]{display:none}
 #alertMenu{position:fixed;z-index:60;background:var(--card);border:1px solid var(--line);border-radius:10px;
 padding:5px;box-shadow:0 12px 40px rgba(0,0,0,.45);min-width:150px}
@@ -452,7 +454,10 @@ font-size:12.5px;padding:6px 8px;border-radius:6px;cursor:pointer}
     <button data-t="buy">🛒 <span data-k="tab_buy"></span></button>
     <button data-t="floors">📉 <span data-k="tab_floors"></span></button>
   </div>
-  <input id="q" type="search" autocomplete="off" spellcheck="false">
+  <div class="filtrow">
+    <input id="q" type="search" autocomplete="off" spellcheck="false">
+    <label class="chk"><input type="checkbox" id="onlyKeys"> <span data-k="only_keys"></span></label>
+  </div>
 </header>
 
 <section data-p="radar">
@@ -541,6 +546,7 @@ const STR = {
  es:{tab_radar:'Radar',tab_keys:'Llaves',tab_buy:'Comprar',tab_floors:'Floors',
   h_now:'Minteando ahora / fase abierta',h_soon:'Próximas 72 h',
   hide_low:'ocultar sin señal (sin X y hype 0)',
+  only_keys:'solo mis llaves',
   note_elig:'El feed no trae los nombres de las colecciones elegibles para GTD/FCFS/WL: investígalos en X / web / OpenSea y regístralos con  node log-mint.mjs.',
   h_keys:'Ranking de llaves — utilidad WL/GTD/FCFS frente al precio',
   note_keys:'wl_value = criterio editorial 0–10 (relación llave/precio). util = 1·GTD + 0.6·FCFS + 0.4·WL sobre mints registrados. ce = util/floor (alto = infravalorada).',
@@ -578,7 +584,7 @@ const STR = {
   alert_pick:'¿De qué fase te aviso?',alert_any:'cualquier cambio de fase',
   legend:'Fases: <b class="ph-GTD">GTD</b> plaza garantizada · <b class="ph-FCFS">FCFS</b> por orden de llegada · <b class="ph-WL">WL/Holder</b> lista genérica · <b>TEAM/PUBLIC</b> equipo / abierto a todos.  <b>●</b> = abierta ahora · <s>tachada</s> = terminada · <b>×N</b> = NFTs por wallet',
   help:'<h3>Cómo leer Monitor MINTS</h3>'+
-   '<p>Seguimiento en vivo de los mints de Robinhood Chain. Se actualiza solo cada 10 min. Lo que marques se guarda solo en tu navegador. El buscador de arriba filtra las filas por cualquier texto (nombre, fase, llave, nota…).</p>'+
+   '<p>Seguimiento en vivo de los mints de Robinhood Chain. Se actualiza solo cada 10 min. Lo que marques se guarda solo en tu navegador. El buscador de arriba filtra las filas por cualquier texto (nombre, fase, llave, nota…); la casilla <b>solo mis llaves</b> deja únicamente los mints para los que tienes llave (marca tus llaves en la pestaña Llaves). Pulsa una cabecera de columna para ordenar.</p>'+
    '<h4>Una fila del Radar</h4><ul>'+
    '<li><b>Proyecto</b> — nombre + enlaces (X / web / OpenSea). <code>live</code> = minteando ahora, <code>SOON</code> = en menos de 72 h, <b>✓✓</b> = confirmado en 2 fuentes.</li>'+
    '<li><b>Minteado</b> — <code>373 / 4.4K</code> = minteados / supply total. <b>⚡ +N/15m</b> = ritmo en los últimos 15 min (<code>~</code> = estimación). <b>👤 294 (79%)</b> = wallets únicas con algún NFT y su % sobre lo minteado: verde ≥70% repartido, ámbar 45–70%, rojo + 🐳 por debajo de 45% = pocas wallets acumulan.</li>'+
@@ -596,6 +602,7 @@ const STR = {
  en:{tab_radar:'Radar',tab_keys:'Keys',tab_buy:'Buy',tab_floors:'Floors',
   h_now:'Minting now / open phase',h_soon:'Next 72 h',
   hide_low:'hide no-signal (no X, hype 0)',
+  only_keys:'only my keys',
   note_elig:'The feed does not include the eligible collection names for GTD/FCFS/WL: research them on X / site / OpenSea and log them with  node log-mint.mjs.',
   h_keys:'Key ranking — WL/GTD/FCFS utility vs. price',
   note_keys:'wl_value = editorial score 0–10 (key value per price). util = 1·GTD + 0.6·FCFS + 0.4·WL over logged mints. ce = util/floor (high = underpriced).',
@@ -633,7 +640,7 @@ const STR = {
   alert_pick:'Which phase should I alert on?',alert_any:'any phase change',
   legend:'Phases: <b class="ph-GTD">GTD</b> guaranteed spot · <b class="ph-FCFS">FCFS</b> first come first served · <b class="ph-WL">WL/Holder</b> generic list · <b>TEAM/PUBLIC</b> team / open to all.  <b>●</b> = open now · <s>struck</s> = ended · <b>×N</b> = NFTs per wallet',
   help:'<h3>How to read Monitor MINTS</h3>'+
-   '<p>Live tracker for Robinhood Chain mints. Auto-updates every 10 min. Anything you tick is saved only in your browser. The search box up top filters rows by any text (name, phase, key, note…).</p>'+
+   '<p>Live tracker for Robinhood Chain mints. Auto-updates every 10 min. Anything you tick is saved only in your browser. The search box up top filters rows by any text (name, phase, key, note…); the <b>only my keys</b> checkbox keeps only mints you hold a key for (tick your keys in the Keys tab). Click a column header to sort.</p>'+
    '<h4>A Radar row</h4><ul>'+
    '<li><b>Project</b> — name + links (X / site / OpenSea). <code>live</code> = minting now, <code>SOON</code> = within 72 h, <b>✓✓</b> = confirmed by 2 sources.</li>'+
    '<li><b>Minted</b> — <code>373 / 4.4K</code> = minted / total supply. <b>⚡ +N/15m</b> = mint rate in the last 15 min (<code>~</code> = estimate). <b>👤 294 (79%)</b> = unique holder wallets and their share of minted: green ≥70% spread, amber 45–70%, red + 🐳 under 45% = few wallets hoarding.</li>'+
@@ -819,20 +826,23 @@ function openAlertMenu(name, x, y){
 }
 function closeAlertMenu(){ const e=document.getElementById('alertMenu'); if(e) e.remove(); }
 
-const cell = (label,html,cls) => '<td'+(cls?' class="'+cls+'"':'')+' data-label="'+esc(label)+'">'+html+'</td>';
+const cell = (label,html,cls,sort) => '<td'+(cls?' class="'+cls+'"':'')+' data-label="'+esc(label)+'"'+(sort!=null?' data-sort="'+esc(sort)+'"':'')+'>'+html+'</td>';
+// rango de "llaves" para ordenar: 2 = tengo llave · 1 = elegibilidad conocida · 0 = sin investigar
+const keyRank = m => { const nd=m.need||[]; if(!nd.length) return 0; return nd.some(n=>isOwned(n.name)) ? 2 : 1; };
+const haveKeyRow = m => (m.need||[]).some(n=>isOwned(n.name));
 function mintRows(list){
   if(!list.length) return '';
-  return list.map(m=>'<tr'+(m.need&&m.need.some(n=>isOwned(n.name))?' class="row-have"':'')+'>'+
-    cell('', '<b>'+esc(m.name)+'</b> '+(m.status==='now'?'<span class="badge b-now">'+t('now')+'</span>':'')+(m.srcs===2?' <span class="v2" title="'+t('two_src')+'">✓✓</span>':'')+'<br><span class="muted" style="font-size:12px">'+links(m)+'</span>')+
-    cell(t('c_supply'), nf(m.minted)+' / '+nf(m.supply)+rateCell(m)+ownersCell(m), 'num')+
-    cell(t('c_hype'), m.hype, 'num')+
+  return list.map(m=>'<tr'+(haveKeyRow(m)?' class="row-have"':'')+'>'+
+    cell('', '<b>'+esc(m.name)+'</b> '+(m.status==='now'?'<span class="badge b-now">'+t('now')+'</span>':'')+(m.srcs===2?' <span class="v2" title="'+t('two_src')+'">✓✓</span>':'')+'<br><span class="muted" style="font-size:12px">'+links(m)+'</span>', null, esc(m.name).toLowerCase())+
+    cell(t('c_supply'), nf(m.minted)+' / '+nf(m.supply)+rateCell(m)+ownersCell(m), 'num', m.minted||0)+
+    cell(t('c_hype'), m.hype, 'num', m.hype||0)+
     cell(t('c_pop'), popTxt(m))+
-    cell(t('c_x'), xCell(m))+
+    cell(t('c_x'), xCell(m), null, m.xFollowers||0)+
     cell(t('c_phases'), phases(m.phases)||'<span class="muted">—</span>')+
-    cell(t('c_keys'), needCell(m))+
-    cell(t('c_price'), money(publicPrice(m))+feeCell(m), 'num')+
-    cell(t('c_floor'), floorRadar(m), 'num')+
-    cell(t('c_when'), bellBtn(m)+whenCell(m.when), 'num')+
+    cell(t('c_keys'), needCell(m), null, keyRank(m))+
+    cell(t('c_price'), money(publicPrice(m))+feeCell(m), 'num', publicPrice(m)??-1)+
+    cell(t('c_floor'), floorRadar(m), 'num', m.floorUsd??-1)+
+    cell(t('c_when'), bellBtn(m)+whenCell(m.when), 'num', m.when||9e15)+
   '</tr>').join('');
 }
 // concentración: dueños únicos vs minteado. % alto = repartido; % bajo = acumulado.
@@ -885,9 +895,12 @@ function floorRadar(m){
 const sNorm = s => String(s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
 function applyFilter(){
   const q = sNorm((document.getElementById('q').value||'').trim());
+  const onlyK = document.getElementById('onlyKeys').checked;
   document.querySelectorAll('section[data-p] table tr').forEach(tr=>{
     if(tr.querySelector('th')) return;
-    tr.hidden = q ? !sNorm(tr.textContent).includes(q) : false;
+    let show = q ? sNorm(tr.textContent).includes(q) : true;
+    if(show && onlyK && tr.closest('section').dataset.p==='radar') show = tr.classList.contains('row-have');
+    tr.hidden = !show;
   });
 }
 
@@ -932,7 +945,7 @@ function render(){
    '</tr>';}).join('');
 
   const order=['🥇','🥈','💎','👑'];
-  const buy = D.ranking.filter(c=>order.includes(c.priority) && !c.owned)
+  const buy = D.ranking.filter(c=>order.includes(c.priority) && !isOwned(c.name))
     .sort((a,b)=>order.indexOf(a.priority)-order.indexOf(b.priority) || (b.wlValue??0)-(a.wlValue??0));
   document.getElementById('tBuy').innerHTML =
    '<tr><th>'+t('c_prio')+'</th><th>'+t('c_coll')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_wl')+'</th><th>'+t('c_note')+'</th></tr>'+
@@ -957,6 +970,7 @@ document.getElementById('lang').addEventListener('click',e=>{
 });
 document.getElementById('hideLow').addEventListener('change',render);
 document.getElementById('q').addEventListener('input',applyFilter);
+document.getElementById('onlyKeys').addEventListener('change',applyFilter);
 document.addEventListener('change',e=>{
   const chk=e.target.closest('.ownchk'); if(!chk) return;
   setOwned(chk.dataset.name, chk.checked);
@@ -999,9 +1013,20 @@ document.addEventListener('click',e=>{
   const tb=th.closest('table'), i=[...th.parentNode.children].indexOf(th);
   const rows=[...tb.querySelectorAll('tr')].slice(1);
   const asc=th.dataset.asc==='1'; th.dataset.asc=asc?'0':'1';
-  rows.sort((a,b)=>{const x=a.children[i]?.textContent.trim()||'',y=b.children[i]?.textContent.trim()||'';
-    const nx=parseFloat(x.replace(/[^0-9.\\-]/g,'')),ny=parseFloat(y.replace(/[^0-9.\\-]/g,''));
-    const v=(!isNaN(nx)&&!isNaN(ny))?nx-ny:x.localeCompare(y);return asc?-v:v;});
+  rows.sort((a,b)=>{
+    const ca=a.children[i], cb=b.children[i];
+    const sa=ca&&ca.dataset.sort, sb=cb&&cb.dataset.sort;
+    let v;
+    if(sa!=null && sb!=null){
+      const na=parseFloat(sa), nb=parseFloat(sb);
+      v = (!isNaN(na)&&!isNaN(nb)) ? na-nb : String(sa).localeCompare(String(sb));
+    } else {
+      const x=ca?ca.textContent.trim():'', y=cb?cb.textContent.trim():'';
+      const nx=parseFloat(x.replace(/[^0-9.\\-]/g,'')),ny=parseFloat(y.replace(/[^0-9.\\-]/g,''));
+      v=(!isNaN(nx)&&!isNaN(ny))?nx-ny:x.localeCompare(y);
+    }
+    return asc?-v:v;
+  });
   rows.forEach(r=>tb.appendChild(r));
 });
 render();
