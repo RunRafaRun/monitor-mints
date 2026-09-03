@@ -23,6 +23,8 @@ import { osCliBase, osCli, whoami, readAuth, walletLabel } from "./lib/os-auth.m
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(ROOT, "data", "eligibility-wallet.json");
 const CHAINS = ["robinhood", "ethereum", "ink"];
+const MAX_DROPS = 60;                 // tope total (radar + calendario)
+const uuNorm = (u) => String(u || "").replace(/-/g, "").toLowerCase();
 const asJson = process.argv.includes("--json");
 const log = (...a) => console.error(...a);
 const die = (msg, code) => { console.error(msg); process.exit(code); };
@@ -89,21 +91,30 @@ async function main() {
   const auth = readAuth();
   const bearer = auth?.jwt || null;
 
-  // 1) slugs de drops SeaDrop en las redes que nos importan
+  // 1) slugs a comprobar: los del radar (--slugs, pasados por serve.mjs) + el
+  //    calendario de OpenSea (próximos + destacados + los que siguen minteando)
   const slugs = new Map();
-  for (const type of ["featured", "upcoming", "recently_minted"]) {
+  const extra = (process.argv.find((a) => a.startsWith("--slugs=")) || "").slice(8);
+  for (const s of extra.split(",").map((x) => x.trim()).filter(Boolean)) {
+    if (slugs.size >= MAX_DROPS) break;
+    slugs.set(s, null);
+  }
+  for (const type of ["upcoming", "featured", "recently_minted"]) {
     const { status, body } = await osGet(`/api/v2/drops?type=${type}&limit=100`);
     if (status !== 200 || !Array.isArray(body?.drops)) { log(`  drops ${type}: HTTP ${status}`); continue; }
     for (const d of body.drops) {
-      if (CHAINS.includes(d.chain) && d.collection_slug) slugs.set(d.collection_slug, d.chain);
+      if (slugs.size >= MAX_DROPS) break;
+      if (!CHAINS.includes(d.chain) || !d.collection_slug) continue;
+      if (type === "recently_minted" && !d.is_minting && !d.next_stage) continue;
+      if (!slugs.has(d.collection_slug)) slugs.set(d.collection_slug, d.chain);
     }
   }
-  log(`${slugs.size} drops en ${CHAINS.join("/")}`);
+  log(`${slugs.size} drops a comprobar`);
   if (!slugs.size) { writeOut(me.address, {}, auth); return; }
 
   // 2) fases (API key) + elegibilidad (sesión) por drop
   const drops = {};
-  let n = 0, hitStages = 0;
+  let n = 0, hitStages = 0, cliCalls = 0;
   for (const [slug, chain] of slugs) {
     n++;
     const meta = await osGet(`/api/v2/drops/${slug}`);
@@ -113,13 +124,14 @@ async function main() {
     if (bearer) {
       const r = await osGet(`/api/v2/drops/${slug}/eligibility`, bearer);
       if (r.status === 200) elig = r.body;
-      else if (r.status === 401) log("  bearer rechazado en /eligibility, pruebo con el CLI");
+      else if (n === 1) log(`  /eligibility HTTP ${r.status} con el token del auth.json`);
     }
-    if (!elig) elig = eligibilityViaCli(slug);
-    const byUuid = new Map((elig?.stages || []).map((s) => [s.stage_uuid, s]));
+    if (!elig && cliCalls < 6) { cliCalls++; elig = eligibilityViaCli(slug); }
+    // los uuid vienen con guiones en /eligibility y sin ellos en /drops -> normalizar
+    const byUuid = new Map((elig?.stages || []).map((s) => [uuNorm(s.stage_uuid), s]));
 
     const stages = metaStages.map((s) => {
-      const e = byUuid.get(s.uuid);
+      const e = byUuid.get(uuNorm(s.uuid));
       return {
         uuid: s.uuid,
         label: s.label || null,

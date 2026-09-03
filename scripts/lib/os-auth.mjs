@@ -56,8 +56,9 @@ export function readAuth() {
     }
     if (typeof o !== "object") return;
     for (const [k, v] of Object.entries(o)) {
-      if (!exp && /^(expires_?at|exp)$/i.test(k) && (typeof v === "number" || /^\d+$/.test(String(v)))) {
-        const n = Number(v); exp = n > 1e12 ? n : n * 1000; // s -> ms
+      if (!exp && /^(expires_?at|exp)$/i.test(k)) {
+        if (typeof v === "number" || /^\d+$/.test(String(v))) { const n = Number(v); exp = n > 1e12 ? n : n * 1000; }
+        else if (typeof v === "string") { const d = Date.parse(v); if (d) exp = d; } // ISO
       }
       walk(v);
     }
@@ -75,7 +76,11 @@ function jwtClaims(jwt) {
 }
 
 // { address, scopes, exp } o null si no hay sesión.
-export function whoami() {
+// Primero el auth.json (rápido, sin lanzar procesos); el CLI solo como respaldo.
+export function whoami({ cliFallback = true } = {}) {
+  const a = readAuth();
+  if (a && a.address && (!a.exp || a.exp > Date.now())) return { address: a.address, scopes: null, exp: a.exp };
+  if (!cliFallback) return a && a.address ? { address: a.address, scopes: null, exp: a.exp } : null;
   const out = osCli(["whoami", "--format", "json"]) || osCli(["whoami"]);
   if (out) {
     try {
@@ -87,7 +92,6 @@ export function whoami() {
       if (m) return { address: m[0].toLowerCase(), scopes: null, exp: null };
     }
   }
-  const a = readAuth();
   return a && a.address ? { address: a.address, scopes: null, exp: a.exp } : null;
 }
 

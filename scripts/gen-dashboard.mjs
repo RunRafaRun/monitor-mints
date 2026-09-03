@@ -316,6 +316,41 @@ export async function buildData({ pub = false } = {}) {
 
   mints.sort((a, b) => (a.status === b.status ? (b.hype - a.hype) : a.status === "now" ? -1 : 1));
 
+  // slug de OpenSea por nombre (data/opensea-slugs.json, lo puebla resolve-slugs.mjs)
+  const slugsPath = join(ROOT, "data", "opensea-slugs.json");
+  const slugMap = existsSync(slugsPath) ? JSON.parse(readFileSync(slugsPath, "utf8")) : {};
+  const slugFor = (name) => {
+    if (slugMap[name] && !/^_/.test(name)) return slugMap[name];
+    const hit = Object.keys(slugMap).find((k) => !/^_/.test(k) && norm(k) === norm(name));
+    return hit ? slugMap[hit] : null;
+  };
+  // completa slug (para floors / agenda / elegibilidad) y el enlace a OpenSea de la fila
+  for (const m of mints) if (!m.slug) m.slug = slugFor(m.name);
+  // los mints nuevos aún no están en opensea-slugs.json -> resolver por contrato en
+  // vivo (lo que hace resolve-slugs.mjs). Caché propia en data/contract-slugs.json.
+  {
+    const csPath = join(ROOT, "data", "contract-slugs.json");
+    let cs = {}; try { cs = JSON.parse(readFileSync(csPath, "utf8")); } catch { /**/ }
+    const key = process.env.OPENSEA_API_KEY;
+    const need = mints.filter((m) => !m.slug && m.contract).slice(0, 12);
+    let wrote = false;
+    for (const m of need) {
+      const c = m.contract.toLowerCase();
+      if (!(c in cs) && key) {
+        try {
+          const r = await fetch(`https://api.opensea.io/api/v2/chain/${m.chain || "robinhood"}/contract/${c}`,
+            { headers: { "x-api-key": key, accept: "application/json" } });
+          cs[c] = r.ok ? ((await r.json())?.collection || null) : null;
+        } catch { cs[c] = null; }
+        wrote = true;
+        await new Promise((res) => setTimeout(res, 120));
+      }
+      if (cs[c]) m.slug = cs[c];
+    }
+    if (wrote) { try { writeFileSync(csPath, JSON.stringify(cs, null, 1) + "\n"); } catch { /**/ } }
+  }
+  for (const m of mints) if (!m.opensea && m.slug) m.opensea = `https://opensea.io/collection/${m.slug}`;
+
   // floor + minteados en vivo desde OpenSea (el feed trae el minted desfasado)
   const ETHUSD = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
     .then((r) => r.json()).then((j) => j.ethereum.usd).catch(() => db.meta.eth_usd_ref || 2400);
@@ -413,14 +448,6 @@ export async function buildData({ pub = false } = {}) {
     }
   }
 
-  // slug de OpenSea por nombre (data/opensea-slugs.json, lo puebla resolve-slugs.mjs)
-  const slugsPath = join(ROOT, "data", "opensea-slugs.json");
-  const slugMap = existsSync(slugsPath) ? JSON.parse(readFileSync(slugsPath, "utf8")) : {};
-  const slugFor = (name) => {
-    if (slugMap[name] && !/^_/.test(name)) return slugMap[name];
-    const hit = Object.keys(slugMap).find((k) => !/^_/.test(k) && norm(k) === norm(name));
-    return hit ? slugMap[hit] : null;
-  };
 
   // colecciones-llave: RH en colecciones.json + un fichero por red extra
   const collFiles = { ethereum: "colecciones-eth.json", ink: "colecciones-ink.json", base: "colecciones-base.json" };
@@ -483,7 +510,14 @@ export async function buildData({ pub = false } = {}) {
   // solo ofrecemos en el selector las redes que traen algo
   const present = new Set([...mints.map((m) => m.chain), ...ranking.map((r) => r.chain)]);
   const chains = CHAINS.filter((c) => present.has(c.id));
-  const out = { updated: new Date().toISOString(), ethUsd: ETHUSD, mints, ranking, alerts, holdings: holdSummary, chains, public: !!pub, wlElig: weMeta };
+  // cartera / P&L (data/trades.json, lo escribe fetch-trades.mjs). Personal.
+  let trades = null;
+  if (!pub) {
+    const tPath = join(ROOT, "data", "trades.json");
+    if (existsSync(tPath)) { try { trades = JSON.parse(readFileSync(tPath, "utf8")); } catch (e) { console.error("trades.json:", e.message); } }
+  }
+
+  const out = { updated: new Date().toISOString(), ethUsd: ETHUSD, mints, ranking, alerts, holdings: holdSummary, chains, public: !!pub, wlElig: weMeta, trades };
   return pub ? stripPersonal(out) : out;
 }
 
@@ -497,6 +531,7 @@ function stripPersonal(d) {
   }
   d.holdings = null;
   d.wlElig = null;
+  d.trades = null;
   return d;
 }
 
@@ -580,6 +615,13 @@ tr.row-have.row-spot td{background:color-mix(in srgb,var(--gold) 13%,transparent
 .wl-hdr b{color:var(--now)}
 .wl-hdr.warn b{color:var(--warn)}
 .wl-btn{margin-left:6px}
+.wstats{display:flex;flex-wrap:wrap;gap:10px;margin:8px 14px 4px}
+.wstat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 14px;min-width:120px}
+.wstat .k{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.wstat .v{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px}
+.wstat .v small{font-size:11px;font-weight:400;color:var(--mut)}
+.pnl-pos{color:var(--now)}.pnl-neg{color:var(--warn)}
+.wflag{display:inline-block;font-size:9px;padding:0 4px;border-radius:4px;border:1px solid var(--line);color:var(--mut);margin-left:3px;text-transform:uppercase}
 .pill.spot{border-color:color-mix(in srgb,var(--gold) 50%,var(--line))}
 .pill.spot-on{color:var(--gold);font-weight:700;border-color:color-mix(in srgb,var(--gold) 75%,var(--line))}
 .spot-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 14px 4px}
@@ -691,6 +733,7 @@ vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
     <button data-t="buy">🛒 <span data-k="tab_buy"></span></button>
     <button data-t="floors">📉 <span data-k="tab_floors"></span></button>
     <button data-t="spots">🎟️ <span data-k="tab_spots"></span></button>
+    <button data-t="wallet">💰 <span data-k="tab_wallet"></span></button>
   </div>
   <div class="chains" id="chains" hidden></div>
   <div class="filtrow">
@@ -739,6 +782,17 @@ vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
   </div>
   <div class="scroll"><table id="tSpots"></table></div>
   <p class="note" id="spPending"></p>
+</section>
+
+<section data-p="wallet" hidden>
+  <h2 data-k="h_wallet"></h2>
+  <div id="wStats" class="wstats"></div>
+  <div class="filtrow" style="margin:6px 14px 0">
+    <label class="chk"><input type="checkbox" id="wRealOnly"> <span data-k="w_real_only"></span></label>
+    <label class="chk"><input type="checkbox" id="wHeldHide"> <span data-k="w_hide_held"></span></label>
+  </div>
+  <div class="scroll"><table id="tWallet"></table></div>
+  <p class="note" data-k="w_note"></p>
 </section>
 </div>
 
@@ -924,9 +978,14 @@ function renderWlBar(){
   bar.innerHTML=h; bar.hidden=false;
 }
 async function wlRefresh(){
-  toast(t('wl_checking'), 9000);
-  try{ await fetch('api/eligibility/refresh',{method:'POST'}); }catch(e){}
-  await reload(); await fetchWlStatus();
+  toast(t('wl_checking'), 120000);
+  try{ await fetch('api/eligibility/refresh',{method:'POST'}); }catch(e){ toast('⚠️ '+e.message); return; }
+  for(let i=0;i<60;i++){
+    await new Promise(x=>setTimeout(x,3000));
+    await fetchWlStatus();
+    if(wlStatus && !wlStatus.eligRunning) break;
+  }
+  await reload();
   toast(t('wl_checked'));
 }
 document.addEventListener('click',async e=>{
@@ -936,13 +995,23 @@ document.addEventListener('click',async e=>{
   try{
     if(act==='refresh'){ await wlRefresh(); }
     else if(act==='login'){
+      await fetchWlStatus();
+      if(wlStatus&&wlStatus.connected){ await wlRefresh(); b.disabled=false; return; }
       toast(t('wl_connecting'), 8000);
       const r=await fetch('api/opensea/login',{method:'POST'});
       const j=await r.json().catch(()=>({}));
-      if(j.error==='no-cli'){ toast(t('wl_need_cli'), 12000); b.disabled=false; return; }
-      if(j.url) window.open(j.url,'_blank','noopener');
-      for(let i=0;i<40 && !(wlStatus&&wlStatus.connected);i++){ await new Promise(x=>setTimeout(x,3000)); await fetchWlStatus(); }
-      if(wlStatus&&wlStatus.connected){ toast(t('wl_connected')); await reload(); }
+      if(j.error==='no-cli'){ toast(t('wl_need_cli'), 14000); b.disabled=false; return; }
+      if(j.url){ const w=window.open(j.url,'_blank','noopener'); if(!w) toast(t('wl_popup')+' '+j.url, 20000); }
+      else { toast(t('wl_no_url'), 16000); b.disabled=false; return; }
+      for(let i=0;i<60 && !(wlStatus&&wlStatus.connected);i++){ await new Promise(x=>setTimeout(x,3000)); await fetchWlStatus(); }
+      if(wlStatus&&wlStatus.connected){
+        toast(t('wl_connected'));
+        // el servidor lanza la comprobación de listas solo al conectar; espera a que acabe
+        toast(t('wl_checking'), 120000);
+        for(let i=0;i<60;i++){ await new Promise(x=>setTimeout(x,3000)); await fetchWlStatus(); if(wlStatus && !wlStatus.eligRunning && wlStatus.eligDoneAt) break; }
+        await reload(); toast(t('wl_checked'));
+      }
+      else toast(t('wl_timeout'), 12000);
     }
   }catch(err){ toast('⚠️ '+err.message); }
   b.disabled=false;
@@ -969,7 +1038,8 @@ const STR = {
   sp_pending_count:'🎟️ {n} plaza(s) pendientes (proyecto sin fecha de mint todavía).',
   sp_del_project:'borrar el proyecto y todas sus plazas',
   wl_os:'OpenSea:',
-  wl_os_tip:'Elegibilidad real de tu wallet en OpenSea. ✅ estás en la lista de esa fase · ✗ no estás · nº = wallets en esa lista (sin comprobar la tuya).',
+  wl_none_lists:'no estás en ninguna lista (comprobado)',
+  wl_os_tip:'Elegibilidad real de tu wallet en OpenSea (firmada por su servidor). ✅ = estás en la lista de esa fase.',
   wl_count:'wallets en esta lista de OpenSea',
   wl_conn:'OpenSea',wl_connect:'Conectar OpenSea',wl_reconnect:'Reconectar',
   wl_refresh:'Actualizar elegibilidad',
@@ -979,7 +1049,21 @@ const STR = {
   wl_checking:'Comprobando tus listas en OpenSea…',
   wl_checked:'Elegibilidad actualizada ✓',
   wl_need_cli:'Necesita el CLI de OpenSea. En una terminal:  npm i -g @opensea/cli  ·  luego  opensea login --scopes read:eligibility',
+  wl_no_url:'No pude arrancar el login. Abre una terminal en la carpeta y ejecuta:  npx -y @opensea/cli@2 login --scopes read:eligibility',
+  wl_popup:'Tu navegador bloqueó la ventana. Abre esta URL a mano:',
+  wl_timeout:'Sigo sin ver la sesión. Cuando termines en OpenSea pulsa "Actualizar elegibilidad".',
   wl_server_only:'La conexión con OpenSea solo funciona en modo servidor (servidor.cmd). En el fichero suelto: abre una terminal y ejecuta  opensea login --scopes read:eligibility',
+  tab_wallet:'Cartera',
+  h_wallet:'Cartera / P&L — compras y ventas de tus wallets',
+  w_real_only:'solo con P&L real (oculta coste desconocido)',
+  w_hide_held:'ocultar lo que sigo teniendo',
+  w_note:'Reconstruido de la API de OpenSea. NO incluye gas · los mints cuentan como coste 0 · P&L en ETH y $ al cambio de hoy (no histórico) · ventas fuera de OpenSea (Blur…) salen como «movido» sin precio. data/trades.json es personal (fuera de git y del modo público). Actualízalo con  node scripts/fetch-trades.mjs  (o update.mjs).',
+  w_realized:'Realizado',w_unrealized:'No realizado',w_sold:'Vendidos',w_held:'En cartera',w_moved:'Movidos fuera',
+  w_none:'Sin datos de cartera. Ejecuta  node scripts/fetch-trades.mjs  (necesita wallets.json + OPENSEA_API_KEY).',
+  w_truncated:'⚠️ historial largo: puede faltar lo más antiguo.',
+  c_bought:'Comprado',c_soldfloor:'Vendido / Floor',c_pnl:'P&L',c_state:'Estado',
+  st_held:'en cartera',st_sold:'vendido',st_moved:'movido fuera',
+  ty_mint:'mint',ty_buy:'compra',ty_transfer_in:'recibido',ty_sale:'venta',ty_transfer_out:'enviado',
   hdr_show:'mostrar filtros',hdr_hide:'ocultar filtros',
   sched_os:'agenda oficial de OpenSea (SeaDrop) — sustituye a la del feed',
   all_chains:'Todas',
@@ -1057,7 +1141,8 @@ const STR = {
   sp_pending_count:'🎟️ {n} pending spot(s) (project has no mint date yet).',
   sp_del_project:'delete the project and all its spots',
   wl_os:'OpenSea:',
-  wl_os_tip:'Your wallet’s real eligibility on OpenSea. ✅ you are on that stage’s list · ✗ you are not · number = wallets on that list (yours not checked).',
+  wl_none_lists:'not on any list (checked)',
+  wl_os_tip:'Your wallet’s real eligibility on OpenSea (signed by their server). ✅ = you are on that stage’s list.',
   wl_count:'wallets on this OpenSea list',
   wl_conn:'OpenSea',wl_connect:'Connect OpenSea',wl_reconnect:'Reconnect',
   wl_refresh:'Refresh eligibility',
@@ -1067,7 +1152,21 @@ const STR = {
   wl_checking:'Checking your OpenSea lists…',
   wl_checked:'Eligibility refreshed ✓',
   wl_need_cli:'Needs the OpenSea CLI. In a terminal:  npm i -g @opensea/cli  ·  then  opensea login --scopes read:eligibility',
+  wl_no_url:'Could not start the login. Open a terminal in the folder and run:  npx -y @opensea/cli@2 login --scopes read:eligibility',
+  wl_popup:'Your browser blocked the popup. Open this URL manually:',
+  wl_timeout:'Still no session. When you finish on OpenSea, press "Refresh eligibility".',
   wl_server_only:'Connecting OpenSea only works in server mode (servidor.cmd). For the standalone file: open a terminal and run  opensea login --scopes read:eligibility',
+  tab_wallet:'Portfolio',
+  h_wallet:'Portfolio / P&L — your wallets’ buys and sells',
+  w_real_only:'only with real P&L (hide unknown cost)',
+  w_hide_held:'hide what I still hold',
+  w_note:'Reconstructed from the OpenSea API. Does NOT include gas · mints count as cost 0 · P&L in ETH and $ at today’s rate (not historical) · sales outside OpenSea (Blur…) show as “moved” with no price. data/trades.json is personal (out of git and of public mode). Refresh with  node scripts/fetch-trades.mjs  (or update.mjs).',
+  w_realized:'Realized',w_unrealized:'Unrealized',w_sold:'Sold',w_held:'Held',w_moved:'Moved out',
+  w_none:'No portfolio data. Run  node scripts/fetch-trades.mjs  (needs wallets.json + OPENSEA_API_KEY).',
+  w_truncated:'⚠️ long history: the oldest items may be missing.',
+  c_bought:'Bought',c_soldfloor:'Sold / Floor',c_pnl:'P&L',c_state:'Status',
+  st_held:'held',st_sold:'sold',st_moved:'moved out',
+  ty_mint:'mint',ty_buy:'buy',ty_transfer_in:'received',ty_sale:'sale',ty_transfer_out:'sent',
   hdr_show:'show filters',hdr_hide:'hide filters',
   sched_os:'official OpenSea drop schedule (SeaDrop) — overrides the feed',
   all_chains:'All',
@@ -1208,18 +1307,22 @@ function xCell(m){
 }
 const publicPrice = m => { const g=m.phases.find(p=>/PUBLIC/i.test(p.k)); return g?priceOf(g.p):(m.priceEth??null); };
 
-// elegibilidad real de tu wallet (OpenSea): ✅ estás en la lista · ✗ no · nº wallets
+// elegibilidad real de tu wallet (OpenSea): ✅ estás en la lista de esa fase
 function wlEligCell(m){
   const w = m.wlElig; if(!w || !w.stages || !w.stages.length) return '';
-  const rows = w.stages.filter(s=>s.k!=='PUBLIC' && (s.eligible!==null || s.wlCount!=null)).map(s=>{
-    if(s.eligible===true)  return '<span class="pill wl-in">✅ '+esc(s.k)+'</span>';
-    if(s.eligible===false) return '<span class="pill wl-out">✗ '+esc(s.k)+'</span>';
-    return '<span class="pill" title="'+t('wl_count')+'">'+esc(s.k)+(s.wlCount!=null?' · '+nf(s.wlCount):'')+'</span>';
-  });
-  if(!rows.length) return '';
-  return '<div class="wl-elig'+(w.stages.some(s=>s.eligible===true)?' wl-elig-yes':'')+'" title="'+t('wl_os_tip')+'">🔎 '+t('wl_os')+' '+rows.join(' ')+'</div>';
+  // por tipo de fase (WL/GTD/FCFS/HOLDER/TEAM), el mejor estado
+  const byK = {};
+  for(const s of w.stages){
+    if(s.k==='PUBLIC') continue;
+    const rank = s.eligible===true?2:s.eligible===false?1:0;
+    if(!byK[s.k] || rank>byK[s.k].rank) byK[s.k]={rank, eligible:s.eligible};
+  }
+  const yes = Object.keys(byK).filter(k=>byK[k].eligible===true);
+  if(!yes.length) return '';   // solo interesa cuando SÍ estás en alguna lista
+  return '<div class="wl-elig wl-elig-yes" title="'+t('wl_os_tip')+'">🔎 '+t('wl_os')+' '+
+    yes.map(k=>'<span class="pill wl-in">✅ '+esc(k)+'</span>').join(' ')+'</div>';
 }
-const wlEligYes = m => !!(m.wlElig && m.wlElig.stages.some(s=>s.eligible===true));
+const wlEligYes = m => !!(m.wlElig && m.wlElig.stages.some(s=>s.eligible===true && s.k!=='PUBLIC'));
 function needCell(m){
   const spot = spotBadge(m);
   const wl = wlEligCell(m);
@@ -1486,6 +1589,54 @@ function applyFilter(){
   });
 }
 
+// ---- Cartera / P&L ----
+function ethShort(v){ if(v==null) return '—'; const a=Math.abs(v), s=v<0?'-':''; return a>=0.01 ? s+'Ξ'+a.toFixed(3) : s+(a*1000).toFixed(1)+'mΞ'; }
+const pnlCls = v => v>0?'pnl-pos':v<0?'pnl-neg':'';
+function renderWallet(){
+  const box=document.getElementById('wStats'), tbl=document.getElementById('tWallet');
+  if(!box||!tbl) return;
+  const T=D.trades;
+  if(!T){ box.innerHTML=''; tbl.innerHTML='<tbody><tr><td class="muted">'+t('w_none')+'</td></tr></tbody>'; return; }
+  const s=T.summary;
+  const tile=(k,v)=>'<div class="wstat"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>';
+  box.innerHTML=
+    tile(t('w_realized'), '<span class="'+pnlCls(s.realizedEth)+'">'+ethShort(s.realizedEth)+'</span> <small>'+fmtUsd(s.realizedUsd)+'</small>')+
+    tile(t('w_unrealized'), '<span class="'+pnlCls(s.unrealizedEth)+'">'+ethShort(s.unrealizedEth)+'</span>')+
+    tile(t('w_sold'), s.sold+' <small>'+s.wins+'✅ / '+s.losses+'❌</small>')+
+    tile(t('w_held'), s.held)+
+    tile(t('w_moved'), s.movedOut);
+
+  const realOnly=document.getElementById('wRealOnly').checked;
+  const hideHeld=document.getElementById('wHeldHide').checked;
+  let rows=T.positions.filter(p=>chainSel==='all'||p.chain===chainSel);
+  if(hideHeld) rows=rows.filter(p=>p.status!=='held');
+  if(realOnly) rows=rows.filter(p=>p.realizedEth!=null || (p.status==='held'&&p.unrealizedEth!=null&&!(p.flags||[]).includes('cost_unknown')));
+
+  const dt=ts=>ts?new Date(ts*1000).toLocaleDateString(L==='es'?'es-ES':'en-US',{year:'2-digit',month:'short',day:'numeric'}):'—';
+  const pr=(eth,usd)=>eth==null?'<span class="muted">?</span>':ethShort(eth)+(usd!=null&&Math.abs(usd)>=0.5?' <small class="muted">'+fmtUsd(usd)+'</small>':'');
+  const flags=fl=>(fl||[]).map(f=>'<span class="wflag">'+esc(f.replace(/_/g,' '))+'</span>').join('');
+  const tyf=k=>t('ty_'+k)===('ty_'+k)?k:t('ty_'+k);
+
+  tbl.innerHTML='<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_bought')+'</th><th>'+t('c_soldfloor')+'</th><th>'+t('c_pnl')+'</th><th>'+t('c_state')+'</th></tr></thead><tbody>'+
+   (rows.map(p=>{
+     const a=p.acquired, dp=p.disposed;
+     const pnl = p.realizedEth!=null ? p.realizedEth : (p.status==='held' ? p.unrealizedEth : null);
+     const pnlUsd = p.realizedUsd!=null ? p.realizedUsd : null;
+     const pct = (a&&a.priceEth>0&&pnl!=null) ? Math.round(pnl/a.priceEth*100) : null;
+     const stTxt = p.status==='held'?t('st_held'):p.status==='sold'?t('st_sold'):t('st_moved');
+     return '<tr>'+
+       cell(t('c_project'), chainPill(p.chain)+'<b>'+esc(p.name)+'</b>'+(p.url?' '+osA(p.url):'')+(flags(p.flags)?'<br>'+flags(p.flags):''), null, esc(p.name).toLowerCase())+
+       cell(t('c_bought'), a?dt(a.ts)+' · '+tyf(a.type)+'<br>'+pr(a.priceEth,a.priceUsd):'—', 'num', a?a.ts:0)+
+       cell(t('c_soldfloor'), dp?dt(dp.ts)+' · '+tyf(dp.type)+'<br>'+pr(dp.priceEth,dp.priceUsd):(p.floorEth!=null?'floor '+ethShort(p.floorEth):'—'), 'num', dp?dp.ts:9e14)+
+       cell(t('c_pnl'), pnl==null?'<span class="muted">—</span>':'<span class="'+pnlCls(pnl)+'">'+ethShort(pnl)+(pnlUsd!=null&&Math.abs(pnlUsd)>=0.5?' <small>'+fmtUsd(pnlUsd)+'</small>':'')+(pct!=null?' <small>'+(pct>0?'+':'')+pct+'%</small>':'')+'</span>', 'num', pnl==null?-9e9:pnl)+
+       cell(t('c_state'), stTxt)+
+     '</tr>';
+   }).join('') || '<tr><td colspan=5 class="muted">—</td></tr>')+'</tbody>';
+
+  const note=document.querySelector('section[data-p="wallet"] .note');
+  if(note && T.truncated) note.textContent = t('w_truncated')+' '+t('w_note');
+}
+
 function render(){
   pruneArmed();
   document.documentElement.lang = L;
@@ -1596,6 +1747,7 @@ function render(){
   if(spPendEl) spPendEl.textContent = spPend ? t('sp_pending_count').replace('{n}', spPend) : '';
 
   renderWlBar();
+  renderWallet();
   applyFilter();
   if(typeof applyHdr==='function') applyHdr();
 }
@@ -1608,6 +1760,8 @@ document.getElementById('lang').addEventListener('click',e=>{
 document.getElementById('hideLow').addEventListener('change',render);
 document.getElementById('q').addEventListener('input',applyFilter);
 document.getElementById('onlyKeys').addEventListener('change',applyFilter);
+document.getElementById('wRealOnly').addEventListener('change',renderWallet);
+document.getElementById('wHeldHide').addEventListener('change',renderWallet);
 document.getElementById('chains').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
   chainSel=b.dataset.c; try{ localStorage.setItem('mints_chain',chainSel); }catch(err){}

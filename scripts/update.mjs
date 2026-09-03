@@ -28,6 +28,9 @@ const steps = [
 if (hasKey && hasWallets) {
   steps.push(["Escaneo de wallets", "scan-wallets.mjs", ["--write"]]);
 }
+if (!pub && hasKey && hasWallets) {
+  steps.push(["Cartera / P&L (compras y ventas)", "fetch-trades.mjs", []]);
+}
 // elegibilidad real (WL/GTD/FCFS) de tu wallet: solo si hay sesión de OpenSea
 if (!pub && existsSync(authFile())) {
   steps.push(["Elegibilidad de tu wallet (OpenSea)", "fetch-eligibility.mjs", []]);

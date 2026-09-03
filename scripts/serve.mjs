@@ -67,7 +67,7 @@ const server = createServer(async (req, res) => {
     // ---- OpenSea: sesión para la elegibilidad real (WL/GTD/FCFS) de tu wallet ----
     if (path === "/api/opensea/status") {
       const cliAvailable = !!osCliBase();
-      let out = { connected: false, cliAvailable, loggingIn: !!loginChild };
+      let out = { connected: false, cliAvailable, loggingIn: !!loginChild, eligRunning, eligDoneAt };
       if (cliAvailable) {
         const me = whoami();
         if (me) out = { ...out, connected: true, address: me.address, label: walletLabel(ROOT, me.address), expiresAt: me.exp || null };
@@ -82,10 +82,10 @@ const server = createServer(async (req, res) => {
       return res.end(JSON.stringify(url ? { url } : { error: "no-url" }));
     }
     if (path === "/api/eligibility/refresh" && req.method === "POST") {
-      const code = await runElig();
-      await rebuild();
       res.setHeader("content-type", "application/json");
-      return res.end(JSON.stringify({ ok: code === 0, code }));
+      if (eligRunning) return res.end(JSON.stringify({ running: true }));
+      kickElig();
+      return res.end(JSON.stringify({ started: true }));
     }
 
     res.statusCode = 404;
@@ -104,38 +104,55 @@ function runFloors() {
 
 // --- OpenSea CLI: login por navegador (sin clave privada) + refresco de elegibilidad ---
 let loginChild = null;
+let eligRunning = false, eligDoneAt = 0, eligCode = null;
 function startOsLogin() {
   return new Promise((resolve) => {
-    if (loginChild) return resolve(null);
+    if (loginChild) { try { loginChild.kill(); } catch {} loginChild = null; }
     const base = osCliBase();
     if (!base) return resolve(null);
-    const args = [...base.slice(1), "login", "--no-browser", "--scopes", "read:eligibility"];
-    const child = spawn(base[0], args, { shell: process.platform === "win32" });
+    // un único string para el shell -> sin DeprecationWarning DEP0190 (no hay input de usuario)
+    const cmd = `${base.join(" ")} login --no-browser --scopes read:eligibility`;
+    const child = spawn(cmd, { shell: true });
     loginChild = child;
     let done = false, buf = "";
     const finish = (val) => { if (!done) { done = true; resolve(val); } };
-    const t = setTimeout(() => finish(null), 20000); // si no imprime URL en 20s, nada
-    child.stdout.on("data", (d) => {
-      buf += d.toString();
-      const m = buf.match(/https?:\/\/\S+/);
-      if (m) { clearTimeout(t); finish(m[0].replace(/[)\].,"']+$/, "")); }
-      process.stdout.write(d);
-    });
-    child.stderr.on("data", (d) => process.stderr.write(d));
+    const t = setTimeout(() => finish(null), 45000);          // sin URL en 45s -> nada
+    const kill = setTimeout(() => { try { child.kill(); } catch {} }, 15 * 60000); // fuga
+    const scan = (d) => {
+      const s = d.toString();
+      process.stderr.write(s);
+      buf += s;
+      const m = buf.match(/https?:\/\/auth\.opensea\.io\/\S+/) || buf.match(/https?:\/\/\S+/);
+      if (m) { clearTimeout(t); finish(m[0].replace(/[)\].,"'\s]+$/, "")); }
+    };
+    child.stdout.on("data", scan);
+    child.stderr.on("data", scan);            // el CLI imprime la URL por stderr
     child.on("close", (code) => {
-      loginChild = null;
-      clearTimeout(t);
+      loginChild = null; clearTimeout(t); clearTimeout(kill);
       console.log(`  opensea login → código ${code}`);
       finish(null);
-      if (code === 0) runElig().then(() => rebuild()); // ya conectado: comprueba listas
+      if (code === 0) kickElig();   // ya conectado: comprueba listas
     });
+    child.on("error", (e) => { console.error("  opensea login:", e.message); loginChild = null; clearTimeout(t); finish(null); });
   });
 }
 function runElig() {
   return new Promise((resolve) => {
-    const p = spawn(process.execPath, [join(HERE, "fetch-eligibility.mjs")], { stdio: "inherit" });
+    // pásale los slugs del radar (mints en curso / inminentes) además del calendario
+    const radarSlugs = [...new Set((cache?.mints || [])
+      .filter((m) => (m.status === "now" || m.status === "soon") && m.slug)
+      .map((m) => m.slug))].join(",");
+    const args = [join(HERE, "fetch-eligibility.mjs")];
+    if (radarSlugs) args.push(`--slugs=${radarSlugs}`);
+    const p = spawn(process.execPath, args, { stdio: "inherit" });
     p.on("close", (code) => resolve(code ?? 1));
   });
+}
+// lanza la comprobación en segundo plano y marca eligRunning para que la web sepa
+function kickElig() {
+  if (eligRunning) return;
+  eligRunning = true;
+  runElig().then(async (code) => { eligRunning = false; eligDoneAt = Date.now(); eligCode = code; await rebuild(); });
 }
 
 // Solo loopback: el panel y sus endpoints (owned, opensea/login, eligibility)

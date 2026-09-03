@@ -136,6 +136,25 @@ en tu máquina.
 - **Personal**: `data/eligibility-wallet.json` está en `.gitignore` y el modo
   `--public` (la web) lo quita del payload.
 
+## Cartera / P&L (💰 pestaña Cartera)
+`node scripts/fetch-trades.mjs` reconstruye tus **compras y ventas de NFT** en
+RobinHood / Ethereum / Ink leyendo la **API de eventos de OpenSea** (`events/
+accounts/{wallet}`) — nada a mano. Necesita `data/wallets.json` + `OPENSEA_API_KEY`.
+Escribe `data/trades.json` (personal: `.gitignore` + fuera del modo `--public`).
+`update.mjs` lo corre solo si hay wallets + key.
+
+La pestaña muestra: **Realizado** (ETH + $), **No realizado** (a floor actual),
+vendidos (W/L), en cartera, movidos fuera; y una tabla por NFT con compra / venta /
+P&L / estado. Filtros: red, "solo con P&L real", "ocultar lo que sigo teniendo".
+
+**Límites v1** (marcados en cada fila y en la nota al pie):
+- **No incluye gas.**
+- Los **mints cuentan como coste 0** (aunque hayas pagado mint price).
+- P&L en **ETH + $ al cambio de HOY**, no histórico.
+- Ventas fuera de OpenSea (Blur…) salen como **«movido»** sin precio.
+- Transferencias entre tus propias wallets se ignoran (portfolio unificado).
+- Historial muy largo: puede faltar lo más antiguo (aviso en la pestaña).
+
 ## Cómo se actualizan los datos
 
 | Dato | Fuente | Cuándo se actualiza |
@@ -147,6 +166,7 @@ en tu máquina.
 | Elegibilidad de un mint | tú | editando `data/eligibility.json` |
 | Plazas confirmadas (🎟️) | tú | pestaña **Plazas** del dashboard — local a tu navegador |
 | Elegibilidad real de tu wallet (🔎) | API de OpenSea (con sesión) | botón **Actualizar elegibilidad**, o `fetch-eligibility.mjs` / `update.mjs` |
+| Cartera / P&L (💰) | API de eventos de OpenSea | `fetch-trades.mjs` (o `update.mjs`) |
 
 **El fichero suelto `dashboard.html` NO se actualiza solo** — es una foto. Regenéralo.
 
