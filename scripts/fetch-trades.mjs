@@ -60,22 +60,37 @@ function money(payment, rate) {
   return { eth: amt, usd: rate ? amt * rate : null, sym: sym || "ETH" }; // ETH/WETH/otros 18d
 }
 
+let apiErrors = 0;
 async function eventsFor(address, kind) {
   const out = [];
-  let cursor = null;
+  let cursor = null, hadError = false;
   for (let page = 0; page < MAX_PAGES; page++) {
     const u = new URL(`https://api.opensea.io/api/v2/events/accounts/${address}`);
     u.searchParams.set("event_type", kind);
     u.searchParams.set("limit", "50");
     if (cursor) u.searchParams.set("next", cursor);
-    let j;
-    try { const r = await fetch(u, H); if (!r.ok) { log(`  events ${kind} ${address.slice(0, 8)}: HTTP ${r.status}`); break; } j = await r.json(); }
-    catch (e) { log(`  events ${kind}: ${e.message}`); break; }
+    let j, ok = false;
+    for (let retry = 0; retry < 4 && !ok; retry++) {
+      try {
+        const r = await fetch(u, H);
+        // OpenSea limita la API de eventos y a veces devuelve 401 en vez de 429
+        if (r.status === 401 || r.status === 429) {
+          const wait = 2000 * 2 ** retry;
+          log(`  events ${kind}: HTTP ${r.status}, reintento en ${wait / 1000}s`);
+          await new Promise((res) => setTimeout(res, wait));
+          continue;
+        }
+        if (!r.ok) { log(`  events ${kind} ${address.slice(0, 8)}: HTTP ${r.status}`); hadError = true; break; }
+        j = await r.json(); ok = true;
+      } catch (e) { log(`  events ${kind}: ${e.message}`); await new Promise((res) => setTimeout(res, 1500)); }
+    }
+    if (!ok) { hadError = true; break; }
     for (const ev of j.asset_events || []) if (CHAINS.has(ev.chain)) out.push(ev);
     cursor = j.next || null;
     if (!cursor) break;
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 150));
   }
+  if (hadError) apiErrors++;
   return { events: out, truncated: out.length >= MAX_PAGES * 50 };
 }
 
@@ -95,6 +110,13 @@ async function main() {
       all.push(...events);
       log(`  ${w.label}/${kind}: ${events.length}`);
     }
+  }
+
+  // si la API falló y no tenemos NADA, no pisamos el trades.json bueno que ya haya
+  if (!all.length && apiErrors) {
+    console.error(`\n⚠️ La API de eventos de OpenSea no respondió (${apiErrors} error/es; suele ser`);
+    console.error(`   límite temporal del plan free). NO se toca data/trades.json. Reintenta en unos minutos.`);
+    process.exit(2);
   }
 
   // 2a) la API repite eventos idénticos y los devuelve una vez por wallet -> únicos
@@ -205,7 +227,10 @@ async function main() {
     const f = floors[p.collection];
     if (!f) continue;
     p.floorEth = f.eth; p.floorUsd = f.usd;
-    if (p.acquired?.priceEth != null && f.eth != null) p.unrealizedEth = +(f.eth - p.acquired.priceEth).toFixed(6);
+    // P&L no realizado SOLO en lo que compraste (los mints gratis no tienen coste base)
+    if (p.acquired?.type === "buy" && p.acquired.priceEth != null && f.eth != null) {
+      p.unrealizedEth = +(f.eth - p.acquired.priceEth).toFixed(6);
+    }
   }
 
   // 5) resumen
@@ -215,7 +240,8 @@ async function main() {
   const summary = {
     realizedEth: +sum(sold, "realizedEth").toFixed(4),
     realizedUsd: +sum(sold, "realizedUsd").toFixed(2),
-    unrealizedEth: +sum(held, "unrealizedEth").toFixed(4),
+    unrealizedEth: +sum(held, "unrealizedEth").toFixed(4),          // solo compras
+    heldFloorEth: +sum(held, "floorEth").toFixed(4),                // valor a floor de TODO lo que tienes
     sold: sold.length,
     held: held.length,
     wins: sold.filter((p) => (p.realizedEth || 0) > 0).length,

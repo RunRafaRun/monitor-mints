@@ -1059,6 +1059,7 @@ const STR = {
   w_hide_held:'ocultar lo que sigo teniendo',
   w_note:'Reconstruido de la API de OpenSea. NO incluye gas · los mints cuentan como coste 0 · P&L en ETH y $ al cambio de hoy (no histórico) · ventas fuera de OpenSea (Blur…) salen como «movido» sin precio. data/trades.json es personal (fuera de git y del modo público). Actualízalo con  node scripts/fetch-trades.mjs  (o update.mjs).',
   w_realized:'Realizado',w_unrealized:'No realizado',w_sold:'Vendidos',w_held:'En cartera',w_moved:'Movidos fuera',
+  w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',
   w_none:'Sin datos de cartera. Ejecuta  node scripts/fetch-trades.mjs  (necesita wallets.json + OPENSEA_API_KEY).',
   w_truncated:'⚠️ historial largo: puede faltar lo más antiguo.',
   c_bought:'Comprado',c_soldfloor:'Vendido / Floor',c_pnl:'P&L',c_state:'Estado',
@@ -1162,6 +1163,7 @@ const STR = {
   w_hide_held:'hide what I still hold',
   w_note:'Reconstructed from the OpenSea API. Does NOT include gas · mints count as cost 0 · P&L in ETH and $ at today’s rate (not historical) · sales outside OpenSea (Blur…) show as “moved” with no price. data/trades.json is personal (out of git and of public mode). Refresh with  node scripts/fetch-trades.mjs  (or update.mjs).',
   w_realized:'Realized',w_unrealized:'Unrealized',w_sold:'Sold',w_held:'Held',w_moved:'Moved out',
+  w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',
   w_none:'No portfolio data. Run  node scripts/fetch-trades.mjs  (needs wallets.json + OPENSEA_API_KEY).',
   w_truncated:'⚠️ long history: the oldest items may be missing.',
   c_bought:'Bought',c_soldfloor:'Sold / Floor',c_pnl:'P&L',c_state:'Status',
@@ -1589,9 +1591,22 @@ function applyFilter(){
   });
 }
 
-// ---- Cartera / P&L ----
-function ethShort(v){ if(v==null) return '—'; const a=Math.abs(v), s=v<0?'-':''; return a>=0.01 ? s+'Ξ'+a.toFixed(3) : s+(a*1000).toFixed(1)+'mΞ'; }
+// ---- Cartera / P&L ----  (los floors de RH van en $, como en OpenSea)
 const pnlCls = v => v>0?'pnl-pos':v<0?'pnl-neg':'';
+const wRate = () => (D.trades && D.trades.ethUsd) || ETHUSD || 2500;
+function wEth(v){ if(v==null) return ''; const a=Math.abs(v); return '<span class="eth">Ξ'+(a<0.001?v.toFixed(5):a<1?v.toFixed(4):v.toFixed(3))+'</span>'; }
+// $ delante (convención RH), Ξ detrás en gris
+function wPrice(eth, usd){
+  if(usd==null && eth!=null) usd = eth*wRate();
+  if(eth==null && usd==null) return '<span class="muted">?</span>';
+  return (usd!=null?fmtUsd(usd):'') + (eth!=null?' '+wEth(eth):'');
+}
+function wPnl(eth, usd, pct){
+  if(eth==null) return '<span class="muted">—</span>';
+  if(usd==null) usd = eth*wRate();
+  const sg = eth>0?'+':'';
+  return '<span class="'+pnlCls(eth)+'">'+sg+fmtUsd(usd)+' '+wEth(eth)+(pct!=null?' <small>'+(pct>0?'+':'')+pct+'%</small>':'')+'</span>';
+}
 function renderWallet(){
   const box=document.getElementById('wStats'), tbl=document.getElementById('tWallet');
   if(!box||!tbl) return;
@@ -1600,8 +1615,9 @@ function renderWallet(){
   const s=T.summary;
   const tile=(k,v)=>'<div class="wstat"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>';
   box.innerHTML=
-    tile(t('w_realized'), '<span class="'+pnlCls(s.realizedEth)+'">'+ethShort(s.realizedEth)+'</span> <small>'+fmtUsd(s.realizedUsd)+'</small>')+
-    tile(t('w_unrealized'), '<span class="'+pnlCls(s.unrealizedEth)+'">'+ethShort(s.unrealizedEth)+'</span>')+
+    tile(t('w_realized'), wPnl(s.realizedEth, s.realizedUsd))+
+    tile(t('w_unrealized'), wPnl(s.unrealizedEth, null))+
+    tile(t('w_held_value'), s.heldFloorEth!=null ? wPrice(s.heldFloorEth, null) : '—')+
     tile(t('w_sold'), s.sold+' <small>'+s.wins+'✅ / '+s.losses+'❌</small>')+
     tile(t('w_held'), s.held)+
     tile(t('w_moved'), s.movedOut);
@@ -1610,25 +1626,29 @@ function renderWallet(){
   const hideHeld=document.getElementById('wHeldHide').checked;
   let rows=T.positions.filter(p=>chainSel==='all'||p.chain===chainSel);
   if(hideHeld) rows=rows.filter(p=>p.status!=='held');
-  if(realOnly) rows=rows.filter(p=>p.realizedEth!=null || (p.status==='held'&&p.unrealizedEth!=null&&!(p.flags||[]).includes('cost_unknown')));
+  if(realOnly) rows=rows.filter(p=>{
+    if(p.realizedEth!=null) return true;                       // venta con coste conocido
+    const a=p.acquired;
+    return p.status==='held' && a && a.type==='buy' && a.priceEth!=null;   // compra real, aún en cartera
+  });
 
   const dt=ts=>ts?new Date(ts*1000).toLocaleDateString(L==='es'?'es-ES':'en-US',{year:'2-digit',month:'short',day:'numeric'}):'—';
-  const pr=(eth,usd)=>eth==null?'<span class="muted">?</span>':ethShort(eth)+(usd!=null&&Math.abs(usd)>=0.5?' <small class="muted">'+fmtUsd(usd)+'</small>':'');
   const flags=fl=>(fl||[]).map(f=>'<span class="wflag">'+esc(f.replace(/_/g,' '))+'</span>').join('');
   const tyf=k=>t('ty_'+k)===('ty_'+k)?k:t('ty_'+k);
 
   tbl.innerHTML='<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_bought')+'</th><th>'+t('c_soldfloor')+'</th><th>'+t('c_pnl')+'</th><th>'+t('c_state')+'</th></tr></thead><tbody>'+
    (rows.map(p=>{
      const a=p.acquired, dp=p.disposed;
+     const mintCost0 = a && a.type==='mint';
      const pnl = p.realizedEth!=null ? p.realizedEth : (p.status==='held' ? p.unrealizedEth : null);
      const pnlUsd = p.realizedUsd!=null ? p.realizedUsd : null;
      const pct = (a&&a.priceEth>0&&pnl!=null) ? Math.round(pnl/a.priceEth*100) : null;
      const stTxt = p.status==='held'?t('st_held'):p.status==='sold'?t('st_sold'):t('st_moved');
      return '<tr>'+
        cell(t('c_project'), chainPill(p.chain)+'<b>'+esc(p.name)+'</b>'+(p.url?' '+osA(p.url):'')+(flags(p.flags)?'<br>'+flags(p.flags):''), null, esc(p.name).toLowerCase())+
-       cell(t('c_bought'), a?dt(a.ts)+' · '+tyf(a.type)+'<br>'+pr(a.priceEth,a.priceUsd):'—', 'num', a?a.ts:0)+
-       cell(t('c_soldfloor'), dp?dt(dp.ts)+' · '+tyf(dp.type)+'<br>'+pr(dp.priceEth,dp.priceUsd):(p.floorEth!=null?'floor '+ethShort(p.floorEth):'—'), 'num', dp?dp.ts:9e14)+
-       cell(t('c_pnl'), pnl==null?'<span class="muted">—</span>':'<span class="'+pnlCls(pnl)+'">'+ethShort(pnl)+(pnlUsd!=null&&Math.abs(pnlUsd)>=0.5?' <small>'+fmtUsd(pnlUsd)+'</small>':'')+(pct!=null?' <small>'+(pct>0?'+':'')+pct+'%</small>':'')+'</span>', 'num', pnl==null?-9e9:pnl)+
+       cell(t('c_bought'), a?dt(a.ts)+' · '+tyf(a.type)+'<br>'+(mintCost0?'<span class="muted">'+t('w_free')+'</span>':wPrice(a.priceEth,a.priceUsd)):'—', 'num', a?a.ts:0)+
+       cell(t('c_soldfloor'), dp?dt(dp.ts)+' · '+tyf(dp.type)+'<br>'+wPrice(dp.priceEth,dp.priceUsd):(p.floorEth!=null?'<span class="muted">floor</span> '+wPrice(p.floorEth,p.floorUsd):'—'), 'num', dp?dp.ts:9e14)+
+       cell(t('c_pnl'), mintCost0&&p.status==='held' ? '<span class="muted">'+t('w_value')+' '+wPrice(p.floorEth,p.floorUsd)+'</span>' : wPnl(pnl, pnlUsd, pct), 'num', pnl==null?-9e9:pnl)+
        cell(t('c_state'), stTxt)+
      '</tr>';
    }).join('') || '<tr><td colspan=5 class="muted">—</td></tr>')+'</tbody>';

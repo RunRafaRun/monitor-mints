@@ -99,9 +99,10 @@ async function main() {
     if (slugs.size >= MAX_DROPS) break;
     slugs.set(s, null);
   }
+  let apiErr = 0;
   for (const type of ["upcoming", "featured", "recently_minted"]) {
     const { status, body } = await osGet(`/api/v2/drops?type=${type}&limit=100`);
-    if (status !== 200 || !Array.isArray(body?.drops)) { log(`  drops ${type}: HTTP ${status}`); continue; }
+    if (status !== 200 || !Array.isArray(body?.drops)) { log(`  drops ${type}: HTTP ${status}`); if (status === 401 || status === 429) apiErr++; continue; }
     for (const d of body.drops) {
       if (slugs.size >= MAX_DROPS) break;
       if (!CHAINS.includes(d.chain) || !d.collection_slug) continue;
@@ -110,15 +111,28 @@ async function main() {
     }
   }
   log(`${slugs.size} drops a comprobar`);
-  if (!slugs.size) { writeOut(me.address, {}, auth); return; }
+  if (!slugs.size) {
+    if (apiErr) die("\n⚠️ La API de OpenSea no respondió (límite temporal). NO se toca data/eligibility-wallet.json.", 2);
+    writeOut(me.address, {}, auth); return;
+  }
+
+  // caché de las fases de cada drop (labels/uuid no cambian) -> menos llamadas
+  const metaPath = join(ROOT, "data", "contract-slugs.json").replace("contract-slugs", "drops-meta");
+  let metaCache = {}; try { metaCache = JSON.parse(readFileSync(metaPath, "utf8")); } catch { /**/ }
+  const META_TTL = 6 * 3600 * 1000;
 
   // 2) fases (API key) + elegibilidad (sesión) por drop
   const drops = {};
-  let n = 0, hitStages = 0, cliCalls = 0;
+  let n = 0, hitStages = 0, cliCalls = 0, metaWrote = false;
   for (const [slug, chain] of slugs) {
     n++;
-    const meta = await osGet(`/api/v2/drops/${slug}`);
-    const metaStages = Array.isArray(meta.body?.stages) ? meta.body.stages : [];
+    let metaStages = metaCache[slug] && (Date.now() - metaCache[slug]._at < META_TTL) ? metaCache[slug].stages : null;
+    if (!metaStages) {
+      const meta = await osGet(`/api/v2/drops/${slug}`);
+      metaStages = Array.isArray(meta.body?.stages) ? meta.body.stages : [];
+      metaCache[slug] = { _at: Date.now(), stages: metaStages };
+      metaWrote = true;
+    }
 
     let elig = null;
     if (bearer) {
@@ -151,6 +165,7 @@ async function main() {
     if (hits.length) log(`  ✅ ${slug}: ${hits.join(", ")}`);
     if (n % 5 === 0) await new Promise((r) => setTimeout(r, 400));
   }
+  if (metaWrote) { try { writeFileSync(metaPath, JSON.stringify(metaCache) + "\n"); } catch { /**/ } }
 
   writeOut(me.address, drops, auth);
   log(`\n✔ ${OUT}  ·  ${hitStages} fase(s) donde estás en la lista`);
