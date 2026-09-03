@@ -1059,7 +1059,7 @@ const STR = {
   w_hide_held:'ocultar lo que sigo teniendo',
   w_note:'Reconstruido de la BLOCKCHAIN (Blockscout): precio real de cada mint y de cada compra/venta, y el gas. P&L en ETH y $ al cambio de HOY (no histórico). El floor sale de OpenSea (muchas colecciones de Ink no cotizan ahí → sin floor). Ventas fuera de un marketplace on-chain estándar salen como «movido». data/trades.json es personal (fuera de git y del modo público). Actualízalo con  node scripts/fetch-trades.mjs  (o update.mjs).',
   w_realized:'Realizado',w_unrealized:'No realizado',w_sold:'Vendidos',w_held:'En cartera',w_moved:'Movidos fuera',
-  w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',w_gas:'Gas total',w_net_sell:'neto si vendes',w_exit_gas:'floor menos el gas estimado para vender (mediana del gas que pagaste al entrar en esa red)',
+  w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',w_gas:'Gas total',w_net_sell:'neto si vendes',w_mkt:'~mercado',w_mkt_tip:'Sin floor de OpenSea: mínimo de las últimas ventas on-chain de la colección',w_exit_gas:'floor menos el gas estimado para vender (mediana del gas que pagaste al entrar en esa red)',
   w_none:'Sin datos de cartera. Ejecuta  node scripts/fetch-trades.mjs  (necesita wallets.json + OPENSEA_API_KEY).',
   w_truncated:'⚠️ historial largo: puede faltar lo más antiguo.',
   c_bought:'Comprado',c_soldfloor:'Vendido / Floor',c_pnl:'P&L',c_state:'Estado',
@@ -1163,7 +1163,7 @@ const STR = {
   w_hide_held:'hide what I still hold',
   w_note:'Reconstructed from the BLOCKCHAIN (Blockscout): real price of every mint and every buy/sell, plus gas. P&L in ETH and $ at TODAY’s rate (not historical). Floor comes from OpenSea (many Ink collections do not trade there → no floor). Sales outside a standard on-chain marketplace show as “moved”. data/trades.json is personal (out of git and of public mode). Refresh with  node scripts/fetch-trades.mjs  (or update.mjs).',
   w_realized:'Realized',w_unrealized:'Unrealized',w_sold:'Sold',w_held:'Held',w_moved:'Moved out',
-  w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',w_gas:'Total gas',w_net_sell:'net if you sell',w_exit_gas:'floor minus estimated gas to sell (median of the gas you paid to enter on that chain)',
+  w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',w_gas:'Total gas',w_net_sell:'net if you sell',w_mkt:'~market',w_mkt_tip:'No OpenSea floor: lowest of the collection last on-chain sales',w_exit_gas:'floor minus estimated gas to sell (median of the gas you paid to enter on that chain)',
   w_none:'No portfolio data. Run  node scripts/fetch-trades.mjs  (needs wallets.json + OPENSEA_API_KEY).',
   w_truncated:'⚠️ long history: the oldest items may be missing.',
   c_bought:'Bought',c_soldfloor:'Sold / Floor',c_pnl:'P&L',c_state:'Status',
@@ -1672,7 +1672,7 @@ function renderWallet(){
      return '<tr>'+
        cell(t('c_project'), chainPill(p.chain)+'<b>'+esc(p.name)+'</b>'+(p.url?' '+osA(p.url):'')+(flags(p.flags)?'<br>'+flags(p.flags):''), null, esc(p.name).toLowerCase())+
        cell(t('c_bought'), a?dt(a.ts)+' · '+tyf(a.type)+txLink(p.chain,a.tx)+'<br>'+(mintCost0?'<span class="muted">'+t('w_free')+'</span>':wPrice(a.priceEth,a.priceUsd))+gasTxt(a.gasEth):'—', 'num', a?a.ts:0)+
-       cell(t('c_soldfloor'), dp?dt(dp.ts)+' · '+tyf(dp.type)+txLink(p.chain,dp.tx)+'<br>'+wPrice(dp.priceEth,dp.priceUsd)+gasTxt(dp.gasEth):(p.floorEth!=null?'<span class="muted">floor</span> '+wPrice(p.floorEth,p.floorUsd):'—'), 'num', dp?dp.ts:9e14)+
+       cell(t('c_soldfloor'), dp?dt(dp.ts)+' · '+tyf(dp.type)+txLink(p.chain,dp.tx)+'<br>'+wPrice(dp.priceEth,dp.priceUsd)+gasTxt(dp.gasEth):(p.floorEth!=null?'<span class="muted" title="'+(p.floorSrc&&p.floorSrc[0]==='s'?t('w_mkt_tip'):'')+'">'+(p.floorSrc&&p.floorSrc[0]==='s'?t('w_mkt'):'floor')+'</span> '+wPrice(p.floorEth,p.floorUsd):'—'), 'num', dp?dp.ts:9e14)+
        cell(t('c_pnl'), (()=>{
           if(mintCost0&&p.status==='held') {
             const eg=exitGas(p.chain), net=(p.floorEth!=null?p.floorEth:0)-eg;

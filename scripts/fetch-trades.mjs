@@ -56,29 +56,27 @@ const own = new Set(wallets.map((w) => w.address.toLowerCase()));
 const labelOf = (a) => wallets.find((w) => w.address.toLowerCase() === String(a).toLowerCase())?.label || null;
 
 let apiErrors = 0;
-// Blockscout PRO free: ~pocas req/s -> serializamos con un hueco mínimo
-let gate = Promise.resolve();
-const MIN_GAP = 260;
+// Blockscout PRO free limita req/s: como mucho 3 en vuelo, con un hueco mínimo
+let inFlight = 0;
+const waiters = [];
+const acquire = () => new Promise((res) => { if (inFlight < 3) { inFlight++; res(); } else waiters.push(res); });
+const release = () => { inFlight--; const w = waiters.shift(); if (w) { inFlight++; setTimeout(w, 120); } };
 async function bs(chainId, path, params = {}) {
-  const run = gate.then(async () => {
+  await acquire();
+  try {
     const u = new URL(`https://api.blockscout.com/${chainId}/api/v2${path}`);
     for (const [k, v] of Object.entries({ ...params, apikey: BS_KEY })) if (v != null) u.searchParams.set(k, v);
     for (let retry = 0; retry < 5; retry++) {
       try {
         const r = await fetch(u, { headers: { accept: "application/json" } });
-        if (r.status === 429 || r.status === 402) {
-          await new Promise((x) => setTimeout(x, 1500 * 2 ** retry));
-          continue;
-        }
+        if (r.status === 429 || r.status === 402) { await new Promise((x) => setTimeout(x, 1500 * 2 ** retry)); continue; }
         if (!r.ok) { apiErrors++; return null; }
         return await r.json();
       } catch (e) { log(`  Blockscout: ${e.message}`); await new Promise((x) => setTimeout(x, 1500)); }
     }
     apiErrors++;
     return null;
-  });
-  gate = run.then(() => new Promise((x) => setTimeout(x, MIN_GAP)), () => new Promise((x) => setTimeout(x, MIN_GAP)));
-  return run;
+  } finally { release(); }
 }
 
 async function ethUsd() {
@@ -154,6 +152,37 @@ function payTotals(pays, party, dir) {
     if (p.kind === "eth") eth += p.amt; else usd += p.amt;
   }
   return { eth, usd };
+}
+
+// valor de mercado on-chain (fallback del floor): el MÍNIMO de las últimas ~5
+// ventas reales de la colección, leído de Blockscout. Sin marketplace, sin límite.
+async function marketFromSales(chainId, contract, rate) {
+  const j = await bs(chainId, `/tokens/${contract}/transfers`);
+  const items = j?.items || [];
+  const txs = [];
+  const seen = new Set();
+  for (const it of items) {
+    const h = it.transaction_hash;
+    if (!h || seen.has(h) || it.from?.hash === ZERO) continue; // saltamos mints
+    seen.add(h); txs.push(h);
+    if (txs.length >= 25) break;
+  }
+  const prices = [];
+  let scanned = 0;
+  for (const h of txs) {
+    scanned++;
+    if (scanned > 12 || (scanned >= 6 && !prices.length)) break;   // colección sin ventas -> no insistir
+    const t = await analyzeTx(chainId, h);
+    if (!t?.pays?.length) continue;                       // sin pago -> transfer/regalo
+    let eth = 0, usd = 0;
+    for (const p of t.pays) { if (p.kind === "eth") eth += p.amt; else usd += p.amt; }
+    const priceEth = eth + (usd ? usd / rate : 0);
+    if (priceEth > 0) prices.push(priceEth);
+    if (prices.length >= 5) break;
+  }
+  if (!prices.length) return null;
+  const eth = Math.min(...prices.slice(0, 5));
+  return { eth, usd: eth * rate, n: prices.length };
 }
 
 async function main() {
@@ -260,17 +289,28 @@ async function main() {
     }
   }
 
-  // 3) floor actual por colección (OpenSea, endpoint de colección = no limitado)
-  const floors = {};
+  // 3) valor de mercado por colección: floor de OpenSea si responde; si no,
+  //    el mínimo de las últimas ~5 ventas on-chain (Blockscout).
+  const floors = {};                 // contract -> { eth, usd, src }
+  const chainIdOf = Object.fromEntries(CHAINS.map((c) => [c.key, c.id]));
+  const heldList = [...heldContracts].slice(0, 60).map((hc) => { const [chain, contract] = hc.split("|"); return { chain, contract }; });
+
   if (OS_KEY) {
     const H = { headers: { "x-api-key": OS_KEY, accept: "application/json" } };
-    // devuelve {ok, body}: ok=false si la llamada falló (para NO cachear un fallo como "no hay colección")
+    // devuelve {ok, body}. OpenSea es solo una MEJORA (el fallback on-chain cubre
+    // el resto), así que si va lento no insistimos: 1 reintento corto y a otra cosa.
+    let osDown = false;
     const osGet = async (url) => {
-      for (let i = 0; i < 4; i++) {
+      if (osDown) return { ok: false, body: null };
+      for (let i = 0; i < 2; i++) {
         const r = await fetch(url, H).catch(() => null);
         if (r && r.ok) return { ok: true, body: await r.json() };
         if (r && r.status === 404) return { ok: true, body: null };
-        if (r && (r.status === 429 || r.status === 401)) { await new Promise((x) => setTimeout(x, 1500 * 2 ** i)); continue; }
+        if (r && (r.status === 429 || r.status === 401)) {
+          if (i) { osDown = true; return { ok: false, body: null }; }  // 2º 429 -> OpenSea saturada, dejamos de intentar
+          await new Promise((x) => setTimeout(x, 800));
+          continue;
+        }
         return { ok: false, body: null };
       }
       return { ok: false, body: null };
@@ -279,8 +319,7 @@ async function main() {
     const csPath = join(ROOT, "data", "contract-slugs.json");
     try { csCache = JSON.parse(readFileSync(csPath, "utf8")); } catch { /**/ }
     let csWrote = false;
-    for (const hc of [...heldContracts].slice(0, 60)) {
-      const [chain, contract] = hc.split("|");
+    for (const { chain, contract } of heldList) {
       let slug = csCache[contract];
       if (slug === undefined) {
         const res = await osGet(`https://api.opensea.io/api/v2/chain/${chain}/contract/${contract}`);
@@ -295,16 +334,30 @@ async function main() {
       if (tt.floor_price == null) continue;
       const sym = tt.floor_price_symbol || "ETH";
       floors[contract] = STABLE.test(sym)
-        ? { eth: tt.floor_price / rate, usd: tt.floor_price }
-        : { eth: tt.floor_price, usd: tt.floor_price * rate };
+        ? { eth: tt.floor_price / rate, usd: tt.floor_price, src: "opensea" }
+        : { eth: tt.floor_price, usd: tt.floor_price * rate, src: "opensea" };
       await new Promise((x) => setTimeout(x, 90));
     }
     if (csWrote) { try { writeFileSync(csPath, JSON.stringify(csCache, null, 1) + "\n"); } catch { /**/ } }
   }
+
+  // fallback on-chain (últimas ventas) SOLO para lo que OpenSea no dio y donde
+  // vale la pena: algo por lo que pagaste >~$1 (el dust de mint no necesita floor)
+  const worthPricing = new Set();
+  for (const p of positions) {
+    if (p.status !== "held" || floors[p.contract]) continue;
+    if ((p.acquired?.priceEth || 0) > 0.0004) worthPricing.add(`${p.chain}|${p.contract}`);
+  }
+  for (const hc of worthPricing) {
+    const [chain, contract] = hc.split("|");
+    const mk = await marketFromSales(chainIdOf[chain], contract, rate).catch(() => null);
+    if (mk) { floors[contract] = { eth: mk.eth, usd: mk.usd, src: "sales" + mk.n }; log(`  ~mercado ${contract.slice(0, 10)}: ${mk.eth.toFixed(5)} ETH (min de ${mk.n} ventas)`); }
+  }
+
   for (const p of positions) {
     const f = floors[p.contract];
     if (!f) continue;
-    p.floorEth = f.eth; p.floorUsd = f.usd;
+    p.floorEth = f.eth; p.floorUsd = f.usd; p.floorSrc = f.src;
     // P&L no realizado si conoces un coste real (compra o mint de pago)
     if (p.status === "held" && p.acquired && p.acquired.priceEth > 1e-9) {
       p.unrealizedEth = +(f.eth - p.acquired.priceEth).toFixed(6);
