@@ -384,6 +384,11 @@ export async function buildData({ pub = false } = {}) {
       const mins = (last.at - ref.at) / 60000;
       if (mins >= 5) m.rate15 = Math.max(0, Math.round(((last.m - ref.m) / mins) * 15));
     }
+    // AGOTADO: minteado el 100% -> ya no se puede mintear aunque la fase siga "abierta"
+    if (m.supply >= 50 && m.minted >= m.supply) {
+      m.soldOut = true;
+      if (m.status === "now") m.status = "soldout";
+    }
   }
 
   // ── OpenSea MANDA ─────────────────────────────────────────────────────────
@@ -422,7 +427,7 @@ export async function buildData({ pub = false } = {}) {
     const liveP = m.phases.find((p) => (p.a ?? 0) <= now && (p.e ?? 1e18) > now);
     const nextP = m.phases.filter((p) => (p.a ?? 0) > now).sort((a, b) => a.a - b.a)[0];
     m.when = (openK || liveP || nextP)?.a ?? m.when;
-    if (liveP) m.status = "now";
+    if (liveP && !m.soldOut) m.status = "now";      // agotado: la fase sigue "abierta" pero no queda supply
     else if (nextP && nextP.a <= soonCut && m.status === "later") m.status = "soon";
   }
 
@@ -598,6 +603,8 @@ a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .xnew{color:var(--warn)}
 .badge{display:inline-block;padding:1px 6px;border-radius:6px;font-size:11px;font-weight:700}
 .b-now{background:rgba(46,204,113,.16);color:var(--now)}.b-soon{background:rgba(74,163,255,.16);color:var(--soon)}
+.b-out{background:color-mix(in srgb,var(--mut) 22%,transparent);color:var(--mut)}
+tr.row-out td{opacity:.5}
 .pop-hi{color:var(--now)}.pop-mid{color:var(--gold)}.pop-lo{color:var(--mut)}
 .v2{color:var(--now);font-size:11px;font-weight:700;letter-spacing:-1px}
 .have-key{color:var(--now);font-weight:700;font-size:11px;margin-bottom:2px}
@@ -1079,7 +1086,7 @@ const STR = {
   c_phases:'Fases',c_when:'Cuándo',c_price:'Precio public',c_keys:'Llaves',c_have:'Tengo',
   c_coll:'Colección',c_prio:'Prio',c_tier:'Tier',c_floor:'Floor',c_wl:'wl_value',c_ev:'GTD/FCFS/WL',c_note:'Nota',
   c_before:'Floor antes',c_after:'Floor ahora',
-  now:'en curso',nothing_now:'nada minteando ahora',nothing_soon:'nada en 72 h',no_hist:'sin histórico todavía',
+  now:'en curso',sold_out:'AGOTADO',nothing_now:'nada minteando ahora',nothing_soon:'nada en 72 h',no_hist:'sin histórico todavía',
   pop_hi:'ALTA',pop_mid:'MEDIA',pop_lo:'BAJA',pop_nox:'sin X',
   x_fol:'seguidores',x_posts:'posts',x_age:'antigüedad de la cuenta',days:'d',new_acct:'cuenta nueva',
   need_unknown:'elegibilidad sin investigar',have_key:'TIENES LLAVE',in_wallet:'wallet donde tienes esta llave',
@@ -1183,7 +1190,7 @@ const STR = {
   c_phases:'Phases',c_when:'When',c_price:'Public price',c_keys:'Keys',c_have:'Have',
   c_coll:'Collection',c_prio:'Prio',c_tier:'Tier',c_floor:'Floor',c_wl:'wl_value',c_ev:'GTD/FCFS/WL',c_note:'Note',
   c_before:'Floor before',c_after:'Floor now',
-  now:'live',nothing_now:'nothing minting now',nothing_soon:'nothing in 72 h',no_hist:'no history yet',
+  now:'live',sold_out:'SOLD OUT',nothing_now:'nothing minting now',nothing_soon:'nothing in 72 h',no_hist:'no history yet',
   pop_hi:'HIGH',pop_mid:'MEDIUM',pop_lo:'LOW',pop_nox:'no X',
   x_fol:'followers',x_posts:'posts',x_age:'account age',days:'d',new_acct:'new account',
   need_unknown:'eligibility not researched',have_key:'YOU HAVE A KEY',in_wallet:'wallet holding this key',
@@ -1518,9 +1525,9 @@ const haveKeyRow = m => (m.need||[]).some(n=>isOwned(n.name)) || wlEligYes(m);
 function mintRows(list){
   if(!list.length) return '';
   return list.map(m=>{
-   const rc = [haveKeyRow(m)?'row-have':'', spotFor(m.name)?'row-spot':''].filter(Boolean).join(' ');
+   const rc = [haveKeyRow(m)?'row-have':'', spotFor(m.name)?'row-spot':'', m.soldOut?'row-out':''].filter(Boolean).join(' ');
    return '<tr'+(rc?' class="'+rc+'"':'')+'>'+
-    cell('', chainPill(m.chain)+'<b>'+esc(m.name)+'</b> '+(m.status==='now'?'<span class="badge b-now">'+t('now')+'</span>':'')+(m.srcs===2?' <span class="v2" title="'+t('two_src')+'">✓✓</span>':'')+'<br><span class="muted" style="font-size:12px">'+links(m)+'</span>', null, esc(m.name).toLowerCase())+
+    cell('', chainPill(m.chain)+'<b>'+esc(m.name)+'</b> '+(m.soldOut?'<span class="badge b-out">'+t('sold_out')+'</span>':m.status==='now'?'<span class="badge b-now">'+t('now')+'</span>':'')+(m.srcs===2?' <span class="v2" title="'+t('two_src')+'">✓✓</span>':'')+'<br><span class="muted" style="font-size:12px">'+links(m)+'</span>', null, esc(m.name).toLowerCase())+
     cell(t('c_supply'), nf(m.minted)+' / '+nf(m.supply)+rateCell(m)+ownersCell(m), 'num', m.minted||0)+
     cell(t('c_hype'), m.hype, 'num', m.hype||0)+
     cell(t('c_pop'), popTxt(m))+
@@ -1740,7 +1747,9 @@ function render(){
 
   const HNOW='<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_supply')+'</th><th>'+t('c_hype')+'</th><th>'+t('c_pop')+
     '</th><th>'+t('c_x')+'</th><th>'+t('c_phases')+'</th><th>'+t('c_keys')+'</th><th>'+t('c_price')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_when')+'</th></tr></thead>';
-  const nowL = MINTS.filter(m=>m.status==='now');
+  // "minteando ahora" primero; los agotados al final (siguen visibles, marcados)
+  const nowL = MINTS.filter(m=>m.status==='now' || m.status==='soldout')
+    .sort((a,b)=>(a.status==='soldout'?1:0)-(b.status==='soldout'?1:0));
   let soonL = MINTS.filter(m=>m.status==='soon');
   if(document.getElementById('hideLow').checked) soonL = soonL.filter(m=>m.x || m.hype>0);
   document.getElementById('tNow').innerHTML = HNOW + '<tbody>' + (mintRows(nowL) || '<tr><td colspan=10 class=muted>'+t('nothing_now')+'</td></tr>') + '</tbody>';
