@@ -1069,7 +1069,7 @@ const STR = {
   w_realized:'Realizado',w_unrealized:'No realizado',w_sold:'Vendidos',w_held:'En cartera',w_moved:'Movidos fuera',
   w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',w_gas:'Gas total',w_net_sell:'neto si vendes',w_mkt:'~mercado',w_mkt_tip:'Sin floor de OpenSea: mínimo de las últimas ventas on-chain de la colección',w_exit_gas:'floor menos el gas estimado para vender (mediana del gas que pagaste al entrar en esa red)',
   w_none:'Sin datos de cartera. Ejecuta  node scripts/fetch-trades.mjs  (necesita wallets.json + OPENSEA_API_KEY).',
-  w_truncated:'⚠️ historial largo: puede faltar lo más antiguo.',
+  w_truncated:'⚠️ wallet muy grande: puede faltar lo más antiguo.',w_more:'…y {n} más (filtra por wallet o usa "ocultar lo que sigo teniendo").',
   c_bought:'Comprado',c_soldfloor:'Vendido / Floor',c_pnl:'P&L',c_state:'Estado',
   st_held:'en cartera',st_sold:'vendido',st_moved:'movido fuera',
   ty_mint:'mint',ty_buy:'compra',ty_transfer_in:'recibido',ty_sale:'venta',ty_transfer_out:'enviado',
@@ -1173,7 +1173,7 @@ const STR = {
   w_realized:'Realized',w_unrealized:'Unrealized',w_sold:'Sold',w_held:'Held',w_moved:'Moved out',
   w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',w_gas:'Total gas',w_net_sell:'net if you sell',w_mkt:'~market',w_mkt_tip:'No OpenSea floor: lowest of the collection last on-chain sales',w_exit_gas:'floor minus estimated gas to sell (median of the gas you paid to enter on that chain)',
   w_none:'No portfolio data. Run  node scripts/fetch-trades.mjs  (needs wallets.json + OPENSEA_API_KEY).',
-  w_truncated:'⚠️ long history: the oldest items may be missing.',
+  w_truncated:'⚠️ very large wallet: the oldest items may be missing.',w_more:'…and {n} more (filter by wallet or use "hide what I still hold").',
   c_bought:'Bought',c_soldfloor:'Sold / Floor',c_pnl:'P&L',c_state:'Status',
   st_held:'held',st_sold:'sold',st_moved:'moved out',
   ty_mint:'mint',ty_buy:'buy',ty_transfer_in:'received',ty_sale:'sale',ty_transfer_out:'sent',
@@ -1670,6 +1670,10 @@ function renderWallet(){
     return p.status==='held' && a && a.priceEth>1e-9;          // pagaste algo por ella y aún la tienes
   });
 
+  // tope de filas para no petar el navegador con wallets enormes
+  const CAP=400; const nRows=rows.length;
+  if(nRows>CAP) rows=rows.slice(0,CAP);
+
   const dt=ts=>ts?new Date(ts<1e12?ts*1000:ts).toLocaleDateString(L==='es'?'es-ES':'en-US',{year:'2-digit',month:'short',day:'numeric'}):'—';
   const flags=fl=>(fl||[]).map(f=>'<span class="wflag">'+esc(f.replace(/_/g,' '))+'</span>').join('');
   const tyf=k=>t('ty_'+k)===('ty_'+k)?k:t('ty_'+k);
@@ -1709,10 +1713,11 @@ function renderWallet(){
         })(), 'num', pnl==null?-9e9:pnl)+
        cell(t('c_state'), stTxt)+
      '</tr>';
-   }).join('') || '<tr><td colspan=5 class="muted">—</td></tr>')+'</tbody>';
+   }).join('') || '<tr><td colspan=5 class="muted">—</td></tr>')
+   +(nRows>CAP?'<tr><td colspan=5 class="muted">'+t('w_more').replace('{n}',nRows-CAP)+'</td></tr>':'')+'</tbody>';
 
   const note=document.querySelector('section[data-p="wallet"] .note');
-  if(note && T.truncated) note.textContent = t('w_truncated')+' '+t('w_note');
+  if(note) note.textContent = (T.truncated?t('w_truncated')+' ':'')+t('w_note');
 }
 
 function render(){

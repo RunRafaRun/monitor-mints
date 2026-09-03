@@ -86,48 +86,74 @@ async function ethUsd() {
   } catch { return 2500; }
 }
 
-// --- 1) todas las transferencias de NFT de cada wallet en cada red ---
-async function nftTransfers(chainId, address) {
+// paginador genérico de Blockscout (listas /addresses/{a}/...)
+let truncated = false;
+async function bsList(chainId, path, baseParams, mapFn, maxPages = 60) {
   const out = [];
-  let params = { type: "ERC-721,ERC-1155" };
-  for (let page = 0; page < 25; page++) {
-    const j = await bs(chainId, `/addresses/${address}/token-transfers`, params);
+  let params = { ...baseParams };
+  for (let page = 0; page < maxPages; page++) {
+    const j = await bs(chainId, path, params);
     if (!j) break;
-    for (const it of j.items || []) {
-      out.push({
-        contract: (it.token?.address_hash || it.token?.address || "").toLowerCase(),
-        tokenId: it.total?.token_id ?? it.total?.id ?? null,
-        qty: Number(it.total?.value) || 1,
-        from: (it.from?.hash || "").toLowerCase(),
-        to: (it.to?.hash || "").toLowerCase(),
-        ts: Date.parse(it.timestamp) || null,
-        tx: it.transaction_hash,
-        method: it.method || null,
-        name: it.token?.name || null,
-        symbol: it.token?.symbol || null,
-        logIndex: it.log_index,
-      });
-    }
+    for (const it of j.items || []) { const v = mapFn(it); if (v) out.push(v); }
     if (!j.next_page_params) break;
     params = j.next_page_params;
-    await new Promise((r) => setTimeout(r, 150));
+    if (page === maxPages - 1) truncated = true;
   }
   return out;
 }
 
-// --- 2) análisis del pago de una tx (cacheado por hash) ---
+// --- 1a) transferencias de NFT de una wallet ---
+const nftTransfers = (chainId, address) => bsList(chainId, `/addresses/${address}/token-transfers`,
+  { type: "ERC-721,ERC-1155" }, (it) => ({
+    contract: (it.token?.address_hash || it.token?.address || "").toLowerCase(),
+    tokenId: it.total?.token_id ?? it.total?.id ?? null,
+    from: (it.from?.hash || "").toLowerCase(),
+    to: (it.to?.hash || "").toLowerCase(),
+    ts: Date.parse(it.timestamp) || null,
+    tx: it.transaction_hash,
+    method: it.method || null,
+    name: it.token?.name || null,
+    logIndex: it.log_index,
+  }));
+
+// --- 1b) TODOS los pagos ERC-20 (WETH/USDG) de una wallet -> por tx ---
+const erc20Transfers = (chainId, address) => bsList(chainId, `/addresses/${address}/token-transfers`,
+  { type: "ERC-20" }, (it) => {
+    const sym = it.token?.symbol || "";
+    const kind = ETHLIKE.test(sym) ? "eth" : STABLE.test(sym) ? "usd" : null;
+    if (!kind) return null;
+    const dec = Number(it.token?.decimals) || 18;
+    const amt = Number(it.total?.value) / 10 ** dec;
+    if (!amt) return null;
+    return { tx: it.transaction_hash, kind, amt, from: (it.from?.hash || "").toLowerCase(), to: (it.to?.hash || "").toLowerCase() };
+  });
+
+// --- 1c) txs QUE ENVIÓ la wallet -> gas y valor nativo, por tx ---
+const sentTxs = (chainId, address) => bsList(chainId, `/addresses/${address}/transactions`,
+  { filter: "from" }, (it) => ({
+    tx: it.hash,
+    gasEth: (Number(it.fee?.value) || 0) / 1e18,
+    nativeEth: (Number(it.value) || 0) / 1e18,
+  }), 30);
+
+// suma de pagos eth/usd que salen de / entran a `party` en una tx
+function payTotals(pays, party, dir) {
+  let eth = 0, usd = 0;
+  for (const p of pays || []) {
+    if (dir === "out" && p.from !== party) continue;
+    if (dir === "in" && p.to !== party) continue;
+    if (p.kind === "eth") eth += p.amt; else usd += p.amt;
+  }
+  return { eth, usd };
+}
+
+// --- 2) análisis del pago de una tx (solo para el fallback de floor) ---
 const txCache = new Map();
 async function analyzeTx(chainId, hash) {
   const ck = chainId + ":" + hash;
   if (txCache.has(ck)) return txCache.get(ck);
-  const [tx, tt] = await Promise.all([
-    bs(chainId, `/transactions/${hash}`),
-    bs(chainId, `/transactions/${hash}/token-transfers`),
-  ]);
-  const sender = (tx?.from?.hash || "").toLowerCase();
-  const gasWei = Number(tx?.fee?.value) || 0;
-  const nativeWei = Number(tx?.value) || 0;
-  const pays = []; // { token: 'eth'|'usd', amt, from, to }
+  const tt = await bs(chainId, `/transactions/${hash}/token-transfers`);
+  const pays = [];
   for (const x of tt?.items || []) {
     if (x.token?.type !== "ERC-20") continue;
     const sym = x.token.symbol || "";
@@ -138,20 +164,9 @@ async function analyzeTx(chainId, hash) {
     if (!kind) continue;
     pays.push({ kind, amt, from: (x.from?.hash || "").toLowerCase(), to: (x.to?.hash || "").toLowerCase() });
   }
-  const rec = { sender, gasWei, nativeWei, pays, method: tx?.method || null };
+  const rec = { pays };
   txCache.set(ck, rec);
   return rec;
-}
-
-// suma de pagos (eth/usd por separado) que salen de `party` o entran a `party`
-function payTotals(pays, party, dir) {
-  let eth = 0, usd = 0;
-  for (const p of pays) {
-    if (dir === "out" && p.from !== party) continue;
-    if (dir === "in" && p.to !== party) continue;
-    if (p.kind === "eth") eth += p.amt; else usd += p.amt;
-  }
-  return { eth, usd };
 }
 
 // valor de mercado on-chain (fallback del floor): el MÍNIMO de las últimas ~5
@@ -189,14 +204,26 @@ async function main() {
   const rate = await ethUsd();
   log(`ETH ≈ $${rate}  ·  ${wallets.length} wallet(s)  ·  Blockscout PRO`);
 
-  // 1) transferencias de NFT
+  // 1) datos en bloque por wallet/red (3 listas paginadas, sin llamadas por-tx):
+  //    NFT transfers · pagos ERC-20 (por tx) · gas/valor de las txs que envió la wallet
   const evs = [];
+  const payByTx = new Map();   // "chain:tx" -> [{kind,amt,from,to}]
+  const sentByTx = new Map();  // "chain:tx" -> {gasEth, nativeEth}  (tx enviada por la wallet)
   for (const w of wallets) {
+    const a = w.address.toLowerCase();
     for (const ch of CHAINS) {
-      const t = await nftTransfers(ch.id, w.address);
-      for (const e of t) e.chain = ch.key, e.chainId = ch.id;
-      evs.push(...t);
-      log(`  ${w.label}/${ch.key}: ${t.length} transferencias`);
+      const [nft, erc20, sent] = await Promise.all([
+        nftTransfers(ch.id, a), erc20Transfers(ch.id, a), sentTxs(ch.id, a),
+      ]);
+      for (const e of nft) { e.chain = ch.key; e.chainId = ch.id; }
+      evs.push(...nft);
+      for (const p of erc20) {
+        const k = `${ch.key}:${p.tx}`;
+        if (!payByTx.has(k)) payByTx.set(k, []);
+        payByTx.get(k).push(p);
+      }
+      for (const s of sent) sentByTx.set(`${ch.key}:${s.tx}`, s);
+      log(`  ${w.label}/${ch.key}: ${nft.length} NFT · ${erc20.length} pagos · ${sent.length} txs`);
     }
   }
   if (!evs.length && apiErrors) {
@@ -204,12 +231,14 @@ async function main() {
     process.exit(2);
   }
 
-  // dedupe (from/to/logIndex bastan; la API no repite pero por si acaso)
+  // dedupe de transferencias NFT
   const seen = new Set();
   const events = evs.filter((e) => {
     const k = `${e.chain}:${e.tx}:${e.contract}:${e.tokenId}:${e.from}:${e.to}:${e.logIndex}`;
     if (seen.has(k)) return false; seen.add(k); return true;
   });
+  const pays = (chain, tx) => payByTx.get(`${chain}:${tx}`) || [];
+  const sent = (chain, tx) => sentByTx.get(`${chain}:${tx}`) || null;
 
   // 2) agrupar por NFT y emparejar (FIFO)
   const byNft = new Map();
@@ -233,22 +262,21 @@ async function main() {
       const dis = own.has(e.from) && !own.has(e.to);
       if (own.has(e.to) && own.has(e.from)) continue; // interno
 
+      const P = pays(e.chain, e.tx);
+      const S = sent(e.chain, e.tx);      // esta tx la envió una de mis wallets?
+
       if (acq) {
         const isMint = e.from === ZERO;
-        const t = await analyzeTx(e.chainId, e.tx);
         const buyer = e.to;
         let priceEth = 0, priceUsd = 0;
         if (isMint) {
-          // coste del mint = ETH nativo que mandaste al contrato (NO tokens ERC-20:
-          // un mint de LP/airdrop mueve tokens que no son "coste")
-          if (t.sender === buyer && t.nativeWei) priceEth = t.nativeWei / 1e18;
+          if (S) priceEth = S.nativeEth;          // el precio del mint = ETH nativo que mandé
         } else {
-          // compra en un marketplace: todo lo que salió de tu bolsillo (incluye fees/royalty)
-          const out = payTotals(t.pays, buyer, "out");
+          const out = payTotals(P, buyer, "out"); // compra: todo lo que salió de mi bolsillo (+fees/royalty)
           priceEth = out.eth; priceUsd = out.usd;
-          if (t.sender === buyer && t.nativeWei) priceEth += t.nativeWei / 1e18;
+          if (S && S.nativeEth) priceEth += S.nativeEth;
         }
-        const gasEth = t.sender === buyer ? t.gasWei / 1e18 : 0;
+        const gasEth = S ? S.gasEth : 0;
         const costEth = priceEth + (priceUsd ? priceUsd / rate : 0) + gasEth;
         const paid = priceEth > 0 || priceUsd > 0;
         lots.push({
@@ -258,10 +286,9 @@ async function main() {
         });
       } else if (dis) {
         const seller = e.from;
-        const t = await analyzeTx(e.chainId, e.tx);
-        const inc = payTotals(t.pays, seller, "in");
+        const inc = payTotals(P, seller, "in");
         const isSale = (inc.eth + inc.usd) > 0;
-        const gasEth = t.sender === seller ? t.gasWei / 1e18 : 0;
+        const gasEth = S ? S.gasEth : 0;
         const procEth = isSale ? (inc.eth + (inc.usd ? inc.usd / rate : 0)) - gasEth : null;
         const lot = lots.shift() || { ts: null, kind: "unknown", costEth: null, gasEth: 0, flags: ["no_acq"] };
         positions.push({
@@ -388,6 +415,7 @@ async function main() {
     updated: new Date().toISOString(),
     ethUsd: rate,
     source: "blockscout",
+    truncated,
     wallets: wallets.map((w) => ({ label: w.label, address: w.address })),
     positions: positions.sort((a, b) => (b.disposed?.ts || b.acquired?.ts || 0) - (a.disposed?.ts || a.acquired?.ts || 0)),
     summary,
