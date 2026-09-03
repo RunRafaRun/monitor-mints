@@ -88,7 +88,7 @@ async function ethUsd() {
 
 // paginador genérico de Blockscout (listas /addresses/{a}/...)
 let truncated = false;
-async function bsList(chainId, path, baseParams, mapFn, maxPages = 60) {
+async function bsList(chainId, path, baseParams, mapFn, maxPages = 40) {
   const out = [];
   let params = { ...baseParams };
   for (let page = 0; page < maxPages; page++) {
@@ -318,13 +318,35 @@ async function main() {
     }
   }
 
-  // 3) valor de mercado por colección: floor de OpenSea si responde; si no,
-  //    el mínimo de las últimas ~5 ventas on-chain (Blockscout).
-  const floors = {};                 // contract -> { eth, usd, src }
+  // 3) valor de mercado por colección: caché en disco + floor de OpenSea + fallback
+  //    on-chain (mín. de las últimas ~5 ventas). Prioriza las colecciones donde
+  //    más NFTs tienes (el valor de un farmeador está en sus posiciones grandes).
   const chainIdOf = Object.fromEntries(CHAINS.map((c) => [c.key, c.id]));
-  const heldList = [...heldContracts].slice(0, 60).map((hc) => { const [chain, contract] = hc.split("|"); return { chain, contract }; });
+  const heldCount = new Map();
+  for (const p of positions) if (p.status === "held") {
+    const k = `${p.chain}|${p.contract}`;
+    heldCount.set(k, (heldCount.get(k) || 0) + 1);
+  }
+  const FLOOR_CACHE = join(ROOT, "data", "floor-cache.json");
+  const FLOOR_TTL = 6 * 3600 * 1000;
+  let fCache = {};
+  try { fCache = JSON.parse(readFileSync(FLOOR_CACHE, "utf8")); } catch { /**/ }
+  const floors = {};
+  const now = Date.now();
+  for (const [k, v] of Object.entries(fCache)) {
+    if (now - (v.at || 0) < FLOOR_TTL) { const c = k.split("|")[1]; floors[c] = v; }
+  }
+  // priorizamos: colecciones donde tienes >1, o por las que pagaste algo, o vendidas
+  // 1º las colecciones que importan de verdad (compraste / vendiste), 2º donde
+  // tienes muchas. Tope 50.
+  const paidC = new Set(positions.filter((p) => (p.acquired?.priceEth || 0) > 0.0004 || p.status === "sold").map((p) => `${p.chain}|${p.contract}`));
+  const bigHeld = [...heldCount.entries()].filter(([, n]) => n > 1).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  const heldList = [...new Set([...paidC, ...bigHeld])]
+    .slice(0, 50)
+    .map((hc) => { const [chain, contract] = hc.split("|"); return { chain, contract, n: heldCount.get(hc) || 0, paid: paidC.has(hc) }; })
+    .filter(({ contract }) => !floors[contract]);   // lo que ya está en caché fresca no se re-pide
 
-  if (OS_KEY) {
+  if (OS_KEY && heldList.length) {
     const H = { headers: { "x-api-key": OS_KEY, accept: "application/json" } };
     // devuelve {ok, body}. OpenSea es solo una MEJORA (el fallback on-chain cubre
     // el resto), así que si va lento no insistimos: 1 reintento corto y a otra cosa.
@@ -363,32 +385,38 @@ async function main() {
       if (tt.floor_price == null) continue;
       const sym = tt.floor_price_symbol || "ETH";
       floors[contract] = STABLE.test(sym)
-        ? { eth: tt.floor_price / rate, usd: tt.floor_price, src: "opensea" }
-        : { eth: tt.floor_price, usd: tt.floor_price * rate, src: "opensea" };
+        ? { eth: tt.floor_price / rate, usd: tt.floor_price, src: "opensea", at: Date.now() }
+        : { eth: tt.floor_price, usd: tt.floor_price * rate, src: "opensea", at: Date.now() };
       await new Promise((x) => setTimeout(x, 90));
     }
     if (csWrote) { try { writeFileSync(csPath, JSON.stringify(csCache, null, 1) + "\n"); } catch { /**/ } }
   }
 
-  // fallback on-chain (últimas ventas) SOLO para lo que OpenSea no dio y donde
-  // vale la pena: algo por lo que pagaste >~$1 (el dust de mint no necesita floor)
-  const worthPricing = new Set();
-  for (const p of positions) {
-    if (p.status !== "held" || floors[p.contract]) continue;
-    if ((p.acquired?.priceEth || 0) > 0.0004) worthPricing.add(`${p.chain}|${p.contract}`);
-  }
-  for (const hc of worthPricing) {
-    const [chain, contract] = hc.split("|");
+  // fallback on-chain (últimas ventas) para lo que OpenSea no dio; los paid primero
+  let mkCalls = 0;
+  for (const { chain, contract, n, paid } of [...heldList].sort((a, b) => (b.paid ? 1 : 0) - (a.paid ? 1 : 0))) {
+    if (floors[contract]) continue;
+    if (!paid && n < 5) { floors[contract] = { eth: 0, usd: 0, src: "none", at: Date.now() }; continue; }
+    if (!paid && mkCalls++ >= 20) { floors[contract] = { eth: 0, usd: 0, src: "none", at: Date.now() }; continue; }
     const mk = await marketFromSales(chainIdOf[chain], contract, rate).catch(() => null);
-    if (mk) { floors[contract] = { eth: mk.eth, usd: mk.usd, src: "sales" + mk.n }; log(`  ~mercado ${contract.slice(0, 10)}: ${mk.eth.toFixed(5)} ETH (min de ${mk.n} ventas)`); }
+    floors[contract] = mk
+      ? { eth: mk.eth, usd: mk.usd, src: "sales" + mk.n, at: Date.now() }
+      : { eth: 0, usd: 0, src: "none", at: Date.now() };   // cacheamos "sin mercado" para no reintentar
+    if (mk) log(`  ~mercado ${contract.slice(0, 10)}: ${mk.eth.toFixed(5)} ETH (min de ${mk.n} ventas)`);
   }
+
+  // guardar caché (keyed por chain|contract, conservando lo viejo aún dentro de TTL)
+  const cacheOut = {};
+  for (const [k, v] of Object.entries(fCache)) if (now - (v.at || 0) < FLOOR_TTL) cacheOut[k] = v;
+  for (const k of heldCount.keys()) { const c = k.split("|")[1]; if (floors[c]) cacheOut[k] = floors[c]; }
+  try { writeFileSync(FLOOR_CACHE, JSON.stringify(cacheOut, null, 0) + "\n"); } catch { /**/ }
 
   for (const p of positions) {
     const f = floors[p.contract];
-    if (!f) continue;
+    if (!f || !(f.eth > 0)) continue;         // "none" = valor desconocido, NO 0
     p.floorEth = f.eth; p.floorUsd = f.usd; p.floorSrc = f.src;
-    // P&L no realizado si conoces un coste real (compra o mint de pago)
-    if (p.status === "held" && p.acquired && p.acquired.priceEth > 1e-9) {
+    // P&L no realizado si conoces un coste real (compra o mint de pago >~$0.25)
+    if (p.status === "held" && p.acquired && p.acquired.priceEth > 1e-4) {
       p.unrealizedEth = +(f.eth - p.acquired.priceEth).toFixed(6);
     }
   }
