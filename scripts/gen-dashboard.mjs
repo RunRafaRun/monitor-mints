@@ -391,6 +391,28 @@ export async function buildData({ pub = false } = {}) {
     else if (nextP && nextP.a <= soonCut && m.status === "later") m.status = "soon";
   }
 
+  // elegibilidad real de TU wallet por fase (data/eligibility-wallet.json, lo
+  // escribe fetch-eligibility.mjs con una sesión de OpenSea). Personal: fuera del
+  // modo público. Se cruza por slug con cada mint del radar.
+  let weMeta = null;
+  if (!pub) {
+    const wePath = join(ROOT, "data", "eligibility-wallet.json");
+    if (existsSync(wePath)) {
+      try {
+        const we = JSON.parse(readFileSync(wePath, "utf8"));
+        for (const m of mints) {
+          const d = m.slug ? we.drops?.[m.slug] : null;
+          if (!d) continue;
+          const stages = (d.stages || [])
+            .filter((s) => s.eligible !== null || s.wlCount != null)
+            .map((s) => ({ k: s.kind, label: s.label, eligible: s.eligible, wlCount: s.wlCount }));
+          if (stages.length) m.wlElig = { wallet: we.wallet?.label || null, stages };
+        }
+        weMeta = { updated: we.updated, expiresAt: we.expiresAt, wallet: we.wallet?.label || null };
+      } catch (e) { console.error("eligibility-wallet.json:", e.message); }
+    }
+  }
+
   // slug de OpenSea por nombre (data/opensea-slugs.json, lo puebla resolve-slugs.mjs)
   const slugsPath = join(ROOT, "data", "opensea-slugs.json");
   const slugMap = existsSync(slugsPath) ? JSON.parse(readFileSync(slugsPath, "utf8")) : {};
@@ -461,7 +483,7 @@ export async function buildData({ pub = false } = {}) {
   // solo ofrecemos en el selector las redes que traen algo
   const present = new Set([...mints.map((m) => m.chain), ...ranking.map((r) => r.chain)]);
   const chains = CHAINS.filter((c) => present.has(c.id));
-  const out = { updated: new Date().toISOString(), ethUsd: ETHUSD, mints, ranking, alerts, holdings: holdSummary, chains, public: !!pub };
+  const out = { updated: new Date().toISOString(), ethUsd: ETHUSD, mints, ranking, alerts, holdings: holdSummary, chains, public: !!pub, wlElig: weMeta };
   return pub ? stripPersonal(out) : out;
 }
 
@@ -471,8 +493,10 @@ function stripPersonal(d) {
   for (const m of d.mints) {
     m.haveKey = false;
     for (const n of m.need || []) { n.owned = false; n.wallets = []; }
+    delete m.wlElig;
   }
   d.holdings = null;
+  d.wlElig = null;
   return d;
 }
 
@@ -548,6 +572,14 @@ tr.row-have td{background:color-mix(in srgb,var(--now) 9%,transparent)}
 tr.row-spot td{background:color-mix(in srgb,var(--gold) 13%,transparent)}
 tr.row-have.row-spot td{background:color-mix(in srgb,var(--gold) 13%,transparent)}
 .have-spot{color:var(--gold);font-weight:700;font-size:11px;margin-bottom:2px}
+.wl-elig{font-size:11px;margin-bottom:3px}
+.wl-elig-yes{font-weight:700}
+.pill.wl-in{color:var(--now);font-weight:700;border-color:color-mix(in srgb,var(--now) 60%,var(--line));background:color-mix(in srgb,var(--now) 12%,transparent)}
+.pill.wl-out{color:var(--mut);border-style:dashed;opacity:.75}
+.wl-hdr{margin-left:8px;font-size:11px;color:var(--mut);white-space:nowrap}
+.wl-hdr b{color:var(--now)}
+.wl-hdr.warn b{color:var(--warn)}
+.wl-btn{margin-left:6px}
 .pill.spot{border-color:color-mix(in srgb,var(--gold) 50%,var(--line))}
 .pill.spot-on{color:var(--gold);font-weight:700;border-color:color-mix(in srgb,var(--gold) 75%,var(--line))}
 .spot-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 14px 4px}
@@ -652,6 +684,7 @@ vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
     </div>
   </div>
   <div class="sub" id="upd"></div>
+  <div class="sub" id="wlBar" hidden></div>
   <div class="tabs" id="tabs">
     <button data-t="radar" class="on">🔥 <span data-k="tab_radar"></span></button>
     <button data-t="keys">🔑 <span data-k="tab_keys"></span></button>
@@ -855,6 +888,66 @@ async function reload(full){
   if(full) toast(t('updated_ok'));
 }
 
+// ---- Sesión de OpenSea + elegibilidad real de la wallet ----
+let wlStatus = null;   // {connected,address,label,expiresAt,cliAvailable} (solo modo servidor)
+async function fetchWlStatus(){
+  if(!SERVED) return null;
+  try{ const r=await fetch('api/opensea/status',{cache:'no-store'}); if(r.ok) wlStatus=await r.json(); }catch(e){}
+  renderWlBar(); return wlStatus;
+}
+function wlExpTxt(ts){
+  if(!ts) return '';
+  const m=Math.round((ts-Date.now())/60000);
+  if(m<=0) return ' · '+t('wl_expired');
+  const v = m<60 ? m+'m' : m<96*60 ? Math.round(m/60)+'h'
+    : new Date(ts).toLocaleDateString(L==='es'?'es-ES':'en-US',{day:'numeric',month:'short'});
+  return ' · '+t('wl_expires')+' '+v;
+}
+const wlShort=a=>a?a.slice(0,6)+'…'+a.slice(-4):'';
+function renderWlBar(){
+  const bar=document.getElementById('wlBar'); if(!bar) return;
+  const meta=D&&D.wlElig, s=wlStatus;
+  if(!SERVED && !meta){ bar.hidden=true; return; }
+  let h='🔎 <b>'+t('wl_conn')+'</b> ';
+  if(s&&s.connected){
+    h+='· '+(s.label?esc(s.label)+' ':'')+wlShort(s.address)+wlExpTxt(s.expiresAt)
+      +' <button class="chk wl-btn" data-wl="refresh">'+t('wl_refresh')+'</button>'
+      +' <button class="chk wl-btn" data-wl="login">'+t('wl_reconnect')+'</button>';
+  } else if(meta){
+    h+='· '+(meta.wallet?esc(meta.wallet)+' ':'')+(meta.expiresAt?wlExpTxt(meta.expiresAt).replace(/^ · /,''):'')
+      +(SERVED?' <button class="chk wl-btn" data-wl="login">'+t('wl_reconnect')+'</button>':'');
+  } else if(SERVED){
+    h += (s&&s.cliAvailable===false)
+      ? '— <span class="muted">'+t('wl_need_cli')+'</span>'
+      : '<button class="chk wl-btn" data-wl="login">'+t('wl_connect')+'</button>';
+  } else { bar.hidden=true; return; }
+  bar.innerHTML=h; bar.hidden=false;
+}
+async function wlRefresh(){
+  toast(t('wl_checking'), 9000);
+  try{ await fetch('api/eligibility/refresh',{method:'POST'}); }catch(e){}
+  await reload(); await fetchWlStatus();
+  toast(t('wl_checked'));
+}
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-wl]'); if(!b) return;
+  if(!SERVED){ toast(t('wl_server_only'), 9000); return; }
+  const act=b.dataset.wl; b.disabled=true;
+  try{
+    if(act==='refresh'){ await wlRefresh(); }
+    else if(act==='login'){
+      toast(t('wl_connecting'), 8000);
+      const r=await fetch('api/opensea/login',{method:'POST'});
+      const j=await r.json().catch(()=>({}));
+      if(j.error==='no-cli'){ toast(t('wl_need_cli'), 12000); b.disabled=false; return; }
+      if(j.url) window.open(j.url,'_blank','noopener');
+      for(let i=0;i<40 && !(wlStatus&&wlStatus.connected);i++){ await new Promise(x=>setTimeout(x,3000)); await fetchWlStatus(); }
+      if(wlStatus&&wlStatus.connected){ toast(t('wl_connected')); await reload(); }
+    }
+  }catch(err){ toast('⚠️ '+err.message); }
+  b.disabled=false;
+});
+
 const STR = {
  es:{tab_radar:'Radar',tab_keys:'Llaves',tab_buy:'Comprar',tab_floors:'Floors',tab_spots:'Plazas',
   h_now:'Minteando ahora / fase abierta',h_soon:'Próximas 72 h',
@@ -875,6 +968,18 @@ const STR = {
   sp_now_live:'🎟️ ¡Ya hay fecha! {p} está en el radar y tienes plaza.',
   sp_pending_count:'🎟️ {n} plaza(s) pendientes (proyecto sin fecha de mint todavía).',
   sp_del_project:'borrar el proyecto y todas sus plazas',
+  wl_os:'OpenSea:',
+  wl_os_tip:'Elegibilidad real de tu wallet en OpenSea. ✅ estás en la lista de esa fase · ✗ no estás · nº = wallets en esa lista (sin comprobar la tuya).',
+  wl_count:'wallets en esta lista de OpenSea',
+  wl_conn:'OpenSea',wl_connect:'Conectar OpenSea',wl_reconnect:'Reconectar',
+  wl_refresh:'Actualizar elegibilidad',
+  wl_expires:'caduca',wl_expired:'sesión caducada',
+  wl_connecting:'Abriendo OpenSea… aprueba el permiso en la pestaña nueva.',
+  wl_connected:'✅ OpenSea conectado',
+  wl_checking:'Comprobando tus listas en OpenSea…',
+  wl_checked:'Elegibilidad actualizada ✓',
+  wl_need_cli:'Necesita el CLI de OpenSea. En una terminal:  npm i -g @opensea/cli  ·  luego  opensea login --scopes read:eligibility',
+  wl_server_only:'La conexión con OpenSea solo funciona en modo servidor (servidor.cmd). En el fichero suelto: abre una terminal y ejecuta  opensea login --scopes read:eligibility',
   hdr_show:'mostrar filtros',hdr_hide:'ocultar filtros',
   sched_os:'agenda oficial de OpenSea (SeaDrop) — sustituye a la del feed',
   all_chains:'Todas',
@@ -951,6 +1056,18 @@ const STR = {
   sp_now_live:'🎟️ It has a date now! {p} is in the radar and you hold a spot.',
   sp_pending_count:'🎟️ {n} pending spot(s) (project has no mint date yet).',
   sp_del_project:'delete the project and all its spots',
+  wl_os:'OpenSea:',
+  wl_os_tip:'Your wallet’s real eligibility on OpenSea. ✅ you are on that stage’s list · ✗ you are not · number = wallets on that list (yours not checked).',
+  wl_count:'wallets on this OpenSea list',
+  wl_conn:'OpenSea',wl_connect:'Connect OpenSea',wl_reconnect:'Reconnect',
+  wl_refresh:'Refresh eligibility',
+  wl_expires:'expires',wl_expired:'session expired',
+  wl_connecting:'Opening OpenSea… approve the grant in the new tab.',
+  wl_connected:'✅ OpenSea connected',
+  wl_checking:'Checking your OpenSea lists…',
+  wl_checked:'Eligibility refreshed ✓',
+  wl_need_cli:'Needs the OpenSea CLI. In a terminal:  npm i -g @opensea/cli  ·  then  opensea login --scopes read:eligibility',
+  wl_server_only:'Connecting OpenSea only works in server mode (servidor.cmd). For the standalone file: open a terminal and run  opensea login --scopes read:eligibility',
   hdr_show:'show filters',hdr_hide:'hide filters',
   sched_os:'official OpenSea drop schedule (SeaDrop) — overrides the feed',
   all_chains:'All',
@@ -1091,12 +1208,25 @@ function xCell(m){
 }
 const publicPrice = m => { const g=m.phases.find(p=>/PUBLIC/i.test(p.k)); return g?priceOf(g.p):(m.priceEth??null); };
 
+// elegibilidad real de tu wallet (OpenSea): ✅ estás en la lista · ✗ no · nº wallets
+function wlEligCell(m){
+  const w = m.wlElig; if(!w || !w.stages || !w.stages.length) return '';
+  const rows = w.stages.filter(s=>s.k!=='PUBLIC' && (s.eligible!==null || s.wlCount!=null)).map(s=>{
+    if(s.eligible===true)  return '<span class="pill wl-in">✅ '+esc(s.k)+'</span>';
+    if(s.eligible===false) return '<span class="pill wl-out">✗ '+esc(s.k)+'</span>';
+    return '<span class="pill" title="'+t('wl_count')+'">'+esc(s.k)+(s.wlCount!=null?' · '+nf(s.wlCount):'')+'</span>';
+  });
+  if(!rows.length) return '';
+  return '<div class="wl-elig'+(w.stages.some(s=>s.eligible===true)?' wl-elig-yes':'')+'" title="'+t('wl_os_tip')+'">🔎 '+t('wl_os')+' '+rows.join(' ')+'</div>';
+}
+const wlEligYes = m => !!(m.wlElig && m.wlElig.stages.some(s=>s.eligible===true));
 function needCell(m){
   const spot = spotBadge(m);
+  const wl = wlEligCell(m);
   const need = (m.need||[]).map(n=>({name:n.name, owned: isOwned(n.name), wallets: n.wallets||[]}));
-  if(!need.length) return spot + '<span class="muted" style="font-size:11px">'+t('need_unknown')+'</span>';
+  if(!need.length) return wl + spot + (wl||spot?'':'<span class="muted" style="font-size:11px">'+t('need_unknown')+'</span>');
   const have = need.some(n=>n.owned);
-  return spot + (have?'<div class="have-key">⭐ '+t('have_key')+'</div>':'')
+  return wl + spot + (have?'<div class="have-key">⭐ '+t('have_key')+'</div>':'')
     + need.map(n=>{
         const w = n.wallets.length ? '<span class="wchip" title="'+t('in_wallet')+'">'+n.wallets.map(esc).join('/')+'</span>' : '';
         return '<span class="pill '+(n.owned?'k-own':'')+'">'+(n.owned?'✅ ':'')+esc(n.name)+w+'</span>';
@@ -1269,15 +1399,16 @@ function openAlertMenu(name, x, y){
 function closeAlertMenu(){ const e=document.getElementById('alertMenu'); if(e) e.remove(); }
 
 const cell = (label,html,cls,sort) => '<td'+(cls?' class="'+cls+'"':'')+' data-label="'+esc(label)+'"'+(sort!=null?' data-sort="'+esc(sort)+'"':'')+'>'+html+'</td>';
-// rango para ordenar la columna Llaves: +4 tengo plaza · +2 tengo llave · +1 elegibilidad conocida
+// rango para ordenar la columna Llaves: +8 estoy en la lista (OpenSea) · +4 tengo plaza · +2 tengo llave · +1 elegibilidad conocida
 const keyRank = m => {
   let r = 0;
+  if(wlEligYes(m)) r += 8;
   if(spotFor(m.name)) r += 4;
   const nd = m.need||[];
   if(nd.some(n=>isOwned(n.name))) r += 2; else if(nd.length) r += 1;
   return r;
 };
-const haveKeyRow = m => (m.need||[]).some(n=>isOwned(n.name));
+const haveKeyRow = m => (m.need||[]).some(n=>isOwned(n.name)) || wlEligYes(m);
 function mintRows(list){
   if(!list.length) return '';
   return list.map(m=>{
@@ -1464,6 +1595,7 @@ function render(){
   const spPendEl=document.getElementById('spPending');
   if(spPendEl) spPendEl.textContent = spPend ? t('sp_pending_count').replace('{n}', spPend) : '';
 
+  renderWlBar();
   applyFilter();
   if(typeof applyHdr==='function') applyHdr();
 }
@@ -1585,6 +1717,7 @@ document.addEventListener('click',e=>{
 });
 render();
 renderAlertBanner();            // re-muestra avisos pendientes tras recargar
+if(SERVED){ fetchWlStatus(); setInterval(fetchWlStatus, 5*60000); }
 setInterval(render, 60000); // los contadores bajan solos
 checkAlerts();
 setInterval(()=>{ checkAlerts(); renderAlertBanner(); }, 30000);

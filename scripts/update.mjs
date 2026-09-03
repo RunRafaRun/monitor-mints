@@ -9,6 +9,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { authFile } from "./lib/os-auth.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const quick = process.argv.includes("--quick");
@@ -26,6 +27,10 @@ const steps = [
 ];
 if (hasKey && hasWallets) {
   steps.push(["Escaneo de wallets", "scan-wallets.mjs", ["--write"]]);
+}
+// elegibilidad real (WL/GTD/FCFS) de tu wallet: solo si hay sesión de OpenSea
+if (!pub && existsSync(authFile())) {
+  steps.push(["Elegibilidad de tu wallet (OpenSea)", "fetch-eligibility.mjs", []]);
 }
 if (!quick && hasKey) {
   steps.push(["Resolver slugs de OpenSea", "resolve-slugs.mjs", []]);

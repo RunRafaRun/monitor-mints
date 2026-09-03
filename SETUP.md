@@ -112,6 +112,30 @@ radar lo lista con **otro nombre**, usa el desplegable **"— asignar a un mint 
 la columna Estado para enlazarlo a mano. El pie de la tabla cuenta cuántas plazas
 siguen pendientes.
 
+### Elegibilidad REAL de tu wallet (🔎 estás en la lista de OpenSea)
+Distinto de las Plazas (que apuntas a mano): esto **le pregunta a OpenSea** si tu
+wallet está en la lista firmada (GTD / FCFS / WL / presale) de cada drop SeaDrop en
+RobinHood / Ethereum / Ink. En el radar sale **🔎 OpenSea: ✅ GTD  ✗ FCFS** en la
+columna Llaves (✅ estás · ✗ no · `nº` = wallets en esa lista, sin comprobar la tuya).
+
+Necesita una **sesión de OpenSea** — firmas un mensaje (login OAuth), **NO es una
+transacción y no se toca la clave privada**. El token queda en `~/.opensea/auth.json`,
+en tu máquina.
+
+- **Con el dashboard en modo servidor** (`servidor.cmd`): botón **🔎 OpenSea ·
+  Conectar** en la cabecera → te abre OpenSea, apruebas, y aparece **Actualizar
+  elegibilidad**. Nada más que instalar (usa `npx`).
+- **Por consola**:
+  ```bash
+  npm i -g @opensea/cli          # una vez
+  opensea login --scopes read:eligibility
+  node scripts/fetch-eligibility.mjs
+  ```
+- `update.mjs` lo lanza solo si detecta sesión (`~/.opensea/auth.json`). Cuando el
+  token caduca (~1 h): botón **Reconectar**, o `opensea auth refresh`.
+- **Personal**: `data/eligibility-wallet.json` está en `.gitignore` y el modo
+  `--public` (la web) lo quita del payload.
+
 ## Cómo se actualizan los datos
 
 | Dato | Fuente | Cuándo se actualiza |
@@ -122,6 +146,7 @@ siguen pendientes.
 | "Tengo" (owned) | tú | checkboxes en modo servidor, o `set-owned.mjs` |
 | Elegibilidad de un mint | tú | editando `data/eligibility.json` |
 | Plazas confirmadas (🎟️) | tú | pestaña **Plazas** del dashboard — local a tu navegador |
+| Elegibilidad real de tu wallet (🔎) | API de OpenSea (con sesión) | botón **Actualizar elegibilidad**, o `fetch-eligibility.mjs` / `update.mjs` |
 
 **El fichero suelto `dashboard.html` NO se actualiza solo** — es una foto. Regenéralo.
 

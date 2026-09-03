@@ -10,7 +10,8 @@ import { execSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { buildData, html } from "./gen-dashboard.mjs";
-import { loadCollections, saveCollections, findCollection } from "./lib/data.mjs";
+import { loadCollections, saveCollections, findCollection, ROOT } from "./lib/data.mjs";
+import { osCliBase, whoami, walletLabel } from "./lib/os-auth.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -62,6 +63,31 @@ const server = createServer(async (req, res) => {
       res.setHeader("content-type", "application/json");
       return res.end(JSON.stringify({ ok: true, updated: cache.updated }));
     }
+
+    // ---- OpenSea: sesión para la elegibilidad real (WL/GTD/FCFS) de tu wallet ----
+    if (path === "/api/opensea/status") {
+      const cliAvailable = !!osCliBase();
+      let out = { connected: false, cliAvailable, loggingIn: !!loginChild };
+      if (cliAvailable) {
+        const me = whoami();
+        if (me) out = { ...out, connected: true, address: me.address, label: walletLabel(ROOT, me.address), expiresAt: me.exp || null };
+      }
+      res.setHeader("content-type", "application/json");
+      return res.end(JSON.stringify(out));
+    }
+    if (path === "/api/opensea/login" && req.method === "POST") {
+      res.setHeader("content-type", "application/json");
+      if (!osCliBase()) return res.end(JSON.stringify({ error: "no-cli" }));
+      const url = await startOsLogin();
+      return res.end(JSON.stringify(url ? { url } : { error: "no-url" }));
+    }
+    if (path === "/api/eligibility/refresh" && req.method === "POST") {
+      const code = await runElig();
+      await rebuild();
+      res.setHeader("content-type", "application/json");
+      return res.end(JSON.stringify({ ok: code === 0, code }));
+    }
+
     res.statusCode = 404;
     res.end("not found");
   } catch (e) {
@@ -74,6 +100,42 @@ const server = createServer(async (req, res) => {
 function runFloors() {
   const p = spawn(process.execPath, [join(HERE, "fetch-floors.mjs")], { stdio: "inherit" });
   p.on("close", () => rebuild());
+}
+
+// --- OpenSea CLI: login por navegador (sin clave privada) + refresco de elegibilidad ---
+let loginChild = null;
+function startOsLogin() {
+  return new Promise((resolve) => {
+    if (loginChild) return resolve(null);
+    const base = osCliBase();
+    if (!base) return resolve(null);
+    const args = [...base.slice(1), "login", "--no-browser", "--scopes", "read:eligibility"];
+    const child = spawn(base[0], args, { shell: process.platform === "win32" });
+    loginChild = child;
+    let done = false, buf = "";
+    const finish = (val) => { if (!done) { done = true; resolve(val); } };
+    const t = setTimeout(() => finish(null), 20000); // si no imprime URL en 20s, nada
+    child.stdout.on("data", (d) => {
+      buf += d.toString();
+      const m = buf.match(/https?:\/\/\S+/);
+      if (m) { clearTimeout(t); finish(m[0].replace(/[)\].,"']+$/, "")); }
+      process.stdout.write(d);
+    });
+    child.stderr.on("data", (d) => process.stderr.write(d));
+    child.on("close", (code) => {
+      loginChild = null;
+      clearTimeout(t);
+      console.log(`  opensea login → código ${code}`);
+      finish(null);
+      if (code === 0) runElig().then(() => rebuild()); // ya conectado: comprueba listas
+    });
+  });
+}
+function runElig() {
+  return new Promise((resolve) => {
+    const p = spawn(process.execPath, [join(HERE, "fetch-eligibility.mjs")], { stdio: "inherit" });
+    p.on("close", (code) => resolve(code ?? 1));
+  });
 }
 
 server.listen(PORT, () => {
