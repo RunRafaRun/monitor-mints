@@ -545,6 +545,15 @@ a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .pill.k-own{color:var(--now);border-color:color-mix(in srgb,var(--now) 55%,var(--line))}
 .wchip{display:inline-block;font-size:10px;padding:0 4px;border-radius:4px;background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--fg);margin-left:3px;vertical-align:middle}
 tr.row-have td{background:color-mix(in srgb,var(--now) 9%,transparent)}
+tr.row-spot td{background:color-mix(in srgb,var(--gold) 13%,transparent)}
+tr.row-have.row-spot td{background:color-mix(in srgb,var(--gold) 13%,transparent)}
+.have-spot{color:var(--gold);font-weight:700;font-size:11px;margin-bottom:2px}
+.pill.spot{border-color:color-mix(in srgb,var(--gold) 50%,var(--line))}
+.pill.spot-on{color:var(--gold);font-weight:700;border-color:color-mix(in srgb,var(--gold) 75%,var(--line))}
+.spot-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 14px 4px}
+.spot-form input{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px}
+.spot-form input::placeholder{color:var(--mut)}
+.spqty{width:60px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:12px}
 .ownchk{width:15px;height:15px;cursor:pointer}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--card);color:var(--fg);
 border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:12px;white-space:pre-wrap;max-width:90vw;
@@ -620,6 +629,7 @@ vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
   td[data-label=""]::before,td:not([data-label])::before{display:none}
   td:first-child{font-size:15px;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:4px}
   tr.row-have{outline:2px solid color-mix(in srgb,var(--now) 45%,transparent)}
+  tr.row-spot{outline:2px solid color-mix(in srgb,var(--gold) 60%,transparent)}
   .hm-box{padding:18px 16px}
 }
 </style></head><body>
@@ -640,6 +650,7 @@ vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
     <button data-t="keys">🔑 <span data-k="tab_keys"></span></button>
     <button data-t="buy">🛒 <span data-k="tab_buy"></span></button>
     <button data-t="floors">📉 <span data-k="tab_floors"></span></button>
+    <button data-t="spots">🎟️ <span data-k="tab_spots"></span></button>
   </div>
   <div class="chains" id="chains" hidden></div>
   <div class="filtrow">
@@ -674,6 +685,20 @@ vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
   <div class="scroll"><table id="tFloors"></table></div>
   <p class="note" data-k="note_floors"></p>
 </section>
+
+<section data-p="spots" hidden>
+  <h2 data-k="h_spots"></h2>
+  <p class="note" data-k="note_spots"></p>
+  <div class="spot-form">
+    <input id="spName" list="spNames" autocomplete="off" spellcheck="false">
+    <datalist id="spNames"></datalist>
+    <input id="spPhase" list="spPhases" autocomplete="off" spellcheck="false" style="width:150px">
+    <datalist id="spPhases"><option>GTD</option><option>FCFS</option><option>WL</option><option>HOLDER</option><option>PUBLIC</option><option>TEAM</option><option>OG</option></datalist>
+    <input id="spQty" type="number" min="1" value="1" style="width:64px">
+    <button id="spAdd" class="chk" data-k="spot_add"></button>
+  </div>
+  <div class="scroll"><table id="tSpots"></table></div>
+</section>
 </div>
 
 <div id="alertBanner" hidden></div>
@@ -699,6 +724,44 @@ function isOwned(name){
   if(n in ownLocal) return ownLocal[n];
   const c = D.ranking.find(x=>norm(x.name)===n);
   return c ? !!c.owned : false;
+}
+
+// ---- Plazas confirmadas (local a este navegador, como los checkboxes de llaves) ----
+let spotsDB = {};
+try { spotsDB = JSON.parse(localStorage.getItem('mints_spots')||'{}'); } catch(e){}
+function saveSpots(){ try { localStorage.setItem('mints_spots', JSON.stringify(spotsDB)); } catch(e){} }
+const spotFor = name => spotsDB[norm(name)] || null;
+function addSpot(name, phase, qty){
+  name  = String(name||'').trim();
+  phase = String(phase||'').trim().toUpperCase().replace(/\\s+/g,'');
+  qty   = Math.max(1, parseInt(qty,10) || 1);
+  if(!name || !phase) return;
+  const k = norm(name);
+  const e = spotsDB[k] || (spotsDB[k] = { name, phases: [] });
+  e.name = name;
+  const ex = e.phases.find(p=>p.k===phase);
+  if(ex) ex.qty = qty; else e.phases.push({ k: phase, qty });
+  saveSpots(); render();
+}
+function removeSpot(k, phase){
+  const e = spotsDB[k]; if(!e) return;
+  e.phases = e.phases.filter(p=>p.k!==phase);
+  if(!e.phases.length) delete spotsDB[k];
+  saveSpots(); render();
+}
+function setSpotQty(k, phase, qty){
+  const e = spotsDB[k]; if(!e) return;
+  const p = e.phases.find(x=>x.k===phase); if(!p) return;
+  p.qty = Math.max(1, parseInt(qty,10) || 1);
+  saveSpots();
+}
+function spotBadge(m){
+  const s = spotFor(m.name); if(!s || !s.phases.length) return '';
+  const kinds = new Set((m.phases||[]).map(p=>p.k));
+  return '<div class="have-spot">🎟️ '+t('spot_lbl')+' '+
+    s.phases.slice().sort((a,b)=>a.k.localeCompare(b.k))
+      .map(p=>'<span class="pill spot'+(kinds.has(p.k)?' spot-on':'')+'">'+esc(p.k)+' ×'+p.qty+'</span>').join(' ')+
+    '</div>';
 }
 async function setOwned(name, val){
   const n = norm(name);
@@ -733,10 +796,16 @@ async function reload(full){
 }
 
 const STR = {
- es:{tab_radar:'Radar',tab_keys:'Llaves',tab_buy:'Comprar',tab_floors:'Floors',
+ es:{tab_radar:'Radar',tab_keys:'Llaves',tab_buy:'Comprar',tab_floors:'Floors',tab_spots:'Plazas',
   h_now:'Minteando ahora / fase abierta',h_soon:'Próximas 72 h',
   hide_low:'ocultar sin señal (sin X y hype 0)',
-  only_keys:'solo mis llaves',
+  only_keys:'solo mis llaves y plazas',
+  h_spots:'Mis plazas confirmadas',
+  note_spots:'Local y privado: se guarda solo en este navegador, igual que los checkboxes de llaves. Apunta los proyectos donde ya tienes plaza para una fase (GTD, FCFS, WL, PUBLIC…) y cuántas. El Radar marca esos mints con 🎟️ y resalta la fila (borde dorado); si esa fase existe en el mint, la pastilla se ilumina.',
+  spot_add:'Añadir',spot_lbl:'PLAZA',
+  sp_empty:'Aún no has apuntado ninguna plaza.',
+  sp_name_ph:'Proyecto…',sp_phase_ph:'Fase (GTD, FCFS…)',
+  c_sp_phase:'Fase',c_sp_qty:'Cantidad',
   hdr_show:'mostrar filtros',hdr_hide:'ocultar filtros',
   sched_os:'agenda oficial de OpenSea (SeaDrop) — sustituye a la del feed',
   all_chains:'Todas',
@@ -792,11 +861,18 @@ const STR = {
    '<li><b>🔑 Llaves</b> — todas las colecciones llave ordenadas por utilidad WL frente al precio. <code>wl_value</code> criterio editorial 0–10 · <code>util</code> GTD/FCFS/WL ponderado del registro de mints · <code>ce</code> = util ÷ floor (alto = infravalorada). Marca aquí lo que tienes.</li>'+
    '<li><b>🛒 Comprar</b> — lista corta de llaves top que aún no tienes, por prioridad y wl_value.</li>'+
    '<li><b>📉 Floors</b> — llaves cuyo floor se movió ±15% en 7 días. <b>🛒</b> marca una caída fuerte en una llave prioritaria.</li>'+
+   '<li><b>🎟️ Plazas</b> — apunta a mano los proyectos donde ya tienes plaza confirmada (GTD/FCFS/WL/PUBLIC…) y cuántas. Es local a tu navegador. El Radar marca esos mints con <b>🎟️</b> y resalta la fila con borde dorado.</li>'+
    '</ul>'},
- en:{tab_radar:'Radar',tab_keys:'Keys',tab_buy:'Buy',tab_floors:'Floors',
+ en:{tab_radar:'Radar',tab_keys:'Keys',tab_buy:'Buy',tab_floors:'Floors',tab_spots:'Spots',
   h_now:'Minting now / open phase',h_soon:'Next 72 h',
   hide_low:'hide no-signal (no X, hype 0)',
-  only_keys:'only my keys',
+  only_keys:'only my keys & spots',
+  h_spots:'My confirmed spots',
+  note_spots:'Local and private: saved in this browser only, just like the key checkboxes. Note the projects where you already hold a spot for a phase (GTD, FCFS, WL, PUBLIC…) and how many. The Radar flags those mints with 🎟️ and highlights the row (gold border); if that phase exists on the mint, the pill lights up.',
+  spot_add:'Add',spot_lbl:'SPOT',
+  sp_empty:'No spots noted yet.',
+  sp_name_ph:'Project…',sp_phase_ph:'Phase (GTD, FCFS…)',
+  c_sp_phase:'Phase',c_sp_qty:'Qty',
   hdr_show:'show filters',hdr_hide:'hide filters',
   sched_os:'official OpenSea drop schedule (SeaDrop) — overrides the feed',
   all_chains:'All',
@@ -852,6 +928,7 @@ const STR = {
    '<li><b>🔑 Keys</b> — every key collection ranked by WL utility vs price. <code>wl_value</code> editorial 0–10 · <code>util</code> weighted GTD/FCFS/WL from the mint log · <code>ce</code> = util ÷ floor (high = underpriced). Tick what you own here.</li>'+
    '<li><b>🛒 Buy</b> — shortlist of top-tier keys you do not own yet, by priority and wl_value.</li>'+
    '<li><b>📉 Floors</b> — keys whose floor moved ±15% over 7 days. <b>🛒</b> marks a big drop on a high-priority key.</li>'+
+   '<li><b>🎟️ Spots</b> — manually note the projects where you already hold a confirmed spot (GTD/FCFS/WL/PUBLIC…) and how many. Local to your browser. The Radar flags those mints with <b>🎟️</b> and highlights the row with a gold border.</li>'+
    '</ul>'}
 };
 let L = localStorage.getItem('mints_lang') || (navigator.language||'es').slice(0,2);
@@ -937,10 +1014,11 @@ function xCell(m){
 const publicPrice = m => { const g=m.phases.find(p=>/PUBLIC/i.test(p.k)); return g?priceOf(g.p):(m.priceEth??null); };
 
 function needCell(m){
+  const spot = spotBadge(m);
   const need = (m.need||[]).map(n=>({name:n.name, owned: isOwned(n.name), wallets: n.wallets||[]}));
-  if(!need.length) return '<span class="muted" style="font-size:11px">'+t('need_unknown')+'</span>';
+  if(!need.length) return spot + '<span class="muted" style="font-size:11px">'+t('need_unknown')+'</span>';
   const have = need.some(n=>n.owned);
-  return (have?'<div class="have-key">⭐ '+t('have_key')+'</div>':'')
+  return spot + (have?'<div class="have-key">⭐ '+t('have_key')+'</div>':'')
     + need.map(n=>{
         const w = n.wallets.length ? '<span class="wchip" title="'+t('in_wallet')+'">'+n.wallets.map(esc).join('/')+'</span>' : '';
         return '<span class="pill '+(n.owned?'k-own':'')+'">'+(n.owned?'✅ ':'')+esc(n.name)+w+'</span>';
@@ -1113,12 +1191,20 @@ function openAlertMenu(name, x, y){
 function closeAlertMenu(){ const e=document.getElementById('alertMenu'); if(e) e.remove(); }
 
 const cell = (label,html,cls,sort) => '<td'+(cls?' class="'+cls+'"':'')+' data-label="'+esc(label)+'"'+(sort!=null?' data-sort="'+esc(sort)+'"':'')+'>'+html+'</td>';
-// rango de "llaves" para ordenar: 2 = tengo llave · 1 = elegibilidad conocida · 0 = sin investigar
-const keyRank = m => { const nd=m.need||[]; if(!nd.length) return 0; return nd.some(n=>isOwned(n.name)) ? 2 : 1; };
+// rango para ordenar la columna Llaves: +4 tengo plaza · +2 tengo llave · +1 elegibilidad conocida
+const keyRank = m => {
+  let r = 0;
+  if(spotFor(m.name)) r += 4;
+  const nd = m.need||[];
+  if(nd.some(n=>isOwned(n.name))) r += 2; else if(nd.length) r += 1;
+  return r;
+};
 const haveKeyRow = m => (m.need||[]).some(n=>isOwned(n.name));
 function mintRows(list){
   if(!list.length) return '';
-  return list.map(m=>'<tr'+(haveKeyRow(m)?' class="row-have"':'')+'>'+
+  return list.map(m=>{
+   const rc = [haveKeyRow(m)?'row-have':'', spotFor(m.name)?'row-spot':''].filter(Boolean).join(' ');
+   return '<tr'+(rc?' class="'+rc+'"':'')+'>'+
     cell('', chainPill(m.chain)+'<b>'+esc(m.name)+'</b> '+(m.status==='now'?'<span class="badge b-now">'+t('now')+'</span>':'')+(m.srcs===2?' <span class="v2" title="'+t('two_src')+'">✓✓</span>':'')+'<br><span class="muted" style="font-size:12px">'+links(m)+'</span>', null, esc(m.name).toLowerCase())+
     cell(t('c_supply'), nf(m.minted)+' / '+nf(m.supply)+rateCell(m)+ownersCell(m), 'num', m.minted||0)+
     cell(t('c_hype'), m.hype, 'num', m.hype||0)+
@@ -1129,7 +1215,8 @@ function mintRows(list){
     cell(t('c_price'), money(publicPrice(m))+feeCell(m), 'num', publicPrice(m)??-1)+
     cell(t('c_floor'), floorRadar(m), 'num', m.floorUsd??-1)+
     cell(t('c_when'), bellBtn(m)+whenCell(m.when), 'num', m.when||9e15)+
-  '</tr>').join('');
+  '</tr>';
+  }).join('');
 }
 // concentración: dueños únicos vs minteado. % alto = repartido; % bajo = acumulado.
 function ownersCell(m){
@@ -1185,7 +1272,7 @@ function applyFilter(){
   document.querySelectorAll('section[data-p] table tr').forEach(tr=>{
     if(tr.querySelector('th')) return;
     let show = q ? sNorm(tr.textContent).includes(q) : true;
-    if(show && onlyK && tr.closest('section').dataset.p==='radar') show = tr.classList.contains('row-have');
+    if(show && onlyK && tr.closest('section').dataset.p==='radar') show = tr.classList.contains('row-have') || tr.classList.contains('row-spot');
     tr.hidden = !show;
   });
 }
@@ -1263,6 +1350,26 @@ function render(){
     cell('Δ', a.change.toFixed(0)+'%'+(a.change<=-15&&['👑','💎','🥇','🥈'].includes(a.priority)?' 🛒':''), 'num '+(a.change<0?'drop':'rise'))+'</tr>').join('')
     || '<tr><td colspan=5 class=muted>'+t('no_hist')+'</td></tr>')+'</tbody>';
 
+  // ---- Plazas (local) ----
+  const spNames=document.getElementById('spNames');
+  if(spNames) spNames.innerHTML=[...new Set((D.mints||[]).map(m=>m.name))].sort((a,b)=>a.localeCompare(b))
+    .map(n=>'<option value="'+esc(n)+'"></option>').join('');
+  const spNameEl=document.getElementById('spName'), spPhaseEl=document.getElementById('spPhase');
+  if(spNameEl) spNameEl.placeholder=t('sp_name_ph');
+  if(spPhaseEl) spPhaseEl.placeholder=t('sp_phase_ph');
+  const spRows=[];
+  for(const [k,e] of Object.entries(spotsDB).sort((a,b)=>a[1].name.localeCompare(b[1].name)))
+    for(const p of e.phases.slice().sort((x,y)=>x.k.localeCompare(y.k)))
+      spRows.push('<tr>'+
+        cell(t('c_project'), esc(e.name), null, e.name.toLowerCase())+
+        cell(t('c_sp_phase'), '<span class="pill ph-'+esc(p.k)+'">'+esc(p.k)+'</span>', null, p.k)+
+        cell(t('c_sp_qty'), '<input type="number" min="1" value="'+esc(p.qty)+'" class="spqty" data-sk="'+esc(k)+'" data-sp="'+esc(p.k)+'">', 'num', p.qty)+
+        cell('', '<button class="chk spdel" data-sk="'+esc(k)+'" data-sp="'+esc(p.k)+'" title="✕">🗑</button>')+
+      '</tr>');
+  document.getElementById('tSpots').innerHTML=
+   '<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_sp_phase')+'</th><th>'+t('c_sp_qty')+'</th><th></th></tr></thead><tbody>'+
+   (spRows.join('') || '<tr><td colspan=4 class=muted>'+t('sp_empty')+'</td></tr>')+'</tbody>';
+
   applyFilter();
   if(typeof applyHdr==='function') applyHdr();
 }
@@ -1283,6 +1390,21 @@ document.getElementById('chains').addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const chk=e.target.closest('.ownchk'); if(!chk) return;
   setOwned(chk.dataset.name, chk.checked);
+});
+// ---- Plazas: alta / baja / cantidad ----
+(function(){
+  const add=document.getElementById('spAdd');
+  if(!add) return;
+  const nEl=document.getElementById('spName'), pEl=document.getElementById('spPhase'), qEl=document.getElementById('spQty');
+  const submit=()=>{ addSpot(nEl.value, pEl.value, qEl.value); nEl.value=''; pEl.value=''; qEl.value='1'; nEl.focus(); };
+  add.addEventListener('click',submit);
+  [nEl,pEl,qEl].forEach(el=>el.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); submit(); } }));
+})();
+document.addEventListener('click',e=>{
+  const d=e.target.closest('.spdel'); if(d) removeSpot(d.dataset.sk, d.dataset.sp);
+});
+document.addEventListener('change',e=>{
+  const q=e.target.closest('.spqty'); if(q) setSpotQty(q.dataset.sk, q.dataset.sp, q.value);
 });
 document.addEventListener('click',e=>{
   const ab=e.target.closest('#alertBanner button');

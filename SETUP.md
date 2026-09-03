@@ -92,6 +92,17 @@ El feed no la trae. Créala a mano en `data/eligibility.json`:
 ```
 El dashboard cruzará esos nombres con tus `owned` y marcará **⭐ TIENES LLAVE** en el radar.
 
+### Plazas confirmadas (🎟️ tengo un spot en una fase)
+Pestaña **🎟️ Plazas** del dashboard. Ahí apuntas a mano los proyectos donde ya
+tienes plaza para una fase concreta (GTD / FCFS / WL / PUBLIC / TEAM / OG…) y la
+cantidad. Es **100 % local a tu navegador** (`localStorage`, igual que los
+checkboxes de "Tengo" en modo fichero) — no toca ningún JSON ni se comparte al
+mandar el `dashboard.html`.
+- El **Radar** marca esos mints con una etiqueta dorada **🎟️ PLAZA GTD ×2 …** en
+  la columna Llaves y resalta la fila con borde dorado.
+- Si esa fase existe de verdad en el mint, la pastilla se ilumina.
+- La casilla **solo mis llaves y plazas** del Radar deja únicamente esas filas.
+
 ## Cómo se actualizan los datos
 
 | Dato | Fuente | Cuándo se actualiza |
@@ -101,6 +112,7 @@ El dashboard cruzará esos nombres con tus `owned` y marcará **⭐ TIENES LLAVE
 | Ranking de llaves | `colecciones.json` | con `rank` (o `update`) |
 | "Tengo" (owned) | tú | checkboxes en modo servidor, o `set-owned.mjs` |
 | Elegibilidad de un mint | tú | editando `data/eligibility.json` |
+| Plazas confirmadas (🎟️) | tú | pestaña **Plazas** del dashboard — local a tu navegador |
 
 **El fichero suelto `dashboard.html` NO se actualiza solo** — es una foto. Regenéralo.
 
