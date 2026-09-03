@@ -1059,7 +1059,7 @@ const STR = {
   w_hide_held:'ocultar lo que sigo teniendo',
   w_note:'Reconstruido de la BLOCKCHAIN (Blockscout): precio real de cada mint y de cada compra/venta, y el gas. P&L en ETH y $ al cambio de HOY (no histórico). El floor sale de OpenSea (muchas colecciones de Ink no cotizan ahí → sin floor). Ventas fuera de un marketplace on-chain estándar salen como «movido». data/trades.json es personal (fuera de git y del modo público). Actualízalo con  node scripts/fetch-trades.mjs  (o update.mjs).',
   w_realized:'Realizado',w_unrealized:'No realizado',w_sold:'Vendidos',w_held:'En cartera',w_moved:'Movidos fuera',
-  w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',w_gas:'Gas total',
+  w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',w_gas:'Gas total',w_net_sell:'neto si vendes',w_exit_gas:'floor menos el gas estimado para vender (mediana del gas que pagaste al entrar en esa red)',
   w_none:'Sin datos de cartera. Ejecuta  node scripts/fetch-trades.mjs  (necesita wallets.json + OPENSEA_API_KEY).',
   w_truncated:'⚠️ historial largo: puede faltar lo más antiguo.',
   c_bought:'Comprado',c_soldfloor:'Vendido / Floor',c_pnl:'P&L',c_state:'Estado',
@@ -1163,7 +1163,7 @@ const STR = {
   w_hide_held:'hide what I still hold',
   w_note:'Reconstructed from the BLOCKCHAIN (Blockscout): real price of every mint and every buy/sell, plus gas. P&L in ETH and $ at TODAY’s rate (not historical). Floor comes from OpenSea (many Ink collections do not trade there → no floor). Sales outside a standard on-chain marketplace show as “moved”. data/trades.json is personal (out of git and of public mode). Refresh with  node scripts/fetch-trades.mjs  (or update.mjs).',
   w_realized:'Realized',w_unrealized:'Unrealized',w_sold:'Sold',w_held:'Held',w_moved:'Moved out',
-  w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',w_gas:'Total gas',
+  w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',w_gas:'Total gas',w_net_sell:'net if you sell',w_exit_gas:'floor minus estimated gas to sell (median of the gas you paid to enter on that chain)',
   w_none:'No portfolio data. Run  node scripts/fetch-trades.mjs  (needs wallets.json + OPENSEA_API_KEY).',
   w_truncated:'⚠️ long history: the oldest items may be missing.',
   c_bought:'Bought',c_soldfloor:'Sold / Floor',c_pnl:'P&L',c_state:'Status',
@@ -1652,6 +1652,13 @@ function renderWallet(){
   const dt=ts=>ts?new Date(ts<1e12?ts*1000:ts).toLocaleDateString(L==='es'?'es-ES':'en-US',{year:'2-digit',month:'short',day:'numeric'}):'—';
   const flags=fl=>(fl||[]).map(f=>'<span class="wflag">'+esc(f.replace(/_/g,' '))+'</span>').join('');
   const tyf=k=>t('ty_'+k)===('ty_'+k)?k:t('ty_'+k);
+  // gas típico para VENDER por red = mediana del que TÚ pagaste al entrar (o un defecto)
+  const egDef={robinhood:0.00012,ethereum:0.0035,ink:0.00010,base:0.00010};
+  const egMap={};
+  { const by={};
+    for(const p of T.positions){ const g=p.acquired&&p.acquired.gasEth; if(g>1e-9)(by[p.chain]||(by[p.chain]=[])).push(g); }
+    for(const c in by){ by[c].sort((a,b)=>a-b); egMap[c]=by[c][Math.floor(by[c].length/2)]; } }
+  const exitGas=c=>egMap[c]??egDef[c]??0.0002;
 
   tbl.innerHTML='<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_bought')+'</th><th>'+t('c_soldfloor')+'</th><th>'+t('c_pnl')+'</th><th>'+t('c_state')+'</th></tr></thead><tbody>'+
    (rows.map(p=>{
@@ -1666,7 +1673,19 @@ function renderWallet(){
        cell(t('c_project'), chainPill(p.chain)+'<b>'+esc(p.name)+'</b>'+(p.url?' '+osA(p.url):'')+(flags(p.flags)?'<br>'+flags(p.flags):''), null, esc(p.name).toLowerCase())+
        cell(t('c_bought'), a?dt(a.ts)+' · '+tyf(a.type)+txLink(p.chain,a.tx)+'<br>'+(mintCost0?'<span class="muted">'+t('w_free')+'</span>':wPrice(a.priceEth,a.priceUsd))+gasTxt(a.gasEth):'—', 'num', a?a.ts:0)+
        cell(t('c_soldfloor'), dp?dt(dp.ts)+' · '+tyf(dp.type)+txLink(p.chain,dp.tx)+'<br>'+wPrice(dp.priceEth,dp.priceUsd)+gasTxt(dp.gasEth):(p.floorEth!=null?'<span class="muted">floor</span> '+wPrice(p.floorEth,p.floorUsd):'—'), 'num', dp?dp.ts:9e14)+
-       cell(t('c_pnl'), mintCost0&&p.status==='held' ? '<span class="muted">'+t('w_value')+' '+wPrice(p.floorEth,p.floorUsd)+'</span>' : wPnl(pnl, pnlUsd, pct), 'num', pnl==null?-9e9:pnl)+
+       cell(t('c_pnl'), (()=>{
+          if(mintCost0&&p.status==='held') {
+            const eg=exitGas(p.chain), net=(p.floorEth!=null?p.floorEth:0)-eg;
+            return '<span class="muted">'+t('w_value')+' '+wPrice(p.floorEth,p.floorUsd)+'</span>'+
+              (p.floorEth!=null?'<br><small class="muted" title="'+t('w_exit_gas')+'">'+t('w_net_sell')+' '+wPrice(net,null)+'</small>':'');
+          }
+          let h=wPnl(pnl, pnlUsd, pct);
+          if(p.status==='held' && pnl!=null && a && a.priceEth>1e-9 && p.floorEth!=null){
+            const eg=exitGas(p.chain), net=p.floorEth-a.priceEth-eg;
+            h+='<br><small class="'+pnlCls(net)+'" title="'+t('w_exit_gas')+'">'+t('w_net_sell')+' '+wPrice(net,null)+' <span class="muted">(−gas '+wPrice(eg,null)+')</span></small>';
+          }
+          return h;
+        })(), 'num', pnl==null?-9e9:pnl)+
        cell(t('c_state'), stTxt)+
      '</tr>';
    }).join('') || '<tr><td colspan=5 class="muted">—</td></tr>')+'</tbody>';
