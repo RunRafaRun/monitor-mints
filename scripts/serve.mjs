@@ -7,13 +7,22 @@
 // Ctrl+C para parar.
 import { createServer } from "node:http";
 import { execSync, spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
-import { buildData, html } from "./gen-dashboard.mjs";
+import { statSync } from "node:fs";
 import { loadCollections, saveCollections, findCollection, ROOT } from "./lib/data.mjs";
 import { osCliBase, whoami, walletLabel } from "./lib/os-auth.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+// Recarga gen-dashboard.mjs si cambia en disco -> no hay que reiniciar servidor.cmd
+const GD = join(HERE, "gen-dashboard.mjs");
+let _gd, _gdAt = 0;
+async function gd() {
+  const m = statSync(GD).mtimeMs;
+  if (m !== _gdAt) { _gd = await import(`${pathToFileURL(GD).href}?v=${m}`); _gdAt = m; console.log("  (gen-dashboard.mjs recargado)"); }
+  return _gd;
+}
 const argv = process.argv.slice(2);
 const PORT = Number(argv[argv.indexOf("--port") + 1]) || 8787;
 const noFloors = argv.includes("--no-floors");
@@ -23,7 +32,7 @@ let building = false;
 async function rebuild() {
   if (building) return;
   building = true;
-  try { cache = await buildData(); }
+  try { cache = await (await gd()).buildData(); }
   catch (e) { console.error("build:", e.message); }
   finally { building = false; }
 }
@@ -38,7 +47,7 @@ const server = createServer(async (req, res) => {
   try {
     if (path === "/") {
       res.setHeader("content-type", "text/html; charset=utf-8");
-      return res.end(cache ? html(cache, { served: true }) : LOADING);
+      return res.end(cache ? (await gd()).html(cache, { served: true }) : LOADING);
     }
     if (!cache && path.startsWith("/api/")) {
       res.statusCode = 503; return res.end('{"loading":true}');
