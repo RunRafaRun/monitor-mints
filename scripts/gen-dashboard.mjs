@@ -1746,8 +1746,11 @@ function render(){
   const spPendEl=document.getElementById('spPending');
   if(spPendEl) spPendEl.textContent = spPend ? t('sp_pending_count').replace('{n}', spPend) : '';
 
-  renderWlBar();
-  renderWallet();
+  // Cartera y elegibilidad son personales: no tienen sentido en la web pública
+  const walletTab=document.querySelector('#tabs button[data-t="wallet"]');
+  if(walletTab) walletTab.hidden = !!D.public;
+  if(D.public){ const wb=document.getElementById('wlBar'); if(wb) wb.hidden=true; }
+  else { renderWlBar(); renderWallet(); }
   applyFilter();
   if(typeof applyHdr==='function') applyHdr();
 }
