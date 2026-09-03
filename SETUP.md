@@ -102,6 +102,15 @@ mandar el `dashboard.html`.
   la columna Llaves y resalta la fila con borde dorado.
 - Si esa fase existe de verdad en el mint, la pastilla se ilumina.
 - La casilla **solo mis llaves y plazas** del Radar deja únicamente esas filas.
+- Cada plaza puede llevar una **nota** (dónde/cómo la conseguiste).
+
+**Proyecto sin fecha de mint todavía.** Puedes escribir un nombre que no esté en la
+lista: la plaza se guarda como **pendiente** (columna Estado: ⏳ *sin fecha de mint*).
+En cuanto ese proyecto aparezca en el radar con **el mismo nombre** (comparación sin
+mayúsculas ni símbolos) se **asigna solo** y salta un aviso (toast + pitido). Si el
+radar lo lista con **otro nombre**, usa el desplegable **"— asignar a un mint —"** de
+la columna Estado para enlazarlo a mano. El pie de la tabla cuenta cuántas plazas
+siguen pendientes.
 
 ## Cómo se actualizan los datos
 

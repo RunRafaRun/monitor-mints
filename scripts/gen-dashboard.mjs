@@ -553,7 +553,14 @@ tr.row-have.row-spot td{background:color-mix(in srgb,var(--gold) 13%,transparent
 .spot-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 14px 4px}
 .spot-form input{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px}
 .spot-form input::placeholder{color:var(--mut)}
-.spqty{width:60px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:12px}
+.spqty{width:54px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:12px}
+.spphase{display:flex;align-items:center;gap:5px;margin:2px 0}
+.sp-on{color:var(--now);font-weight:700}
+.sp-pend{color:var(--gold);font-weight:700}
+.spassign,.spnote{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:12px}
+.spassign{margin-left:6px}
+.spnote{width:100%;max-width:230px}
+.spnote::placeholder{color:var(--mut)}
 .ownchk{width:15px;height:15px;cursor:pointer}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--card);color:var(--fg);
 border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:12px;white-space:pre-wrap;max-width:90vw;
@@ -698,6 +705,7 @@ vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
     <button id="spAdd" class="chk" data-k="spot_add"></button>
   </div>
   <div class="scroll"><table id="tSpots"></table></div>
+  <p class="note" id="spPending"></p>
 </section>
 </div>
 
@@ -727,27 +735,42 @@ function isOwned(name){
 }
 
 // ---- Plazas confirmadas (local a este navegador, como los checkboxes de llaves) ----
+// spotsDB[norm(nombre)] = { name, phases:[{k,qty}], note }
+// Un proyecto sin fecha de mint (no está en el radar) queda "pendiente"; en cuanto
+// aparece en el radar con el mismo nombre se asigna solo (spotFor cruza por norm()).
 let spotsDB = {};
 try { spotsDB = JSON.parse(localStorage.getItem('mints_spots')||'{}'); } catch(e){}
+let spotsSeen = {};   // norm(nombre) -> ts de cuando se vio por primera vez en el radar
+try { spotsSeen = JSON.parse(localStorage.getItem('mints_spots_seen')||'{}'); } catch(e){}
 function saveSpots(){ try { localStorage.setItem('mints_spots', JSON.stringify(spotsDB)); } catch(e){} }
+function saveSpotsSeen(){ try { localStorage.setItem('mints_spots_seen', JSON.stringify(spotsSeen)); } catch(e){} }
 const spotFor = name => spotsDB[norm(name)] || null;
+const mintKnown = k => (D.mints||[]).some(m=>norm(m.name)===k);
 function addSpot(name, phase, qty){
   name  = String(name||'').trim();
-  phase = String(phase||'').trim().toUpperCase().replace(/\\s+/g,'');
+  phase = String(phase||'').trim().toUpperCase().replace(/[\\s_]+/g,'');
   qty   = Math.max(1, parseInt(qty,10) || 1);
   if(!name || !phase) return;
   const k = norm(name);
-  const e = spotsDB[k] || (spotsDB[k] = { name, phases: [] });
+  const e = spotsDB[k] || (spotsDB[k] = { name, phases: [], note: '' });
   e.name = name;
   const ex = e.phases.find(p=>p.k===phase);
   if(ex) ex.qty = qty; else e.phases.push({ k: phase, qty });
+  const known = mintKnown(k);
+  if(known && !spotsSeen[k]){ spotsSeen[k] = Date.now(); saveSpotsSeen(); }   // ya está en el radar: no avisar luego
   saveSpots(); render();
+  if(!known && typeof toast==='function') toast(t('sp_added_pending'), 7000);
 }
 function removeSpot(k, phase){
   const e = spotsDB[k]; if(!e) return;
   e.phases = e.phases.filter(p=>p.k!==phase);
-  if(!e.phases.length) delete spotsDB[k];
+  if(!e.phases.length){ delete spotsDB[k]; delete spotsSeen[k]; saveSpotsSeen(); }
   saveSpots(); render();
+}
+function removeProject(k){
+  if(!spotsDB[k]) return;
+  delete spotsDB[k]; delete spotsSeen[k];
+  saveSpots(); saveSpotsSeen(); render();
 }
 function setSpotQty(k, phase, qty){
   const e = spotsDB[k]; if(!e) return;
@@ -755,12 +778,49 @@ function setSpotQty(k, phase, qty){
   p.qty = Math.max(1, parseInt(qty,10) || 1);
   saveSpots();
 }
+function setSpotNote(k, v){
+  const e = spotsDB[k]; if(!e) return;
+  e.note = String(v||'').slice(0,200);
+  saveSpots();
+}
+// asignar manualmente una plaza pendiente a un mint del radar (nombre distinto)
+function reassignSpot(oldKey, newName){
+  const e = spotsDB[oldKey]; if(!e) return;
+  newName = String(newName||'').trim();
+  const nk = norm(newName);
+  if(!nk || nk===oldKey) return;
+  const tgt = spotsDB[nk];
+  if(tgt){
+    for(const p of e.phases){ const x = tgt.phases.find(y=>y.k===p.k); if(x) x.qty = Math.max(x.qty, p.qty); else tgt.phases.push(p); }
+    tgt.name = newName;
+    if(!tgt.note) tgt.note = e.note || '';
+  } else {
+    spotsDB[nk] = { name: newName, phases: e.phases, note: e.note || '' };
+  }
+  delete spotsDB[oldKey]; delete spotsSeen[oldKey];
+  if(mintKnown(nk)) spotsSeen[nk] = Date.now();
+  saveSpots(); saveSpotsSeen(); render();
+}
+// aviso cuando una plaza pendiente entra en el radar (el proyecto ya tiene fecha)
+function checkSpotsMatched(){
+  const fresh = [];
+  for(const k of Object.keys(spotsDB)){
+    if(mintKnown(k)){ if(!spotsSeen[k]){ spotsSeen[k] = Date.now(); fresh.push(spotsDB[k].name); } }
+    else if(spotsSeen[k]){ delete spotsSeen[k]; }   // salió del radar: rearmar por si vuelve
+  }
+  saveSpotsSeen();
+  if(fresh.length && typeof toast==='function'){
+    toast(t('sp_now_live').replace('{p}', fresh.join(', ')), 12000);
+    try { beep(); } catch(e){}
+  }
+}
 function spotBadge(m){
   const s = spotFor(m.name); if(!s || !s.phases.length) return '';
   const kinds = new Set((m.phases||[]).map(p=>p.k));
   return '<div class="have-spot">🎟️ '+t('spot_lbl')+' '+
     s.phases.slice().sort((a,b)=>a.k.localeCompare(b.k))
       .map(p=>'<span class="pill spot'+(kinds.has(p.k)?' spot-on':'')+'">'+esc(p.k)+' ×'+p.qty+'</span>').join(' ')+
+    (s.note ? ' <span class="muted" style="font-weight:400">'+esc(s.note)+'</span>' : '')+
     '</div>';
 }
 async function setOwned(name, val){
@@ -801,11 +861,20 @@ const STR = {
   hide_low:'ocultar sin señal (sin X y hype 0)',
   only_keys:'solo mis llaves y plazas',
   h_spots:'Mis plazas confirmadas',
-  note_spots:'Local y privado: se guarda solo en este navegador, igual que los checkboxes de llaves. Apunta los proyectos donde ya tienes plaza para una fase (GTD, FCFS, WL, PUBLIC…) y cuántas. El Radar marca esos mints con 🎟️ y resalta la fila (borde dorado); si esa fase existe en el mint, la pastilla se ilumina.',
+  note_spots:'Local y privado: se guarda solo en este navegador, igual que los checkboxes de llaves. Apunta los proyectos donde ya tienes plaza para una fase (GTD, FCFS, WL, PUBLIC…) y cuántas. Puedes añadir un proyecto aunque todavía no tenga fecha de mint: queda como «pendiente» y, en cuanto aparezca en el radar con ese mismo nombre, se asigna solo y te aviso. Si sale con otro nombre, asígnalo a mano en la columna Estado. El Radar marca los mints con plaza con 🎟️ y resalta la fila.',
   spot_add:'Añadir',spot_lbl:'PLAZA',
   sp_empty:'Aún no has apuntado ninguna plaza.',
   sp_name_ph:'Proyecto…',sp_phase_ph:'Fase (GTD, FCFS…)',
   c_sp_phase:'Fase',c_sp_qty:'Cantidad',
+  sp_status:'Estado',sp_phases_col:'Fases (cantidad)',
+  sp_live:'en el radar · minteando',sp_soon:'en el radar · próximo',
+  sp_nodate:'sin fecha de mint — pendiente',
+  sp_assign:'— asignar a un mint —',
+  sp_note_ph:'nota (dónde/cómo la conseguiste…)',
+  sp_added_pending:'Plaza guardada como PENDIENTE: ese proyecto aún no está en el radar. Cuando tenga fecha te aviso; si sale con otro nombre, asígnalo desde la columna Estado.',
+  sp_now_live:'🎟️ ¡Ya hay fecha! {p} está en el radar y tienes plaza.',
+  sp_pending_count:'🎟️ {n} plaza(s) pendientes (proyecto sin fecha de mint todavía).',
+  sp_del_project:'borrar el proyecto y todas sus plazas',
   hdr_show:'mostrar filtros',hdr_hide:'ocultar filtros',
   sched_os:'agenda oficial de OpenSea (SeaDrop) — sustituye a la del feed',
   all_chains:'Todas',
@@ -861,18 +930,27 @@ const STR = {
    '<li><b>🔑 Llaves</b> — todas las colecciones llave ordenadas por utilidad WL frente al precio. <code>wl_value</code> criterio editorial 0–10 · <code>util</code> GTD/FCFS/WL ponderado del registro de mints · <code>ce</code> = util ÷ floor (alto = infravalorada). Marca aquí lo que tienes.</li>'+
    '<li><b>🛒 Comprar</b> — lista corta de llaves top que aún no tienes, por prioridad y wl_value.</li>'+
    '<li><b>📉 Floors</b> — llaves cuyo floor se movió ±15% en 7 días. <b>🛒</b> marca una caída fuerte en una llave prioritaria.</li>'+
-   '<li><b>🎟️ Plazas</b> — apunta a mano los proyectos donde ya tienes plaza confirmada (GTD/FCFS/WL/PUBLIC…) y cuántas. Es local a tu navegador. El Radar marca esos mints con <b>🎟️</b> y resalta la fila con borde dorado.</li>'+
+   '<li><b>🎟️ Plazas</b> — apunta a mano los proyectos donde ya tienes plaza confirmada (GTD/FCFS/WL/PUBLIC…) y cuántas. Es local a tu navegador. Puedes añadir un proyecto aunque aún no tenga fecha de mint: queda <i>pendiente</i> y, cuando aparezca en el radar con ese nombre, se asigna solo y te aviso (si sale con otro nombre lo asignas a mano). El Radar marca esos mints con <b>🎟️</b> y resalta la fila con borde dorado.</li>'+
    '</ul>'},
  en:{tab_radar:'Radar',tab_keys:'Keys',tab_buy:'Buy',tab_floors:'Floors',tab_spots:'Spots',
   h_now:'Minting now / open phase',h_soon:'Next 72 h',
   hide_low:'hide no-signal (no X, hype 0)',
   only_keys:'only my keys & spots',
   h_spots:'My confirmed spots',
-  note_spots:'Local and private: saved in this browser only, just like the key checkboxes. Note the projects where you already hold a spot for a phase (GTD, FCFS, WL, PUBLIC…) and how many. The Radar flags those mints with 🎟️ and highlights the row (gold border); if that phase exists on the mint, the pill lights up.',
+  note_spots:'Local and private: saved in this browser only, just like the key checkboxes. Note the projects where you already hold a spot for a phase (GTD, FCFS, WL, PUBLIC…) and how many. You can add a project even if it has no mint date yet: it stays "pending" and, as soon as it shows up in the radar under the same name, it is assigned automatically and you get a heads-up. If it appears under a different name, assign it by hand in the Status column. The Radar flags mints with a spot with 🎟️ and highlights the row.',
   spot_add:'Add',spot_lbl:'SPOT',
   sp_empty:'No spots noted yet.',
   sp_name_ph:'Project…',sp_phase_ph:'Phase (GTD, FCFS…)',
   c_sp_phase:'Phase',c_sp_qty:'Qty',
+  sp_status:'Status',sp_phases_col:'Phases (qty)',
+  sp_live:'in radar · minting',sp_soon:'in radar · soon',
+  sp_nodate:'no mint date — pending',
+  sp_assign:'— assign to a mint —',
+  sp_note_ph:'note (where/how you got it…)',
+  sp_added_pending:'Spot saved as PENDING: that project is not in the radar yet. You will get a heads-up when it gets a date; if it shows under a different name, assign it from the Status column.',
+  sp_now_live:'🎟️ It has a date now! {p} is in the radar and you hold a spot.',
+  sp_pending_count:'🎟️ {n} pending spot(s) (project has no mint date yet).',
+  sp_del_project:'delete the project and all its spots',
   hdr_show:'show filters',hdr_hide:'hide filters',
   sched_os:'official OpenSea drop schedule (SeaDrop) — overrides the feed',
   all_chains:'All',
@@ -928,7 +1006,7 @@ const STR = {
    '<li><b>🔑 Keys</b> — every key collection ranked by WL utility vs price. <code>wl_value</code> editorial 0–10 · <code>util</code> weighted GTD/FCFS/WL from the mint log · <code>ce</code> = util ÷ floor (high = underpriced). Tick what you own here.</li>'+
    '<li><b>🛒 Buy</b> — shortlist of top-tier keys you do not own yet, by priority and wl_value.</li>'+
    '<li><b>📉 Floors</b> — keys whose floor moved ±15% over 7 days. <b>🛒</b> marks a big drop on a high-priority key.</li>'+
-   '<li><b>🎟️ Spots</b> — manually note the projects where you already hold a confirmed spot (GTD/FCFS/WL/PUBLIC…) and how many. Local to your browser. The Radar flags those mints with <b>🎟️</b> and highlights the row with a gold border.</li>'+
+   '<li><b>🎟️ Spots</b> — manually note the projects where you already hold a confirmed spot (GTD/FCFS/WL/PUBLIC…) and how many. Local to your browser. You can add a project with no mint date yet: it stays <i>pending</i> and, once it shows in the radar under that name, it is assigned automatically and you get a heads-up (assign it by hand if the name differs). The Radar flags those mints with <b>🎟️</b> and highlights the row with a gold border.</li>'+
    '</ul>'}
 };
 let L = localStorage.getItem('mints_lang') || (navigator.language||'es').slice(0,2);
@@ -1351,24 +1429,40 @@ function render(){
     || '<tr><td colspan=5 class=muted>'+t('no_hist')+'</td></tr>')+'</tbody>';
 
   // ---- Plazas (local) ----
+  checkSpotsMatched();
+  const allNames=[...new Set((D.mints||[]).map(m=>m.name))].sort((a,b)=>a.localeCompare(b));
   const spNames=document.getElementById('spNames');
-  if(spNames) spNames.innerHTML=[...new Set((D.mints||[]).map(m=>m.name))].sort((a,b)=>a.localeCompare(b))
-    .map(n=>'<option value="'+esc(n)+'"></option>').join('');
+  if(spNames) spNames.innerHTML=allNames.map(n=>'<option value="'+esc(n)+'"></option>').join('');
   const spNameEl=document.getElementById('spName'), spPhaseEl=document.getElementById('spPhase');
   if(spNameEl) spNameEl.placeholder=t('sp_name_ph');
   if(spPhaseEl) spPhaseEl.placeholder=t('sp_phase_ph');
-  const spRows=[];
-  for(const [k,e] of Object.entries(spotsDB).sort((a,b)=>a[1].name.localeCompare(b[1].name)))
-    for(const p of e.phases.slice().sort((x,y)=>x.k.localeCompare(y.k)))
-      spRows.push('<tr>'+
-        cell(t('c_project'), esc(e.name), null, e.name.toLowerCase())+
-        cell(t('c_sp_phase'), '<span class="pill ph-'+esc(p.k)+'">'+esc(p.k)+'</span>', null, p.k)+
-        cell(t('c_sp_qty'), '<input type="number" min="1" value="'+esc(p.qty)+'" class="spqty" data-sk="'+esc(k)+'" data-sp="'+esc(p.k)+'">', 'num', p.qty)+
-        cell('', '<button class="chk spdel" data-sk="'+esc(k)+'" data-sp="'+esc(p.k)+'" title="✕">🗑</button>')+
-      '</tr>');
+  const assignOpts='<option value="">'+esc(t('sp_assign'))+'</option>'+allNames.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
+  const mintByNorm=new Map((D.mints||[]).map(m=>[norm(m.name), m]));
+  let spPend=0;
+  const spRows=Object.entries(spotsDB).sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([k,e])=>{
+    const m=mintByNorm.get(k);
+    if(!m) spPend++;
+    const status=m
+      ? '<span class="sp-on">🎯 '+t(m.status==='now'?'sp_live':'sp_soon')+'</span>'
+      : '<span class="sp-pend">⏳ '+t('sp_nodate')+'</span>'+
+        '<select class="spassign" data-sk="'+esc(k)+'">'+assignOpts+'</select>';
+    const phasesHtml=e.phases.slice().sort((x,y)=>x.k.localeCompare(y.k)).map(p=>
+      '<div class="spphase"><span class="pill ph-'+esc(p.k)+'">'+esc(p.k)+'</span> × '+
+      '<input type="number" min="1" value="'+esc(p.qty)+'" class="spqty" data-sk="'+esc(k)+'" data-sp="'+esc(p.k)+'">'+
+      ' <button class="chk spdel" data-sk="'+esc(k)+'" data-sp="'+esc(p.k)+'" title="✕">✕</button></div>').join('');
+    return '<tr>'+
+      cell(t('c_project'), esc(e.name), null, e.name.toLowerCase())+
+      cell(t('sp_status'), status, null, m?(m.status==='now'?0:1):2)+
+      cell(t('sp_phases_col'), phasesHtml)+
+      cell(t('c_note'), '<input class="spnote" data-sk="'+esc(k)+'" value="'+esc(e.note||'')+'" placeholder="'+esc(t('sp_note_ph'))+'">')+
+      cell('', '<button class="chk spdelall" data-sk="'+esc(k)+'" title="'+esc(t('sp_del_project'))+'">🗑</button>')+
+    '</tr>';
+  });
   document.getElementById('tSpots').innerHTML=
-   '<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_sp_phase')+'</th><th>'+t('c_sp_qty')+'</th><th></th></tr></thead><tbody>'+
-   (spRows.join('') || '<tr><td colspan=4 class=muted>'+t('sp_empty')+'</td></tr>')+'</tbody>';
+   '<thead><tr><th>'+t('c_project')+'</th><th>'+t('sp_status')+'</th><th>'+t('sp_phases_col')+'</th><th>'+t('c_note')+'</th><th></th></tr></thead><tbody>'+
+   (spRows.join('') || '<tr><td colspan=5 class=muted>'+t('sp_empty')+'</td></tr>')+'</tbody>';
+  const spPendEl=document.getElementById('spPending');
+  if(spPendEl) spPendEl.textContent = spPend ? t('sp_pending_count').replace('{n}', spPend) : '';
 
   applyFilter();
   if(typeof applyHdr==='function') applyHdr();
@@ -1401,10 +1495,13 @@ document.addEventListener('change',e=>{
   [nEl,pEl,qEl].forEach(el=>el.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); submit(); } }));
 })();
 document.addEventListener('click',e=>{
-  const d=e.target.closest('.spdel'); if(d) removeSpot(d.dataset.sk, d.dataset.sp);
+  const d=e.target.closest('.spdel'); if(d){ removeSpot(d.dataset.sk, d.dataset.sp); return; }
+  const da=e.target.closest('.spdelall'); if(da) removeProject(da.dataset.sk);
 });
 document.addEventListener('change',e=>{
-  const q=e.target.closest('.spqty'); if(q) setSpotQty(q.dataset.sk, q.dataset.sp, q.value);
+  const q=e.target.closest('.spqty'); if(q){ setSpotQty(q.dataset.sk, q.dataset.sp, q.value); return; }
+  const a=e.target.closest('.spassign'); if(a){ if(a.value) reassignSpot(a.dataset.sk, a.value); return; }
+  const n=e.target.closest('.spnote'); if(n) setSpotNote(n.dataset.sk, n.value);
 });
 document.addEventListener('click',e=>{
   const ab=e.target.closest('#alertBanner button');
