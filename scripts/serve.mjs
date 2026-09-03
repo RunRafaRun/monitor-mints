@@ -138,7 +138,9 @@ function runElig() {
   });
 }
 
-server.listen(PORT, () => {
+// Solo loopback: el panel y sus endpoints (owned, opensea/login, eligibility)
+// NO deben quedar expuestos a la red local.
+server.listen(PORT, "127.0.0.1", () => {
   const u = `http://localhost:${PORT}/`;
   console.log(`\n🚨 Monitor MINTS  →  ${u}`);
   console.log("   Checkboxes de 'Tengo' → se guardan en data/colecciones.json");
