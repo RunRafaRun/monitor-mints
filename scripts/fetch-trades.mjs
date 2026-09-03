@@ -264,6 +264,17 @@ async function main() {
   const floors = {};
   if (OS_KEY) {
     const H = { headers: { "x-api-key": OS_KEY, accept: "application/json" } };
+    // devuelve {ok, body}: ok=false si la llamada falló (para NO cachear un fallo como "no hay colección")
+    const osGet = async (url) => {
+      for (let i = 0; i < 4; i++) {
+        const r = await fetch(url, H).catch(() => null);
+        if (r && r.ok) return { ok: true, body: await r.json() };
+        if (r && r.status === 404) return { ok: true, body: null };
+        if (r && (r.status === 429 || r.status === 401)) { await new Promise((x) => setTimeout(x, 1500 * 2 ** i)); continue; }
+        return { ok: false, body: null };
+      }
+      return { ok: false, body: null };
+    };
     let csCache = {};
     const csPath = join(ROOT, "data", "contract-slugs.json");
     try { csCache = JSON.parse(readFileSync(csPath, "utf8")); } catch { /**/ }
@@ -272,16 +283,15 @@ async function main() {
       const [chain, contract] = hc.split("|");
       let slug = csCache[contract];
       if (slug === undefined) {
-        const r = await fetch(`https://api.opensea.io/api/v2/chain/${chain}/contract/${contract}`, H).catch(() => null);
-        slug = r && r.ok ? ((await r.json())?.collection || null) : null;
-        if (slug && slug.toLowerCase() === contract) slug = null; // OpenSea a veces devuelve el contrato como slug
-        csCache[contract] = slug; csWrote = true;
-        await new Promise((x) => setTimeout(x, 120));
+        const res = await osGet(`https://api.opensea.io/api/v2/chain/${chain}/contract/${contract}`);
+        slug = res.body?.collection || null;
+        if (slug && /^0x[0-9a-f]{6,}/i.test(slug)) slug = null; // OpenSea devuelve a veces el contrato como slug
+        if (res.ok) { csCache[contract] = slug; csWrote = true; }   // solo cacheamos una respuesta real
+        await new Promise((x) => setTimeout(x, 150));
       }
       if (!slug) continue;
-      const r = await fetch(`https://api.opensea.io/api/v2/collections/${slug}/stats`, H).catch(() => null);
-      if (!r || !r.ok) continue;
-      const tt = (await r.json())?.total || {};
+      const res = await osGet(`https://api.opensea.io/api/v2/collections/${slug}/stats`);
+      const tt = res.body?.total || {};
       if (tt.floor_price == null) continue;
       const sym = tt.floor_price_symbol || "ETH";
       floors[contract] = STABLE.test(sym)
