@@ -1,15 +1,20 @@
-// Cartera / P&L: reconstruye compras y ventas de NFT de tus wallets (RobinHood,
-// Ethereum, Ink) leyendo la API de eventos de OpenSea. Sin nada a mano.
+// Cartera / P&L — reconstruye compras y ventas de NFT de tus wallets leyendo la
+// BLOCKCHAIN directamente (Blockscout PRO API), sin depender de OpenSea.
 //
 //   node fetch-trades.mjs           -> data/trades.json  (lo lee el dashboard)
 //   node fetch-trades.mjs --json    además vuelca el resultado por stdout
 //
-// Necesita OPENSEA_API_KEY en scripts/.env y data/wallets.json (direcciones
-// PÚBLICAS). Solo lee — nunca firma ni mueve nada.
+// Necesita BLOCKSCOUT_API_KEY en scripts/.env (gratis, empieza por proapi_) y
+// data/wallets.json (direcciones PÚBLICAS). Solo lee — nunca firma ni mueve nada.
 //
-// LÍMITES v1:  no incluye gas · mints = coste 0 (marcado) · P&L en ETH + $ al
-// cambio de HOY (no histórico) · ventas fuera de OpenSea (Blur…) salen como
-// "movido" sin precio.
+// Qué SÍ hace (mejor que la v1 vía OpenSea):
+//  · precio real de cada mint (value de la tx), no "coste 0"
+//  · GAS de cada compra/venta/mint (fee de la tx)
+//  · precio de venta = suma de pagos (WETH/USDG/ETH) al vendedor; compra = lo que
+//    pagó el comprador (incluye fees y royalties que salieron de su bolsillo)
+// Límites: P&L en ETH y $ al cambio de HOY (no histórico) · floor actual desde
+// OpenSea (endpoint de colección, no limitado) · ventas fuera de un marketplace
+// on-chain estándar salen como "movido".
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -19,9 +24,6 @@ import { loadWallets } from "./lib/wallets.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(ROOT, "data", "trades.json");
-const CHAINS = new Set(["robinhood", "ethereum", "ink"]);
-const STABLE = /^(USDG|USDC|USDT|DAI|USDB)$/i;
-const MAX_PAGES = 14;         // ~700 eventos por tipo y wallet
 const asJson = process.argv.includes("--json");
 const log = (...a) => console.error(...a);
 
@@ -34,214 +36,282 @@ const log = (...a) => console.error(...a);
   }
 })();
 
-const KEY = process.env.OPENSEA_API_KEY;
-if (!KEY) { console.error("Falta OPENSEA_API_KEY en scripts/.env (ver SETUP.md)."); process.exit(1); }
-const H = { headers: { "x-api-key": KEY, accept: "application/json" } };
+const BS_KEY = process.env.BLOCKSCOUT_API_KEY;
+if (!BS_KEY) { console.error("Falta BLOCKSCOUT_API_KEY en scripts/.env (ver SETUP.md)."); process.exit(1); }
+const OS_KEY = process.env.OPENSEA_API_KEY || "";
+
+const CHAINS = [
+  { key: "robinhood", id: 4663 },
+  { key: "ethereum", id: 1 },
+  { key: "ink", id: 57073 },
+];
+const ZERO = "0x0000000000000000000000000000000000000000";
+const STABLE = /^(USDG|USDC|USDC\.E|USDT|USD₮0|DAI|USDB|USDB\.E)$/i;
+const ETHLIKE = /^(W?ETH)$/i;
+const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase/i;
 
 const wallets = loadWallets();
 if (!wallets.length) { console.error("No hay wallets en data/wallets.json."); process.exit(1); }
 const own = new Set(wallets.map((w) => w.address.toLowerCase()));
-const labelOf = (addr) => wallets.find((w) => w.address.toLowerCase() === String(addr).toLowerCase())?.label || null;
+const labelOf = (a) => wallets.find((w) => w.address.toLowerCase() === String(a).toLowerCase())?.label || null;
+
+let apiErrors = 0;
+// Blockscout PRO free: ~pocas req/s -> serializamos con un hueco mínimo
+let gate = Promise.resolve();
+const MIN_GAP = 260;
+async function bs(chainId, path, params = {}) {
+  const run = gate.then(async () => {
+    const u = new URL(`https://api.blockscout.com/${chainId}/api/v2${path}`);
+    for (const [k, v] of Object.entries({ ...params, apikey: BS_KEY })) if (v != null) u.searchParams.set(k, v);
+    for (let retry = 0; retry < 5; retry++) {
+      try {
+        const r = await fetch(u, { headers: { accept: "application/json" } });
+        if (r.status === 429 || r.status === 402) {
+          await new Promise((x) => setTimeout(x, 1500 * 2 ** retry));
+          continue;
+        }
+        if (!r.ok) { apiErrors++; return null; }
+        return await r.json();
+      } catch (e) { log(`  Blockscout: ${e.message}`); await new Promise((x) => setTimeout(x, 1500)); }
+    }
+    apiErrors++;
+    return null;
+  });
+  gate = run.then(() => new Promise((x) => setTimeout(x, MIN_GAP)), () => new Promise((x) => setTimeout(x, MIN_GAP)));
+  return run;
+}
 
 async function ethUsd() {
   try {
     const j = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd").then((r) => r.json());
     return j.ethereum.usd;
-  } catch { return 2400; }
+  } catch { return 2500; }
 }
 
-// { eth, usd } normalizado desde payment {quantity,decimals,symbol}
-function money(payment, rate) {
-  if (!payment || payment.quantity == null) return { eth: null, usd: null, sym: null };
-  const dec = payment.decimals ?? 18;
-  const amt = Number(payment.quantity) / 10 ** dec;
-  const sym = payment.symbol || null;
-  if (sym && STABLE.test(sym)) return { eth: rate ? amt / rate : null, usd: amt, sym };
-  return { eth: amt, usd: rate ? amt * rate : null, sym: sym || "ETH" }; // ETH/WETH/otros 18d
-}
-
-let apiErrors = 0;
-async function eventsFor(address, kind) {
+// --- 1) todas las transferencias de NFT de cada wallet en cada red ---
+async function nftTransfers(chainId, address) {
   const out = [];
-  let cursor = null, hadError = false;
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const u = new URL(`https://api.opensea.io/api/v2/events/accounts/${address}`);
-    u.searchParams.set("event_type", kind);
-    u.searchParams.set("limit", "50");
-    if (cursor) u.searchParams.set("next", cursor);
-    let j, ok = false;
-    for (let retry = 0; retry < 4 && !ok; retry++) {
-      try {
-        const r = await fetch(u, H);
-        // OpenSea limita la API de eventos y a veces devuelve 401 en vez de 429
-        if (r.status === 401 || r.status === 429) {
-          const wait = 2000 * 2 ** retry;
-          log(`  events ${kind}: HTTP ${r.status}, reintento en ${wait / 1000}s`);
-          await new Promise((res) => setTimeout(res, wait));
-          continue;
-        }
-        if (!r.ok) { log(`  events ${kind} ${address.slice(0, 8)}: HTTP ${r.status}`); hadError = true; break; }
-        j = await r.json(); ok = true;
-      } catch (e) { log(`  events ${kind}: ${e.message}`); await new Promise((res) => setTimeout(res, 1500)); }
+  let params = { type: "ERC-721,ERC-1155" };
+  for (let page = 0; page < 25; page++) {
+    const j = await bs(chainId, `/addresses/${address}/token-transfers`, params);
+    if (!j) break;
+    for (const it of j.items || []) {
+      out.push({
+        contract: (it.token?.address_hash || it.token?.address || "").toLowerCase(),
+        tokenId: it.total?.token_id ?? it.total?.id ?? null,
+        qty: Number(it.total?.value) || 1,
+        from: (it.from?.hash || "").toLowerCase(),
+        to: (it.to?.hash || "").toLowerCase(),
+        ts: Date.parse(it.timestamp) || null,
+        tx: it.transaction_hash,
+        method: it.method || null,
+        name: it.token?.name || null,
+        symbol: it.token?.symbol || null,
+        logIndex: it.log_index,
+      });
     }
-    if (!ok) { hadError = true; break; }
-    for (const ev of j.asset_events || []) if (CHAINS.has(ev.chain)) out.push(ev);
-    cursor = j.next || null;
-    if (!cursor) break;
+    if (!j.next_page_params) break;
+    params = j.next_page_params;
     await new Promise((r) => setTimeout(r, 150));
   }
-  if (hadError) apiErrors++;
-  return { events: out, truncated: out.length >= MAX_PAGES * 50 };
+  return out;
 }
 
-const nftKey = (ev) => `${ev.chain}:${(ev.nft?.contract || "").toLowerCase()}:${ev.nft?.identifier}`;
+// --- 2) análisis del pago de una tx (cacheado por hash) ---
+const txCache = new Map();
+async function analyzeTx(chainId, hash) {
+  const ck = chainId + ":" + hash;
+  if (txCache.has(ck)) return txCache.get(ck);
+  const [tx, tt] = await Promise.all([
+    bs(chainId, `/transactions/${hash}`),
+    bs(chainId, `/transactions/${hash}/token-transfers`),
+  ]);
+  const sender = (tx?.from?.hash || "").toLowerCase();
+  const gasWei = Number(tx?.fee?.value) || 0;
+  const nativeWei = Number(tx?.value) || 0;
+  const pays = []; // { token: 'eth'|'usd', amt, from, to }
+  for (const x of tt?.items || []) {
+    if (x.token?.type !== "ERC-20") continue;
+    const sym = x.token.symbol || "";
+    const dec = Number(x.token.decimals) || 18;
+    const amt = Number(x.total?.value) / 10 ** dec;
+    if (!amt) continue;
+    const kind = ETHLIKE.test(sym) ? "eth" : STABLE.test(sym) ? "usd" : null;
+    if (!kind) continue;
+    pays.push({ kind, amt, from: (x.from?.hash || "").toLowerCase(), to: (x.to?.hash || "").toLowerCase() });
+  }
+  const rec = { sender, gasWei, nativeWei, pays, method: tx?.method || null };
+  txCache.set(ck, rec);
+  return rec;
+}
+
+// suma de pagos (eth/usd por separado) que salen de `party` o entran a `party`
+function payTotals(pays, party, dir) {
+  let eth = 0, usd = 0;
+  for (const p of pays) {
+    if (dir === "out" && p.from !== party) continue;
+    if (dir === "in" && p.to !== party) continue;
+    if (p.kind === "eth") eth += p.amt; else usd += p.amt;
+  }
+  return { eth, usd };
+}
 
 async function main() {
   const rate = await ethUsd();
-  log(`ETH ≈ $${rate}  ·  ${wallets.length} wallet(s)`);
+  log(`ETH ≈ $${rate}  ·  ${wallets.length} wallet(s)  ·  Blockscout PRO`);
 
-  // 1) recoger eventos (ventas + transfers) de todas las wallets
-  const all = [];
-  let truncated = false;
+  // 1) transferencias de NFT
+  const evs = [];
   for (const w of wallets) {
-    for (const kind of ["sale", "transfer"]) {
-      const { events, truncated: tr } = await eventsFor(w.address, kind);
-      truncated ||= tr;
-      all.push(...events);
-      log(`  ${w.label}/${kind}: ${events.length}`);
+    for (const ch of CHAINS) {
+      const t = await nftTransfers(ch.id, w.address);
+      for (const e of t) e.chain = ch.key, e.chainId = ch.id;
+      evs.push(...t);
+      log(`  ${w.label}/${ch.key}: ${t.length} transferencias`);
     }
   }
-
-  // si la API falló y no tenemos NADA, no pisamos el trades.json bueno que ya haya
-  if (!all.length && apiErrors) {
-    console.error(`\n⚠️ La API de eventos de OpenSea no respondió (${apiErrors} error/es; suele ser`);
-    console.error(`   límite temporal del plan free). NO se toca data/trades.json. Reintenta en unos minutos.`);
+  if (!evs.length && apiErrors) {
+    console.error("\n⚠️ Blockscout no respondió. NO se toca data/trades.json. Reintenta en unos minutos.");
     process.exit(2);
   }
 
-  // 2a) la API repite eventos idénticos y los devuelve una vez por wallet -> únicos
-  const uniq = new Map();
-  for (const e of all) {
-    const id = `${e.event_type}:${e.transaction}:${nftKey(e)}:${e.event_timestamp}:${(e.seller || e.from_address || "")}:${(e.buyer || e.to_address || "")}`;
-    if (!uniq.has(id)) uniq.set(id, e);
-  }
-  // 2b) una venta trae también un transfer con el mismo tx -> nos quedamos con la venta
-  const deduped = [...uniq.values()];
-  const saleTx = new Set(deduped.filter((e) => e.event_type === "sale").map((e) => `${e.transaction}:${nftKey(e)}`));
-  const events = deduped.filter((e) => e.event_type !== "transfer" || !saleTx.has(`${e.transaction}:${nftKey(e)}`));
+  // dedupe (from/to/logIndex bastan; la API no repite pero por si acaso)
+  const seen = new Set();
+  const events = evs.filter((e) => {
+    const k = `${e.chain}:${e.tx}:${e.contract}:${e.tokenId}:${e.from}:${e.to}:${e.logIndex}`;
+    if (seen.has(k)) return false; seen.add(k); return true;
+  });
 
-  // 3) por NFT (contrato+id): ordenar por tiempo y emparejar compras con ventas (FIFO)
+  // 2) agrupar por NFT y emparejar (FIFO)
   const byNft = new Map();
-  for (const ev of events) {
-    if (!ev.nft?.identifier) continue;
-    const k = nftKey(ev);
+  for (const e of events) {
+    if (e.tokenId == null) continue;
+    const k = `${e.chain}:${e.contract}:${e.tokenId}`;
     if (!byNft.has(k)) byNft.set(k, []);
-    byNft.get(k).push(ev);
+    byNft.get(k).push(e);
   }
+
   const positions = [];
-  const heldSlugs = new Set();
+  const heldContracts = new Set();
 
-  for (const [key, evs] of byNft) {
-    evs.sort((a, b) => a.event_timestamp - b.event_timestamp);
-    const lots = []; // compras abiertas
-    const nftInfo = evs.find((e) => e.nft?.name)?.nft || evs[0].nft;
-    const [chain] = key.split(":");
+  for (const [, list] of byNft) {
+    list.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    const lots = [];
+    const info = list.find((e) => e.name) || list[0];
 
-    for (const ev of evs) {
-      const isSale = ev.event_type === "sale";
-      const to = (ev.buyer || ev.to_address || "").toLowerCase();
-      const from = (ev.seller || ev.from_address || "").toLowerCase();
-      const acq = to && own.has(to) && !(from && own.has(from));      // entra de fuera
-      const dis = from && own.has(from) && !(to && own.has(to));      // sale hacia fuera
-      const internal = to && from && own.has(to) && own.has(from) && ev.transfer_type !== "mint";
-      if (internal) continue;
+    for (const e of list) {
+      const acq = own.has(e.to) && !own.has(e.from);
+      const dis = own.has(e.from) && !own.has(e.to);
+      if (own.has(e.to) && own.has(e.from)) continue; // interno
 
-      if (acq || (ev.transfer_type === "mint")) {
-        const m = isSale ? money(ev.payment, rate) : { eth: 0, usd: 0, sym: null };
+      if (acq) {
+        const isMint = e.from === ZERO;
+        const t = await analyzeTx(e.chainId, e.tx);
+        const buyer = e.to;
+        let priceEth = 0, priceUsd = 0;
+        if (isMint) {
+          // coste del mint = ETH nativo que mandaste al contrato (NO tokens ERC-20:
+          // un mint de LP/airdrop mueve tokens que no son "coste")
+          if (t.sender === buyer && t.nativeWei) priceEth = t.nativeWei / 1e18;
+        } else {
+          // compra en un marketplace: todo lo que salió de tu bolsillo (incluye fees/royalty)
+          const out = payTotals(t.pays, buyer, "out");
+          priceEth = out.eth; priceUsd = out.usd;
+          if (t.sender === buyer && t.nativeWei) priceEth += t.nativeWei / 1e18;
+        }
+        const gasEth = t.sender === buyer ? t.gasWei / 1e18 : 0;
+        const costEth = priceEth + (priceUsd ? priceUsd / rate : 0) + gasEth;
+        const paid = priceEth > 0 || priceUsd > 0;
         lots.push({
-          ts: ev.event_timestamp,
-          kind: ev.transfer_type === "mint" ? "mint" : isSale ? "buy" : "transfer_in",
-          costEth: ev.transfer_type === "mint" ? 0 : m.eth,
-          costUsd: ev.transfer_type === "mint" ? 0 : m.usd,
-          costSym: m.sym,
-          tx: ev.transaction,
-          wallet: labelOf(to),
-          flags: ev.transfer_type === "mint" ? ["mint"] : (!isSale ? ["cost_unknown"] : []),
+          ts: e.ts, kind: isMint ? "mint" : paid ? "buy" : "transfer_in",
+          costEth, gasEth, tx: e.tx,
+          flags: isMint && !paid ? ["free_mint"] : (!isMint && !paid) ? ["cost_unknown"] : [],
         });
       } else if (dis) {
-        const m = isSale ? money(ev.payment, rate) : { eth: null, usd: null, sym: null };
-        const lot = lots.shift() || { ts: null, kind: "unknown", costEth: null, costUsd: null, flags: ["no_acq"] };
+        const seller = e.from;
+        const t = await analyzeTx(e.chainId, e.tx);
+        const inc = payTotals(t.pays, seller, "in");
+        const isSale = (inc.eth + inc.usd) > 0;
+        const gasEth = t.sender === seller ? t.gasWei / 1e18 : 0;
+        const procEth = isSale ? (inc.eth + (inc.usd ? inc.usd / rate : 0)) - gasEth : null;
+        const lot = lots.shift() || { ts: null, kind: "unknown", costEth: null, gasEth: 0, flags: ["no_acq"] };
         positions.push({
-          chain,
-          contract: nftInfo.contract, tokenId: nftInfo.identifier,
-          collection: nftInfo.collection || null,
-          name: nftInfo.name || `#${nftInfo.identifier}`,
-          image: nftInfo.display_image_url || nftInfo.image_url || null,
-          url: nftInfo.opensea_url || null,
-          acquired: lot.ts ? { ts: lot.ts, type: lot.kind, priceEth: lot.costEth, priceUsd: lot.costUsd, tx: lot.tx } : null,
-          disposed: { ts: ev.event_timestamp, type: isSale ? "sale" : "transfer_out", priceEth: m.eth, priceUsd: m.usd, tx: ev.transaction },
+          chain: e.chain, contract: info.contract, tokenId: info.tokenId,
+          name: info.name ? `${info.name} #${info.tokenId}` : `#${info.tokenId}`,
+          url: `https://opensea.io/assets/${e.chain}/${info.contract}/${info.tokenId}`,
+          acquired: lot.ts ? { ts: lot.ts, type: lot.kind, priceEth: lot.costEth, gasEth: lot.gasEth, tx: lot.tx } : null,
+          disposed: { ts: e.ts, type: isSale ? "sale" : "transfer_out", priceEth: isSale ? procEth : null, gasEth, tx: e.tx },
           status: isSale ? "sold" : "moved_out",
-          realizedEth: (isSale && lot.costEth != null && m.eth != null) ? +(m.eth - lot.costEth).toFixed(6) : null,
-          realizedUsd: (isSale && lot.costUsd != null && m.usd != null) ? +(m.usd - lot.costUsd).toFixed(2) : null,
+          realizedEth: (isSale && lot.costEth != null) ? +(procEth - lot.costEth).toFixed(6) : null,
           flags: [...new Set([...(lot.flags || []), ...(isSale ? [] : ["sold_elsewhere_or_gift"])])],
         });
       }
     }
-    // lo que queda en 'lots' -> en cartera
     for (const lot of lots) {
-      if (nftInfo.collection) heldSlugs.add(`${chain}|${nftInfo.collection}`);
+      heldContracts.add(`${info.chain}|${info.contract}`);
       positions.push({
-        chain,
-        contract: nftInfo.contract, tokenId: nftInfo.identifier,
-        collection: nftInfo.collection || null,
-        name: nftInfo.name || `#${nftInfo.identifier}`,
-        image: nftInfo.display_image_url || nftInfo.image_url || null,
-        url: nftInfo.opensea_url || null,
-        acquired: { ts: lot.ts, type: lot.kind, priceEth: lot.costEth, priceUsd: lot.costUsd, tx: lot.tx },
-        disposed: null,
-        status: "held",
-        realizedEth: null, realizedUsd: null,
+        chain: info.chain, contract: info.contract, tokenId: info.tokenId,
+        name: info.name ? `${info.name} #${info.tokenId}` : `#${info.tokenId}`,
+        url: `https://opensea.io/assets/${info.chain}/${info.contract}/${info.tokenId}`,
+        acquired: { ts: lot.ts, type: lot.kind, priceEth: lot.costEth, gasEth: lot.gasEth, tx: lot.tx },
+        disposed: null, status: "held", realizedEth: null,
         flags: lot.flags || [],
       });
     }
   }
 
-  // 4) floor actual de las colecciones que sigo teniendo (para el no-realizado)
+  // 3) floor actual por colección (OpenSea, endpoint de colección = no limitado)
   const floors = {};
-  const slugList = [...heldSlugs].map((s) => s.split("|")[1]).filter(Boolean);
-  for (const slug of [...new Set(slugList)].slice(0, 50)) {
-    try {
-      const r = await fetch(`https://api.opensea.io/api/v2/collections/${slug}/stats`, H);
-      if (!r.ok) continue;
+  if (OS_KEY) {
+    const H = { headers: { "x-api-key": OS_KEY, accept: "application/json" } };
+    let csCache = {};
+    const csPath = join(ROOT, "data", "contract-slugs.json");
+    try { csCache = JSON.parse(readFileSync(csPath, "utf8")); } catch { /**/ }
+    let csWrote = false;
+    for (const hc of [...heldContracts].slice(0, 60)) {
+      const [chain, contract] = hc.split("|");
+      let slug = csCache[contract];
+      if (slug === undefined) {
+        const r = await fetch(`https://api.opensea.io/api/v2/chain/${chain}/contract/${contract}`, H).catch(() => null);
+        slug = r && r.ok ? ((await r.json())?.collection || null) : null;
+        if (slug && slug.toLowerCase() === contract) slug = null; // OpenSea a veces devuelve el contrato como slug
+        csCache[contract] = slug; csWrote = true;
+        await new Promise((x) => setTimeout(x, 120));
+      }
+      if (!slug) continue;
+      const r = await fetch(`https://api.opensea.io/api/v2/collections/${slug}/stats`, H).catch(() => null);
+      if (!r || !r.ok) continue;
       const tt = (await r.json())?.total || {};
       if (tt.floor_price == null) continue;
       const sym = tt.floor_price_symbol || "ETH";
-      floors[slug] = STABLE.test(sym)
-        ? { eth: rate ? tt.floor_price / rate : null, usd: tt.floor_price, sym }
-        : { eth: tt.floor_price, usd: rate ? tt.floor_price * rate : null, sym };
-    } catch { /* nada */ }
-    await new Promise((r) => setTimeout(r, 90));
+      floors[contract] = STABLE.test(sym)
+        ? { eth: tt.floor_price / rate, usd: tt.floor_price }
+        : { eth: tt.floor_price, usd: tt.floor_price * rate };
+      await new Promise((x) => setTimeout(x, 90));
+    }
+    if (csWrote) { try { writeFileSync(csPath, JSON.stringify(csCache, null, 1) + "\n"); } catch { /**/ } }
   }
   for (const p of positions) {
-    if (p.status !== "held" || !p.collection) continue;
-    const f = floors[p.collection];
+    const f = floors[p.contract];
     if (!f) continue;
     p.floorEth = f.eth; p.floorUsd = f.usd;
-    // P&L no realizado SOLO en lo que compraste (los mints gratis no tienen coste base)
-    if (p.acquired?.type === "buy" && p.acquired.priceEth != null && f.eth != null) {
+    // P&L no realizado si conoces un coste real (compra o mint de pago)
+    if (p.status === "held" && p.acquired && p.acquired.priceEth > 1e-9) {
       p.unrealizedEth = +(f.eth - p.acquired.priceEth).toFixed(6);
     }
   }
 
-  // 5) resumen
+  // 4) resumen
   const sold = positions.filter((p) => p.status === "sold");
   const held = positions.filter((p) => p.status === "held");
   const sum = (arr, k) => arr.reduce((a, x) => a + (x[k] || 0), 0);
+  const gasTotal = positions.reduce((a, p) => a + (p.acquired?.gasEth || 0) + (p.disposed?.gasEth || 0), 0);
   const summary = {
     realizedEth: +sum(sold, "realizedEth").toFixed(4),
-    realizedUsd: +sum(sold, "realizedUsd").toFixed(2),
-    unrealizedEth: +sum(held, "unrealizedEth").toFixed(4),          // solo compras
-    heldFloorEth: +sum(held, "floorEth").toFixed(4),                // valor a floor de TODO lo que tienes
+    realizedUsd: +(sum(sold, "realizedEth") * rate).toFixed(2),
+    unrealizedEth: +sum(held, "unrealizedEth").toFixed(4),
+    heldFloorEth: +sum(held, "floorEth").toFixed(4),
+    gasEth: +gasTotal.toFixed(4),
     sold: sold.length,
     held: held.length,
     wins: sold.filter((p) => (p.realizedEth || 0) > 0).length,
@@ -252,16 +322,20 @@ async function main() {
   const payload = {
     updated: new Date().toISOString(),
     ethUsd: rate,
+    source: "blockscout",
     wallets: wallets.map((w) => ({ label: w.label, address: w.address })),
-    truncated,
     positions: positions.sort((a, b) => (b.disposed?.ts || b.acquired?.ts || 0) - (a.disposed?.ts || a.acquired?.ts || 0)),
     summary,
   };
+  if (!positions.length && apiErrors) {
+    console.error("\n⚠️ Blockscout falló durante el análisis. NO se toca data/trades.json.");
+    process.exit(2);
+  }
   writeFileSync(OUT, JSON.stringify(payload, null, 2) + "\n");
   log(`\n✔ ${OUT}`);
-  log(`  vendidos ${sold.length} (${summary.wins}✅/${summary.losses}❌)  ·  realizado ${summary.realizedEth} ETH ($${summary.realizedUsd})`);
-  log(`  en cartera ${held.length}  ·  no realizado ${summary.unrealizedEth} ETH  ·  movidos fuera ${summary.movedOut}`);
-  if (truncated) log("  ⚠️ historial largo: puede faltar lo más antiguo (límite de páginas)");
+  log(`  vendidos ${sold.length} (${summary.wins}✅/${summary.losses}❌) · realizado ${summary.realizedEth} ETH ($${summary.realizedUsd})`);
+  log(`  en cartera ${held.length} · no realizado ${summary.unrealizedEth} ETH · valor floor ${summary.heldFloorEth} ETH`);
+  log(`  gas total ${summary.gasEth} ETH · movidos fuera ${summary.movedOut}`);
   if (asJson) process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
 }
 

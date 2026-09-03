@@ -138,22 +138,32 @@ en tu máquina.
 
 ## Cartera / P&L (💰 pestaña Cartera)
 `node scripts/fetch-trades.mjs` reconstruye tus **compras y ventas de NFT** en
-RobinHood / Ethereum / Ink leyendo la **API de eventos de OpenSea** (`events/
-accounts/{wallet}`) — nada a mano. Necesita `data/wallets.json` + `OPENSEA_API_KEY`.
-Escribe `data/trades.json` (personal: `.gitignore` + fuera del modo `--public`).
-`update.mjs` lo corre solo si hay wallets + key.
+RobinHood / Ethereum / Ink leyendo **la blockchain directamente** (Blockscout PRO)
+— nada a mano. Necesita `data/wallets.json` + **`BLOCKSCOUT_API_KEY`** en
+`scripts/.env` (gratis: docs.blockscout.com → PRO API → registro → key `proapi_…`).
+El floor sale de `OPENSEA_API_KEY` (endpoint de colección, no limitado). Escribe
+`data/trades.json` (personal: `.gitignore` + fuera del modo `--public`). `update.mjs`
+lo corre si hay wallets + Blockscout key.
 
-La pestaña muestra: **Realizado** (ETH + $), **No realizado** (a floor actual),
-vendidos (W/L), en cartera, movidos fuera; y una tabla por NFT con compra / venta /
-P&L / estado. Filtros: red, "solo con P&L real", "ocultar lo que sigo teniendo".
+La pestaña muestra: **Realizado**, **No realizado** (a floor actual), **Valor
+cartera**, **Gas total**, vendidos (W/L), en cartera, movidos fuera; y una tabla
+por NFT con compra / venta / P&L / estado, en **$** (Ξ detrás). Filtros: red,
+"solo con P&L real", "ocultar lo que sigo teniendo".
 
-**Límites v1** (marcados en cada fila y en la nota al pie):
-- **No incluye gas.**
-- Los **mints cuentan como coste 0** (aunque hayas pagado mint price).
-- P&L en **ETH + $ al cambio de HOY**, no histórico.
-- Ventas fuera de OpenSea (Blur…) salen como **«movido»** sin precio.
+**Qué SÍ hace** (leído de la cadena):
+- Precio real de **cada mint** y de **cada compra/venta** (suma de pagos WETH/
+  USDG/ETH; la compra incluye los fees/royalty que pagaste).
+- El **gas** de cada operación tuya.
+
+**Límites:**
+- P&L en **$ al cambio de HOY**, no histórico.
+- El **floor** es de OpenSea → muchas colecciones de **Ink** no cotizan ahí y
+  salen **sin floor**.
+- Ventas fuera de un marketplace on-chain estándar (Seaport…) salen como
+  **«movido»** sin precio.
 - Transferencias entre tus propias wallets se ignoran (portfolio unificado).
-- Historial muy largo: puede faltar lo más antiguo (aviso en la pestaña).
+- Es lento (Blockscout free limita req/s): ~30 s por wallet con pocas NFT, más si
+  tienes muchas. Los slugs de floor se cachean en `data/contract-slugs.json`.
 
 ## Cómo se actualizan los datos
 
@@ -166,7 +176,7 @@ P&L / estado. Filtros: red, "solo con P&L real", "ocultar lo que sigo teniendo".
 | Elegibilidad de un mint | tú | editando `data/eligibility.json` |
 | Plazas confirmadas (🎟️) | tú | pestaña **Plazas** del dashboard — local a tu navegador |
 | Elegibilidad real de tu wallet (🔎) | API de OpenSea (con sesión) | botón **Actualizar elegibilidad**, o `fetch-eligibility.mjs` / `update.mjs` |
-| Cartera / P&L (💰) | API de eventos de OpenSea | `fetch-trades.mjs` (o `update.mjs`) |
+| Cartera / P&L (💰) | blockchain (Blockscout) + floor de OpenSea | `fetch-trades.mjs` (o `update.mjs`) |
 
 **El fichero suelto `dashboard.html` NO se actualiza solo** — es una foto. Regenéralo.
 

@@ -1057,9 +1057,9 @@ const STR = {
   h_wallet:'Cartera / P&L — compras y ventas de tus wallets',
   w_real_only:'solo con P&L real (oculta coste desconocido)',
   w_hide_held:'ocultar lo que sigo teniendo',
-  w_note:'Reconstruido de la API de OpenSea. NO incluye gas · los mints cuentan como coste 0 · P&L en ETH y $ al cambio de hoy (no histórico) · ventas fuera de OpenSea (Blur…) salen como «movido» sin precio. data/trades.json es personal (fuera de git y del modo público). Actualízalo con  node scripts/fetch-trades.mjs  (o update.mjs).',
+  w_note:'Reconstruido de la BLOCKCHAIN (Blockscout): precio real de cada mint y de cada compra/venta, y el gas. P&L en ETH y $ al cambio de HOY (no histórico). El floor sale de OpenSea (muchas colecciones de Ink no cotizan ahí → sin floor). Ventas fuera de un marketplace on-chain estándar salen como «movido». data/trades.json es personal (fuera de git y del modo público). Actualízalo con  node scripts/fetch-trades.mjs  (o update.mjs).',
   w_realized:'Realizado',w_unrealized:'No realizado',w_sold:'Vendidos',w_held:'En cartera',w_moved:'Movidos fuera',
-  w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',
+  w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',w_gas:'Gas total',
   w_none:'Sin datos de cartera. Ejecuta  node scripts/fetch-trades.mjs  (necesita wallets.json + OPENSEA_API_KEY).',
   w_truncated:'⚠️ historial largo: puede faltar lo más antiguo.',
   c_bought:'Comprado',c_soldfloor:'Vendido / Floor',c_pnl:'P&L',c_state:'Estado',
@@ -1161,9 +1161,9 @@ const STR = {
   h_wallet:'Portfolio / P&L — your wallets’ buys and sells',
   w_real_only:'only with real P&L (hide unknown cost)',
   w_hide_held:'hide what I still hold',
-  w_note:'Reconstructed from the OpenSea API. Does NOT include gas · mints count as cost 0 · P&L in ETH and $ at today’s rate (not historical) · sales outside OpenSea (Blur…) show as “moved” with no price. data/trades.json is personal (out of git and of public mode). Refresh with  node scripts/fetch-trades.mjs  (or update.mjs).',
+  w_note:'Reconstructed from the BLOCKCHAIN (Blockscout): real price of every mint and every buy/sell, plus gas. P&L in ETH and $ at TODAY’s rate (not historical). Floor comes from OpenSea (many Ink collections do not trade there → no floor). Sales outside a standard on-chain marketplace show as “moved”. data/trades.json is personal (out of git and of public mode). Refresh with  node scripts/fetch-trades.mjs  (or update.mjs).',
   w_realized:'Realized',w_unrealized:'Unrealized',w_sold:'Sold',w_held:'Held',w_moved:'Moved out',
-  w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',
+  w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',w_gas:'Total gas',
   w_none:'No portfolio data. Run  node scripts/fetch-trades.mjs  (needs wallets.json + OPENSEA_API_KEY).',
   w_truncated:'⚠️ long history: the oldest items may be missing.',
   c_bought:'Bought',c_soldfloor:'Sold / Floor',c_pnl:'P&L',c_state:'Status',
@@ -1617,7 +1617,8 @@ function renderWallet(){
   box.innerHTML=
     tile(t('w_realized'), wPnl(s.realizedEth, s.realizedUsd))+
     tile(t('w_unrealized'), wPnl(s.unrealizedEth, null))+
-    tile(t('w_held_value'), s.heldFloorEth!=null ? wPrice(s.heldFloorEth, null) : '—')+
+    tile(t('w_held_value'), s.heldFloorEth ? wPrice(s.heldFloorEth, null) : '—')+
+    (s.gasEth ? tile(t('w_gas'), '<span class="pnl-neg">'+wPrice(s.gasEth, null)+'</span>') : '')+
     tile(t('w_sold'), s.sold+' <small>'+s.wins+'✅ / '+s.losses+'❌</small>')+
     tile(t('w_held'), s.held)+
     tile(t('w_moved'), s.movedOut);
@@ -1629,17 +1630,17 @@ function renderWallet(){
   if(realOnly) rows=rows.filter(p=>{
     if(p.realizedEth!=null) return true;                       // venta con coste conocido
     const a=p.acquired;
-    return p.status==='held' && a && a.type==='buy' && a.priceEth!=null;   // compra real, aún en cartera
+    return p.status==='held' && a && a.priceEth>1e-9;          // pagaste algo por ella y aún la tienes
   });
 
-  const dt=ts=>ts?new Date(ts*1000).toLocaleDateString(L==='es'?'es-ES':'en-US',{year:'2-digit',month:'short',day:'numeric'}):'—';
+  const dt=ts=>ts?new Date(ts<1e12?ts*1000:ts).toLocaleDateString(L==='es'?'es-ES':'en-US',{year:'2-digit',month:'short',day:'numeric'}):'—';
   const flags=fl=>(fl||[]).map(f=>'<span class="wflag">'+esc(f.replace(/_/g,' '))+'</span>').join('');
   const tyf=k=>t('ty_'+k)===('ty_'+k)?k:t('ty_'+k);
 
   tbl.innerHTML='<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_bought')+'</th><th>'+t('c_soldfloor')+'</th><th>'+t('c_pnl')+'</th><th>'+t('c_state')+'</th></tr></thead><tbody>'+
    (rows.map(p=>{
      const a=p.acquired, dp=p.disposed;
-     const mintCost0 = a && a.type==='mint';
+     const mintCost0 = a && a.type==='mint' && !(a.priceEth>1e-9);   // mint realmente gratis
      const pnl = p.realizedEth!=null ? p.realizedEth : (p.status==='held' ? p.unrealizedEth : null);
      const pnlUsd = p.realizedUsd!=null ? p.realizedUsd : null;
      const pct = (a&&a.priceEth>0&&pnl!=null) ? Math.round(pnl/a.priceEth*100) : null;

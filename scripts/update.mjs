@@ -19,6 +19,8 @@ const envKey = /OPENSEA_API_KEY=\S/.test(
   (existsSync(join(HERE, ".env")) ? readFileSync(join(HERE, ".env"), "utf8") : "")
 );
 const hasKey = envKey || !!process.env.OPENSEA_API_KEY;
+const envRaw = existsSync(join(HERE, ".env")) ? readFileSync(join(HERE, ".env"), "utf8") : "";
+const hasBlockscout = /BLOCKSCOUT_API_KEY=\S/.test(envRaw) || !!process.env.BLOCKSCOUT_API_KEY;
 
 const hasWallets = existsSync(join(HERE, "..", "data", "wallets.json"));
 
@@ -28,7 +30,7 @@ const steps = [
 if (hasKey && hasWallets) {
   steps.push(["Escaneo de wallets", "scan-wallets.mjs", ["--write"]]);
 }
-if (!pub && hasKey && hasWallets) {
+if (!pub && hasBlockscout && hasWallets) {
   steps.push(["Cartera / P&L (compras y ventas)", "fetch-trades.mjs", []]);
 }
 // elegibilidad real (WL/GTD/FCFS) de tu wallet: solo si hay sesión de OpenSea
