@@ -253,7 +253,7 @@ async function main() {
         const paid = priceEth > 0 || priceUsd > 0;
         lots.push({
           ts: e.ts, kind: isMint ? "mint" : paid ? "buy" : "transfer_in",
-          costEth, gasEth, tx: e.tx,
+          costEth, gasEth, tx: e.tx, wallet: labelOf(e.to),
           flags: isMint && !paid ? ["free_mint"] : (!isMint && !paid) ? ["cost_unknown"] : [],
         });
       } else if (dis) {
@@ -266,6 +266,7 @@ async function main() {
         const lot = lots.shift() || { ts: null, kind: "unknown", costEth: null, gasEth: 0, flags: ["no_acq"] };
         positions.push({
           chain: e.chain, contract: info.contract, tokenId: info.tokenId,
+          wallet: lot.wallet || labelOf(e.from),
           name: info.name ? `${info.name} #${info.tokenId}` : `#${info.tokenId}`,
           url: `https://opensea.io/assets/${e.chain}/${info.contract}/${info.tokenId}`,
           acquired: lot.ts ? { ts: lot.ts, type: lot.kind, priceEth: lot.costEth, gasEth: lot.gasEth, tx: lot.tx } : null,
@@ -280,6 +281,7 @@ async function main() {
       heldContracts.add(`${info.chain}|${info.contract}`);
       positions.push({
         chain: info.chain, contract: info.contract, tokenId: info.tokenId,
+        wallet: lot.wallet || null,
         name: info.name ? `${info.name} #${info.tokenId}` : `#${info.tokenId}`,
         url: `https://opensea.io/assets/${info.chain}/${info.contract}/${info.tokenId}`,
         acquired: { ts: lot.ts, type: lot.kind, priceEth: lot.costEth, gasEth: lot.gasEth, tx: lot.tx },

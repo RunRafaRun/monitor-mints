@@ -786,6 +786,7 @@ vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
 
 <section data-p="wallet" hidden>
   <h2 data-k="h_wallet"></h2>
+  <div class="chains" id="wWallets" hidden></div>
   <div id="wStats" class="wstats"></div>
   <div class="filtrow" style="margin:6px 14px 0">
     <label class="chk"><input type="checkbox" id="wRealOnly"> <span data-k="w_real_only"></span></label>
@@ -1609,6 +1610,7 @@ function wPnl(eth, usd, pct){
 }
 const BS_TX={robinhood:'https://robinhoodchain.blockscout.com/tx/',ethereum:'https://eth.blockscout.com/tx/',ink:'https://explorer.inkonchain.com/tx/'};
 const txLink=(chain,tx)=>tx?' <a class="oslink" href="'+esc((BS_TX[chain]||BS_TX.ethereum)+tx)+'" target="_blank" rel="noopener">tx ↗</a>':'';
+let wSel='all';   // filtro de wallet en la pestaña Cartera
 function renderWallet(){
   const box=document.getElementById('wStats'), tbl=document.getElementById('tWallet');
   if(!box||!tbl) return;
@@ -1616,8 +1618,20 @@ function renderWallet(){
   if(!T){ box.innerHTML=''; tbl.innerHTML='<tbody><tr><td class="muted">'+t('w_none')+'</td></tr></tbody>'; return; }
   const tile=(k,v)=>'<div class="wstat"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>';
 
-  // el resumen respeta el filtro de red (si estás en "RH" no cuentes el gas de ETH)
-  const inCh=p=>chainSel==='all'||p.chain===chainSel;
+  // selector de wallet (si hay más de una)
+  const wl=(T.wallets||[]).map(w=>w.label);
+  const wbar=document.getElementById('wWallets');
+  if(wbar){
+    if(wl.length>1){
+      if(wSel!=='all' && !wl.includes(wSel)) wSel='all';
+      wbar.hidden=false;
+      wbar.innerHTML='<button data-w="all"'+(wSel==='all'?' class="on"':'')+'>'+t('all_chains')+'</button>'+
+        wl.map(l=>'<button data-w="'+esc(l)+'"'+(wSel===l?' class="on"':'')+'>'+esc(l)+'</button>').join('');
+    } else wbar.hidden=true;
+  }
+
+  // el resumen respeta el filtro de red y de wallet
+  const inCh=p=>(chainSel==='all'||p.chain===chainSel) && (wSel==='all'||p.wallet===wSel);
   const P=T.positions.filter(inCh);
   const sold=P.filter(p=>p.status==='sold'), held=P.filter(p=>p.status==='held');
   const sm=(arr,f)=>arr.reduce((a,x)=>a+(f(x)||0),0);
@@ -1670,7 +1684,7 @@ function renderWallet(){
      const stTxt = p.status==='held'?t('st_held'):p.status==='sold'?t('st_sold'):t('st_moved');
      const gasTxt=g=>g>1e-9?' <small class="muted" title="'+t('w_gas')+'">+gas '+wPrice(g,null)+'</small>':'';
      return '<tr>'+
-       cell(t('c_project'), chainPill(p.chain)+'<b>'+esc(p.name)+'</b>'+(p.url?' '+osA(p.url):'')+(flags(p.flags)?'<br>'+flags(p.flags):''), null, esc(p.name).toLowerCase())+
+       cell(t('c_project'), chainPill(p.chain)+'<b>'+esc(p.name)+'</b>'+(p.url?' '+osA(p.url):'')+(p.wallet&&(T.wallets||[]).length>1&&wSel==='all'?' <span class="wchip">'+esc(p.wallet)+'</span>':'')+(flags(p.flags)?'<br>'+flags(p.flags):''), null, esc(p.name).toLowerCase())+
        cell(t('c_bought'), a?dt(a.ts)+' · '+tyf(a.type)+txLink(p.chain,a.tx)+'<br>'+(mintCost0?'<span class="muted">'+t('w_free')+'</span>':wPrice(a.priceEth,a.priceUsd))+gasTxt(a.gasEth):'—', 'num', a?a.ts:0)+
        cell(t('c_soldfloor'), dp?dt(dp.ts)+' · '+tyf(dp.type)+txLink(p.chain,dp.tx)+'<br>'+wPrice(dp.priceEth,dp.priceUsd)+gasTxt(dp.gasEth):(p.floorEth!=null?'<span class="muted" title="'+(p.floorSrc&&p.floorSrc[0]==='s'?t('w_mkt_tip'):'')+'">'+(p.floorSrc&&p.floorSrc[0]==='s'?t('w_mkt'):'floor')+'</span> '+wPrice(p.floorEth,p.floorUsd):'—'), 'num', dp?dp.ts:9e14)+
        cell(t('c_pnl'), (()=>{
@@ -1822,6 +1836,10 @@ document.getElementById('q').addEventListener('input',applyFilter);
 document.getElementById('onlyKeys').addEventListener('change',applyFilter);
 document.getElementById('wRealOnly').addEventListener('change',renderWallet);
 document.getElementById('wHeldHide').addEventListener('change',renderWallet);
+document.getElementById('wWallets').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  wSel=b.dataset.w; renderWallet();
+});
 document.getElementById('chains').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
   chainSel=b.dataset.c; try{ localStorage.setItem('mints_chain',chainSel); }catch(err){}
