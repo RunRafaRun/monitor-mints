@@ -9,6 +9,7 @@ on:
     paths-ignore:
       - "docs/**"
       - "**/*.md"
+      - "public-data/**"   # lo commitea community-portfolios; el cron de aquí ya lo recoge
   schedule:
     # cada 10 min. GitHub Actions puede retrasar/agrupar ejecuciones programadas
     # si hay carga (sobre todo al inicio de cada hora); el intervalo real suele
@@ -47,8 +48,10 @@ jobs:
 
       - name: Preparar carpeta de publicación
         run: |
-          mkdir -p public
+          mkdir -p public/portfolios
           cp data/dashboard.html public/index.html
+          # carteras de la comunidad (las calcula community-portfolios.yml)
+          cp -r public-data/portfolios/. public/portfolios/ 2>/dev/null || true
 
       - uses: actions/upload-pages-artifact@v3
         with:

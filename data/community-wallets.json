@@ -1,0 +1,6 @@
+{
+  "note": "Direcciones PÚBLICAS de gente que quiere ver su cartera en el dashboard. El CI (community-portfolios.yml) calcula la de cada una y publica public-data/portfolios/<addr>.json. NO gitignore: el workflow lo necesita. Solo direcciones 0x... de 42 chars.",
+  "wallets": [
+    "0xd7c44c18b4ae297fd6cbc09dee42fc5531e36f84"
+  ]
+}
