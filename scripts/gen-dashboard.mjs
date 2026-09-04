@@ -577,6 +577,7 @@ padding:5px 12px;cursor:pointer;font-size:13px}
 .lang{display:flex;gap:0;border:1px solid var(--line);border-radius:999px;overflow:hidden}
 .lang button{border:0;border-radius:0;padding:5px 10px}.lang button.on{background:var(--accent);color:#fff}
 .chk{display:inline-flex;gap:6px;align-items:center;margin:0 14px 4px}
+[hidden]{display:none!important}
 table{width:calc(100% - 28px);margin:0 14px;border-collapse:collapse;font-size:13px}
 th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--mut);font-weight:600;cursor:pointer;white-space:nowrap;user-select:none}
@@ -793,14 +794,23 @@ vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
 
 <section data-p="wallet" hidden>
   <h2 data-k="h_wallet"></h2>
+  <div id="wPubForm" hidden>
+    <p class="note" data-k="w_pub_hint"></p>
+    <div class="spot-form">
+      <input id="wPubAddr" type="text" autocomplete="off" spellcheck="false" placeholder="0x…" style="flex:1;min-width:240px">
+      <button id="wPubGo" class="chk" data-k="w_pub_btn"></button>
+      <button id="wPubClear" class="chk" data-k="w_pub_clear" hidden></button>
+    </div>
+    <p class="note" id="wPubStatus"></p>
+  </div>
   <div class="chains" id="wWallets" hidden></div>
   <div id="wStats" class="wstats"></div>
-  <div class="filtrow" style="margin:6px 14px 0">
+  <div class="filtrow" id="wFilters" style="margin:6px 14px 0">
     <label class="chk"><input type="checkbox" id="wRealOnly"> <span data-k="w_real_only"></span></label>
     <label class="chk"><input type="checkbox" id="wHeldHide"> <span data-k="w_hide_held"></span></label>
   </div>
   <div class="scroll"><table id="tWallet"></table></div>
-  <p class="note" data-k="w_note"></p>
+  <p class="note" id="wNote"></p>
 </section>
 </div>
 
@@ -1070,6 +1080,12 @@ const STR = {
   w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',w_gas:'Gas total',w_net_sell:'neto si vendes',w_mkt:'~mercado',w_mkt_tip:'Sin floor de OpenSea: mínimo de las últimas ventas on-chain de la colección',w_exit_gas:'floor menos el gas estimado para vender (mediana del gas que pagaste al entrar en esa red)',
   w_none:'Sin datos de cartera. Ejecuta  node scripts/fetch-trades.mjs  (necesita wallets.json + OPENSEA_API_KEY).',
   w_truncated:'⚠️ wallet muy grande: puede faltar lo más antiguo.',w_more:'…y {n} más (filtra por wallet o usa "ocultar lo que sigo teniendo").',
+  w_pub_hint:'Introduce tu dirección PÚBLICA (0x…) para ver el valor y el P&L de tu cartera. Se calcula en el servidor con datos on-chain; se guarda solo en este navegador. Nunca claves privadas.',
+  w_pub_btn:'Ver cartera',w_pub_clear:'cambiar dirección',
+  w_pub_bad:'Dirección no válida: tiene que ser 0x… con 42 caracteres.',
+  w_pub_loading:'Cargando tu cartera…',
+  w_pub_pending:'Todavía no tenemos tu cartera calculada. Se recalculan cada pocas horas — vuelve en un rato.',
+  w_pub_note:'Reconstruido de la blockchain (Blockscout): precio real de cada mint / compra / venta y el gas. P&L en $ y ETH al cambio de HOY. Floor de OpenSea (algunas colecciones sin mercado → sin floor). Se actualiza cada pocas horas.',
   c_bought:'Comprado',c_soldfloor:'Vendido / Floor',c_pnl:'P&L',c_state:'Estado',
   st_held:'en cartera',st_sold:'vendido',st_moved:'movido fuera',
   ty_mint:'mint',ty_buy:'compra',ty_transfer_in:'recibido',ty_sale:'venta',ty_transfer_out:'enviado',
@@ -1174,6 +1190,12 @@ const STR = {
   w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',w_gas:'Total gas',w_net_sell:'net if you sell',w_mkt:'~market',w_mkt_tip:'No OpenSea floor: lowest of the collection last on-chain sales',w_exit_gas:'floor minus estimated gas to sell (median of the gas you paid to enter on that chain)',
   w_none:'No portfolio data. Run  node scripts/fetch-trades.mjs  (needs wallets.json + OPENSEA_API_KEY).',
   w_truncated:'⚠️ very large wallet: the oldest items may be missing.',w_more:'…and {n} more (filter by wallet or use "hide what I still hold").',
+  w_pub_hint:'Enter your PUBLIC address (0x…) to see your portfolio value and P&L. Computed server-side from on-chain data; stored only in this browser. Never private keys.',
+  w_pub_btn:'Show portfolio',w_pub_clear:'change address',
+  w_pub_bad:'Invalid address: must be 0x… with 42 characters.',
+  w_pub_loading:'Loading your portfolio…',
+  w_pub_pending:'Your portfolio isn’t computed yet. They refresh every few hours — check back soon.',
+  w_pub_note:'Reconstructed from the blockchain (Blockscout): real price of every mint / buy / sell plus gas. P&L in $ and ETH at TODAY’s rate. Floor from OpenSea (some collections have no market → no floor). Refreshed every few hours.',
   c_bought:'Bought',c_soldfloor:'Sold / Floor',c_pnl:'P&L',c_state:'Status',
   st_held:'held',st_sold:'sold',st_moved:'moved out',
   ty_mint:'mint',ty_buy:'buy',ty_transfer_in:'received',ty_sale:'sale',ty_transfer_out:'sent',
@@ -1601,7 +1623,37 @@ function applyFilter(){
 
 // ---- Cartera / P&L ----  (los floors de RH van en $, como en OpenSea)
 const pnlCls = v => v>0?'pnl-pos':v<0?'pnl-neg':'';
-const wRate = () => (D.trades && D.trades.ethUsd) || ETHUSD || 2500;
+// modo público: la cartera se pide por dirección a portfolios/<addr>.json (lo
+// calcula el workflow community-portfolios). Se guarda solo en localStorage.
+let pubTrades = null;
+const PUB_ADDR_RE = /^0x[0-9a-f]{40}$/;
+const wTrades = () => D.public ? pubTrades : D.trades;
+const wRate = () => { const T=wTrades(); return (T && T.ethUsd) || ETHUSD || 2500; };
+function wPubStatus(msg){ const e=document.getElementById('wPubStatus'); if(e) e.textContent = msg||''; }
+async function loadPubWallet(addr, {store=true}={}){
+  addr = String(addr||'').trim().toLowerCase();
+  const clr=document.getElementById('wPubClear'), inp=document.getElementById('wPubAddr');
+  if(!PUB_ADDR_RE.test(addr)){ wPubStatus(t('w_pub_bad')); return; }
+  if(store){ try{ localStorage.setItem('mints_pub_wallet', addr); }catch(e){} }
+  if(inp) inp.value = addr;
+  wPubStatus(t('w_pub_loading'));
+  try{
+    const r = await fetch('portfolios/'+addr+'.json', {cache:'no-cache'});
+    if(r.status===404){ pubTrades=null; wPubStatus(t('w_pub_pending')); if(clr) clr.hidden=false; renderWallet(); return; }
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    pubTrades = await r.json();
+    wPubStatus('');
+    if(clr) clr.hidden=false;
+    renderWallet();
+  }catch(e){ wPubStatus('⚠️ '+e.message); }
+}
+function clearPubWallet(){
+  pubTrades = null;
+  try{ localStorage.removeItem('mints_pub_wallet'); }catch(e){}
+  const inp=document.getElementById('wPubAddr'); if(inp) inp.value='';
+  const clr=document.getElementById('wPubClear'); if(clr) clr.hidden=true;
+  wPubStatus(''); renderWallet();
+}
 function wEth(v){ if(v==null) return ''; const a=Math.abs(v); return '<span class="eth">Ξ'+(a<0.001?v.toFixed(5):a<1?v.toFixed(4):v.toFixed(3))+'</span>'; }
 // $ delante (convención RH), Ξ detrás en gris
 function wPrice(eth, usd){
@@ -1621,8 +1673,18 @@ let wSel='all';   // filtro de wallet en la pestaña Cartera
 function renderWallet(){
   const box=document.getElementById('wStats'), tbl=document.getElementById('tWallet');
   if(!box||!tbl) return;
-  const T=D.trades;
-  if(!T){ box.innerHTML=''; tbl.innerHTML='<tbody><tr><td class="muted">'+t('w_none')+'</td></tr></tbody>'; return; }
+  const pubForm=document.getElementById('wPubForm');
+  if(pubForm) pubForm.hidden = !D.public;
+  const T=wTrades();
+  const filt=document.getElementById('wFilters');
+  if(filt) filt.hidden = !T;
+  if(!T){
+    box.innerHTML='';
+    tbl.innerHTML = D.public ? '' : '<tbody><tr><td class="muted">'+t('w_none')+'</td></tr></tbody>';
+    const n0=document.getElementById('wNote');
+    if(n0) n0.textContent = D.public ? t('w_pub_note') : t('w_none');
+    return;
+  }
   const tile=(k,v)=>'<div class="wstat"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>';
 
   // selector de wallet (si hay más de una)
@@ -1716,8 +1778,8 @@ function renderWallet(){
    }).join('') || '<tr><td colspan=5 class="muted">—</td></tr>')
    +(nRows>CAP?'<tr><td colspan=5 class="muted">'+t('w_more').replace('{n}',nRows-CAP)+'</td></tr>':'')+'</tbody>';
 
-  const note=document.querySelector('section[data-p="wallet"] .note');
-  if(note) note.textContent = (T.truncated?t('w_truncated')+' ':'')+t('w_note');
+  const note=document.getElementById('wNote');
+  if(note) note.textContent = (T.truncated?t('w_truncated')+' ':'')+(D.public?t('w_pub_note'):t('w_note'));
 }
 
 function render(){
@@ -1831,10 +1893,11 @@ function render(){
   const spPendEl=document.getElementById('spPending');
   if(spPendEl) spPendEl.textContent = spPend ? t('sp_pending_count').replace('{n}', spPend) : '';
 
-  // Cartera y elegibilidad son personales: no tienen sentido en la web pública
+  // La elegibilidad (llaves) es personal y no va en la web pública. La cartera SÍ:
+  // en modo público se pide por dirección (portfolios/<addr>.json).
   const walletTab=document.querySelector('#tabs button[data-t="wallet"]');
-  if(walletTab) walletTab.hidden = !!D.public;
-  if(D.public){ const wb=document.getElementById('wlBar'); if(wb) wb.hidden=true; }
+  if(walletTab) walletTab.hidden = false;
+  if(D.public){ const wb=document.getElementById('wlBar'); if(wb) wb.hidden=true; renderWallet(); }
   else { renderWlBar(); renderWallet(); }
   applyFilter();
   if(typeof applyHdr==='function') applyHdr();
@@ -1850,6 +1913,13 @@ document.getElementById('q').addEventListener('input',applyFilter);
 document.getElementById('onlyKeys').addEventListener('change',applyFilter);
 document.getElementById('wRealOnly').addEventListener('change',renderWallet);
 document.getElementById('wHeldHide').addEventListener('change',renderWallet);
+(function(){
+  const go=document.getElementById('wPubGo'), inp=document.getElementById('wPubAddr'), clr=document.getElementById('wPubClear');
+  if(go) go.addEventListener('click',()=>loadPubWallet(inp.value));
+  if(inp) inp.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); loadPubWallet(inp.value); } });
+  if(clr) clr.addEventListener('click',clearPubWallet);
+  if(D.public){ try{ const a=localStorage.getItem('mints_pub_wallet'); if(a) loadPubWallet(a,{store:false}); }catch(e){} }
+})();
 document.getElementById('wWallets').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
   wSel=b.dataset.w; renderWallet();
