@@ -70,6 +70,19 @@ export function readAuth() {
   return { jwt, exp, address: addr };
 }
 
+// El token de sesión de OpenSea dura poco (~1 h). Antes de usarlo, si ya caducó
+// o le queda poco, pedimos al CLI que lo renueve con el refresh token (sin
+// navegador, sin firma). Devuelve el auth ya fresco (o el que había si falla).
+export function refreshAuth({ marginMs = 5 * 60 * 1000 } = {}) {
+  const a = readAuth();
+  if (a?.exp && a.exp - Date.now() > marginMs) return a;      // aún vale
+  if (!osCliBase()) return a;                                  // sin CLI no hay nada que hacer
+  const out = osCli(["auth", "refresh", "--format", "json"]) || osCli(["auth", "refresh"]);
+  const fresh = readAuth();
+  if (out && fresh?.exp && fresh.exp > Date.now()) return fresh;
+  return fresh || a;
+}
+
 function jwtClaims(jwt) {
   if (!jwt) return null;
   try { return JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString()); } catch { return null; }

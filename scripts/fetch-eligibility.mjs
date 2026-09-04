@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ROOT } from "./lib/data.mjs";
-import { osCliBase, osCli, whoami, readAuth, walletLabel } from "./lib/os-auth.mjs";
+import { osCliBase, osCli, whoami, readAuth, refreshAuth, walletLabel } from "./lib/os-auth.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(ROOT, "data", "eligibility-wallet.json");
@@ -82,13 +82,21 @@ async function main() {
     die("Falta el CLI de OpenSea. Una vez:  npm i -g @opensea/cli\n" +
         "(o deja que npx lo baje). Luego:  opensea login --scopes read:eligibility", 2);
   }
+  // el token de sesión dura ~1 h: si caducó (o le queda poco) lo renovamos con el
+  // refresh token, sin navegador. Si no hay refresh válido seguimos y avisamos.
+  const preExp = readAuth()?.exp || null;
+  const auth = refreshAuth();
+  if (auth?.exp && preExp && auth.exp > preExp) log("Sesión OpenSea renovada");
   const me = whoami();
   if (!me) {
     die("No hay sesión de OpenSea. Ejecuta:  opensea login --scopes read:eligibility\n" +
         "Abre el navegador y firmas un mensaje — NO es una transacción.", 3);
   }
   log(`Sesión OpenSea: ${me.address}${me.exp ? ` · caduca ${new Date(me.exp).toLocaleString()}` : ""}`);
-  const auth = readAuth();
+  if (auth?.exp && auth.exp < Date.now()) {
+    log("⚠️ El token de OpenSea está caducado y no se pudo renovar. " +
+        "Ejecuta:  opensea login --scopes read:eligibility  (o el botón «Reconectar»).");
+  }
   const bearer = auth?.jwt || null;
 
   // 1) slugs a comprobar: los del radar (--slugs, pasados por serve.mjs) + el
@@ -123,7 +131,7 @@ async function main() {
 
   // 2) fases (API key) + elegibilidad (sesión) por drop
   const drops = {};
-  let n = 0, hitStages = 0, cliCalls = 0, metaWrote = false;
+  let n = 0, hitList = 0, cliCalls = 0, metaWrote = false;
   for (const [slug, chain] of slugs) {
     n++;
     let metaStages = metaCache[slug] && (Date.now() - metaCache[slug]._at < META_TTL) ? metaCache[slug].stages : null;
@@ -160,15 +168,16 @@ async function main() {
       };
     });
     drops[slug] = { chain, stages };
-    const hits = stages.filter((s) => s.eligible === true).map((s) => s.kind);
-    hitStages += hits.length;
+    // PUBLIC no cuenta: en la fase pública todo el mundo es elegible, no es una plaza
+    const hits = stages.filter((s) => s.eligible === true && s.kind !== "PUBLIC").map((s) => s.kind);
+    hitList += hits.length;
     if (hits.length) log(`  ✅ ${slug}: ${hits.join(", ")}`);
     if (n % 5 === 0) await new Promise((r) => setTimeout(r, 400));
   }
   if (metaWrote) { try { writeFileSync(metaPath, JSON.stringify(metaCache) + "\n"); } catch { /**/ } }
 
   writeOut(me.address, drops, auth);
-  log(`\n✔ ${OUT}  ·  ${hitStages} fase(s) donde estás en la lista`);
+  log(`\n✔ ${OUT}  ·  ${hitList} plaza(s) donde estás en la lista (GTD/FCFS/WL)`);
   if (asJson) process.stdout.write(JSON.stringify({ address: me.address, drops }, null, 2) + "\n");
 }
 
