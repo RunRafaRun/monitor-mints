@@ -16,16 +16,30 @@
 // OpenSea (endpoint de colección, no limitado) · ventas fuera de un marketplace
 // on-chain estándar salen como "movido".
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ROOT } from "./lib/data.mjs";
 import { loadWallets } from "./lib/wallets.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const OUT = join(ROOT, "data", "trades.json");
 const asJson = process.argv.includes("--json");
 const log = (...a) => console.error(...a);
+
+// --address=0x…  -> analiza SOLO esa dirección (para carteras de la comunidad en
+//                  CI); ignora data/wallets.json.
+// --out=RUTA     -> dónde escribir el JSON (por defecto data/trades.json, o
+//                  data/portfolios/<addr>.json si hay --address).
+const argAddr = (process.argv.find((a) => a.startsWith("--address=")) || "").slice(10).trim().toLowerCase();
+const argOut = (process.argv.find((a) => a.startsWith("--out=")) || "").slice(6).trim();
+if (argAddr && !/^0x[0-9a-f]{40}$/.test(argAddr)) {
+  console.error(`--address no es una dirección válida: ${argAddr}`); process.exit(1);
+}
+const OUT = argOut
+  ? (join(argOut))
+  : argAddr
+    ? join(ROOT, "data", "portfolios", `${argAddr}.json`)
+    : join(ROOT, "data", "trades.json");
 
 (() => { // scripts/.env
   const p = join(HERE, ".env");
@@ -50,7 +64,7 @@ const STABLE = /^(USDG|USDC|USDC\.E|USDT|USD₮0|DAI|USDB|USDB\.E)$/i;
 const ETHLIKE = /^(W?ETH)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase/i;
 
-const wallets = loadWallets();
+const wallets = argAddr ? [{ label: "wallet", address: argAddr }] : loadWallets();
 if (!wallets.length) { console.error("No hay wallets en data/wallets.json."); process.exit(1); }
 const own = new Set(wallets.map((w) => w.address.toLowerCase()));
 const labelOf = (a) => wallets.find((w) => w.address.toLowerCase() === String(a).toLowerCase())?.label || null;
@@ -451,9 +465,10 @@ async function main() {
     summary,
   };
   if (!positions.length && apiErrors) {
-    console.error("\n⚠️ Blockscout falló durante el análisis. NO se toca data/trades.json.");
+    console.error(`\n⚠️ Blockscout falló durante el análisis. NO se toca ${OUT}.`);
     process.exit(2);
   }
+  mkdirSync(dirname(OUT), { recursive: true });
   writeFileSync(OUT, JSON.stringify(payload, null, 2) + "\n");
   log(`\n✔ ${OUT}`);
   log(`  vendidos ${sold.length} (${summary.wins}✅/${summary.losses}❌) · realizado ${summary.realizedEth} ETH ($${summary.realizedUsd})`);
