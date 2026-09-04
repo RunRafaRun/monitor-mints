@@ -1,6 +1,6 @@
 {
-  "updated": "2026-09-04T08:37:56.984Z",
-  "ethUsd": 2517.48,
+  "updated": "2026-09-04T08:43:20.288Z",
+  "ethUsd": 2518.49,
   "source": "blockscout",
   "truncated": false,
   "wallets": [
@@ -29,7 +29,7 @@
       "realizedEth": null,
       "flags": [],
       "floorEth": 0.0006,
-      "floorUsd": 1.5055199999999997,
+      "floorUsd": 1.5110939999999997,
       "floorSrc": "opensea",
       "unrealizedEth": -0.000215
     },
@@ -52,7 +52,7 @@
       "realizedEth": null,
       "flags": [],
       "floorEth": 0.0031846999,
-      "floorUsd": 7.991048989079999,
+      "floorUsd": 8.020634851151,
       "floorSrc": "opensea",
       "unrealizedEth": -0.000015
     },
@@ -82,10 +82,7 @@
       "flags": [
         "free_mint",
         "sold_elsewhere_or_gift"
-      ],
-      "floorEth": 0.0000999,
-      "floorUsd": 0.25149625200000003,
-      "floorSrc": "opensea"
+      ]
     },
     {
       "chain": "ink",
@@ -301,10 +298,10 @@
       "status": "held",
       "realizedEth": null,
       "flags": [],
-      "floorEth": 0.000299999998,
-      "floorUsd": 0.7527599949815998,
-      "floorSrc": "opensea",
-      "unrealizedEth": -0.000116
+      "floorEth": 0.00019999999999999998,
+      "floorUsd": 0.5036979999999999,
+      "floorSrc": "sales5",
+      "unrealizedEth": -0.000216
     },
     {
       "chain": "ink",
@@ -444,9 +441,9 @@
         "free_mint",
         "sold_elsewhere_or_gift"
       ],
-      "floorEth": 0.04499,
-      "floorUsd": 113.2614252,
-      "floorSrc": "opensea"
+      "floorEth": 0.018000000000000002,
+      "floorUsd": 45.33282,
+      "floorSrc": "sales5"
     },
     {
       "chain": "ethereum",
@@ -475,16 +472,16 @@
         "free_mint",
         "sold_elsewhere_or_gift"
       ],
-      "floorEth": 0.04499,
-      "floorUsd": 113.2614252,
-      "floorSrc": "opensea"
+      "floorEth": 0.018000000000000002,
+      "floorUsd": 45.33282,
+      "floorSrc": "sales5"
     }
   ],
   "summary": {
     "realizedEth": 0,
     "realizedUsd": 0,
-    "unrealizedEth": -0.0003,
-    "heldFloorEth": 0.0041,
+    "unrealizedEth": -0.0004,
+    "heldFloorEth": 0.004,
     "gasEth": 0.0294,
     "sold": 0,
     "held": 16,
