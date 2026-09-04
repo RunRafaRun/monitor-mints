@@ -1,0 +1,57 @@
+name: wallet-intake
+
+# Alta self-service de carteras: un visitante abre un issue titulado
+# "[cartera] 0x…" (lo genera el botón de la pestaña Cartera del dashboard).
+# Sacamos la dirección, la añadimos a data/community-wallets.json, comentamos
+# y cerramos el issue, y disparamos community-portfolios para calcularla ya.
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: wallet-intake
+  cancel-in-progress: false
+
+jobs:
+  add:
+    if: startsWith(github.event.issue.title, '[cartera]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Procesar el issue
+        id: intake
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+          BODY: ${{ github.event.issue.body }}
+        run: node scripts/wallet-intake.mjs
+
+      - name: Commit y push
+        if: steps.intake.outputs.added == '1'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/community-wallets.json
+          git commit -m "cartera comunidad: +${{ steps.intake.outputs.addr }} (issue #${{ github.event.issue.number }}) [skip ci]"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin master && git push && exit 0
+            echo "push falló (intento $i)"; sleep 5
+          done
+          exit 1
+
+      - name: Calcular esa cartera ya
+        if: steps.intake.outputs.added == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run community-portfolios.yml -R "$GITHUB_REPOSITORY"

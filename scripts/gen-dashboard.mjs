@@ -522,7 +522,8 @@ export async function buildData({ pub = false } = {}) {
     if (existsSync(tPath)) { try { trades = JSON.parse(readFileSync(tPath, "utf8")); } catch (e) { console.error("trades.json:", e.message); } }
   }
 
-  const out = { updated: new Date().toISOString(), ethUsd: ETHUSD, mints, ranking, alerts, holdings: holdSummary, chains, public: !!pub, wlElig: weMeta, trades };
+  const out = { updated: new Date().toISOString(), ethUsd: ETHUSD, mints, ranking, alerts, holdings: holdSummary, chains, public: !!pub, wlElig: weMeta, trades,
+    repo: process.env.GITHUB_REPOSITORY || process.env.REPO || "RunRafaRun/monitor-mints" };
   return pub ? stripPersonal(out) : out;
 }
 
@@ -1084,7 +1085,8 @@ const STR = {
   w_pub_btn:'Ver cartera',w_pub_clear:'cambiar dirección',
   w_pub_bad:'Dirección no válida: tiene que ser 0x… con 42 caracteres.',
   w_pub_loading:'Cargando tu cartera…',
-  w_pub_pending:'Todavía no tenemos tu cartera calculada. Se recalculan cada pocas horas — vuelve en un rato.',
+  w_pub_pending:'Todavía no tenemos tu cartera calculada.',
+  w_pub_ask:'Apúntala aquí ↗ (lista en unos minutos; luego vuelve a pulsar «Ver cartera»)',
   w_pub_note:'Reconstruido de la blockchain (Blockscout): precio real de cada mint / compra / venta y el gas. P&L en $ y ETH al cambio de HOY. Floor de OpenSea (algunas colecciones sin mercado → sin floor). Se actualiza cada pocas horas.',
   c_bought:'Comprado',c_soldfloor:'Vendido / Floor',c_pnl:'P&L',c_state:'Estado',
   st_held:'en cartera',st_sold:'vendido',st_moved:'movido fuera',
@@ -1194,7 +1196,8 @@ const STR = {
   w_pub_btn:'Show portfolio',w_pub_clear:'change address',
   w_pub_bad:'Invalid address: must be 0x… with 42 characters.',
   w_pub_loading:'Loading your portfolio…',
-  w_pub_pending:'Your portfolio isn’t computed yet. They refresh every few hours — check back soon.',
+  w_pub_pending:'Your portfolio isn’t computed yet.',
+  w_pub_ask:'Add it here ↗ (ready in a few minutes; then hit “Show portfolio” again)',
   w_pub_note:'Reconstructed from the blockchain (Blockscout): real price of every mint / buy / sell plus gas. P&L in $ and ETH at TODAY’s rate. Floor from OpenSea (some collections have no market → no floor). Refreshed every few hours.',
   c_bought:'Bought',c_soldfloor:'Sold / Floor',c_pnl:'P&L',c_state:'Status',
   st_held:'held',st_sold:'sold',st_moved:'moved out',
@@ -1629,7 +1632,11 @@ let pubTrades = null;
 const PUB_ADDR_RE = /^0x[0-9a-f]{40}$/;
 const wTrades = () => D.public ? pubTrades : D.trades;
 const wRate = () => { const T=wTrades(); return (T && T.ethUsd) || ETHUSD || 2500; };
-function wPubStatus(msg){ const e=document.getElementById('wPubStatus'); if(e) e.textContent = msg||''; }
+function wPubStatus(msg, html){ const e=document.getElementById('wPubStatus'); if(!e) return; if(html!=null) e.innerHTML=html; else e.textContent = msg||''; }
+function pubIssueUrl(addr){
+  return 'https://github.com/'+(D.repo||'')+'/issues/new?title='+encodeURIComponent('[cartera] '+addr)
+    +'&body='+encodeURIComponent('Añade esta dirección PÚBLICA a las carteras del dashboard: '+addr);
+}
 async function loadPubWallet(addr, {store=true}={}){
   addr = String(addr||'').trim().toLowerCase();
   const clr=document.getElementById('wPubClear'), inp=document.getElementById('wPubAddr');
@@ -1639,7 +1646,11 @@ async function loadPubWallet(addr, {store=true}={}){
   wPubStatus(t('w_pub_loading'));
   try{
     const r = await fetch('portfolios/'+addr+'.json', {cache:'no-cache'});
-    if(r.status===404){ pubTrades=null; wPubStatus(t('w_pub_pending')); if(clr) clr.hidden=false; renderWallet(); return; }
+    if(r.status===404){
+      pubTrades=null;
+      wPubStatus(null, esc(t('w_pub_pending'))+' <a class="oslink" href="'+esc(pubIssueUrl(addr))+'" target="_blank" rel="noopener">'+esc(t('w_pub_ask'))+'</a>');
+      if(clr) clr.hidden=false; renderWallet(); return;
+    }
     if(!r.ok) throw new Error('HTTP '+r.status);
     pubTrades = await r.json();
     wPubStatus('');
@@ -1918,7 +1929,17 @@ document.getElementById('wHeldHide').addEventListener('change',renderWallet);
   if(go) go.addEventListener('click',()=>loadPubWallet(inp.value));
   if(inp) inp.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); loadPubWallet(inp.value); } });
   if(clr) clr.addEventListener('click',clearPubWallet);
-  if(D.public){ try{ const a=localStorage.getItem('mints_pub_wallet'); if(a) loadPubWallet(a,{store:false}); }catch(e){} }
+  if(D.public){
+    // enlace directo desde el comentario del issue:  …/#wallet=0x…
+    const hm=(location.hash||'').match(/wallet=(0x[0-9a-fA-F]{40})/i);
+    let a=null;
+    if(hm){
+      a=hm[1].toLowerCase();
+      document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x.dataset.t==='wallet'));
+      document.querySelectorAll('section[data-p]').forEach(s=>s.hidden = s.dataset.p!=='wallet');
+    } else { try{ a=localStorage.getItem('mints_pub_wallet'); }catch(e){} }
+    if(a) loadPubWallet(a);
+  }
 })();
 document.getElementById('wWallets').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
