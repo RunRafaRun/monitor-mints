@@ -26,8 +26,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const asJson = process.argv.includes("--json");
 const log = (...a) => console.error(...a);
 
-// --address=0x…  -> analiza SOLO esa dirección (para carteras de la comunidad en
-//                  CI); ignora data/wallets.json.
+// --address=0x…  -> analiza SOLO esa dirección; ignora data/wallets.json.
 // --out=RUTA     -> dónde escribir el JSON (por defecto data/trades.json, o
 //                  data/portfolios/<addr>.json si hay --address).
 const argAddr = (process.argv.find((a) => a.startsWith("--address=")) || "").slice(10).trim().toLowerCase();
