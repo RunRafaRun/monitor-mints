@@ -329,12 +329,14 @@ async function main() {
   }
   const FLOOR_CACHE = join(ROOT, "data", "floor-cache.json");
   const FLOOR_TTL = 6 * 3600 * 1000;
+  const FLOOR_TTL_NONE = 1 * 3600 * 1000;   // "sin mercado" suele ser OpenSea saturada -> reintentar antes
   let fCache = {};
   try { fCache = JSON.parse(readFileSync(FLOOR_CACHE, "utf8")); } catch { /**/ }
   const floors = {};
   const now = Date.now();
+  const cacheFresh = (v) => now - (v.at || 0) < (v.src === "none" ? FLOOR_TTL_NONE : FLOOR_TTL);
   for (const [k, v] of Object.entries(fCache)) {
-    if (now - (v.at || 0) < FLOOR_TTL) { const c = k.split("|")[1]; floors[c] = v; }
+    if (cacheFresh(v)) { const c = k.split("|")[1]; floors[c] = v; }
   }
   // priorizamos: colecciones donde tienes >1, o por las que pagaste algo, o vendidas
   // 1º las colecciones que importan de verdad (compraste / vendiste), 2º donde
@@ -407,7 +409,7 @@ async function main() {
 
   // guardar caché (keyed por chain|contract, conservando lo viejo aún dentro de TTL)
   const cacheOut = {};
-  for (const [k, v] of Object.entries(fCache)) if (now - (v.at || 0) < FLOOR_TTL) cacheOut[k] = v;
+  for (const [k, v] of Object.entries(fCache)) if (cacheFresh(v)) cacheOut[k] = v;
   for (const k of heldCount.keys()) { const c = k.split("|")[1]; if (floors[c]) cacheOut[k] = floors[c]; }
   try { writeFileSync(FLOOR_CACHE, JSON.stringify(cacheOut, null, 0) + "\n"); } catch { /**/ }
 
