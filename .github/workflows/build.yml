@@ -59,6 +59,7 @@ jobs:
           mkdir -p site/app
           cp -r web/. site/                           # landing + assets -> mintscope.fun/
           cp data/dashboard.html site/app/index.html  # radar            -> mintscope.fun/app/
+          cp -r functions site/functions              # Pages Functions  -> /api/*
 
       - name: Desplegar en Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
