@@ -2399,11 +2399,15 @@ async function pnlRead(){
   }catch(e){ pnlMsg((L==='es'?'Error: ':'Error: ')+e.message,1); }
 }
 async function pnlAnalyze(){
-  const boxes=[...document.querySelectorAll('#pnlCols input[type=checkbox]:checked')];
-  if(!boxes.length){ pnlMsg(L==='es'?'No has marcado ninguna colección.':'No collections selected.',1); return; }
   const full=!!document.getElementById('pnlFull')?.checked;
+  const boxes=[...document.querySelectorAll('#pnlCols .pnl-col input:checked')];
   const byChain={};
   for(const b of boxes){ (byChain[b.dataset.c]||(byChain[b.dataset.c]=[])).push(b.dataset.ct); }
+  if(full && !boxes.length){
+    // historial completo sin nada marcado: se analizan todas las redes con holdings
+    for(const c of Object.keys(pnlHeld)){ if((pnlHeld[c]||[]).length) byChain[c]=[]; }
+  }
+  if(!Object.keys(byChain).length){ pnlMsg(L==='es'?(full?'No hay colecciones que leer.':'No has marcado ninguna colección.'):'No collections selected.',1); return; }
   const label=pnlAddr.slice(0,6)+'…'+pnlAddr.slice(-4);
   pnlMsg(L==='es'?'Analizando '+Object.keys(byChain).length+' red(es)… (puede tardar)':'Analyzing '+Object.keys(byChain).length+' chain(s)… (may take a bit)');
   const all=[]; let rate=ETHUSD, trunc=false, err=false;
