@@ -18,7 +18,7 @@ const STABLE = /USD|DOLLAR|^DAI$|^GHO$|^PYUSD$/i;
 const ETHLIKE = /^(W?ETH|WETH\.E)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
-const CACHE_V = "4";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
+const CACHE_V = "5";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
 const MAX_PAGES = 16;      // ~800 movimientos por lista
 const MAX_FLOOR = 18;
 
@@ -37,7 +37,7 @@ async function handle({ request, env }) {
   const BUDGET = Number(env.TRADES_SUBREQ_BUDGET) || 40;   // tope de fetches por petición (Cloudflare free = 50; súbelo con env var si tienes plan de pago)
   let subreq = 0;
 
-  const { address, chain, collections, ethUsd: rateIn } = await request.json().catch(() => ({}));
+  const { address, chain, collections, ethUsd: rateIn, contractsOnly } = await request.json().catch(() => ({}));
   const addr = String(address || "").trim().toLowerCase();
   if (!/^0x[a-f0-9]{40}$/.test(addr)) return j({ error: "bad_address" }, 400);
   const cid = CHAIN_ID[chain];
@@ -97,6 +97,28 @@ async function handle({ request, env }) {
     return out;
   }
 
+  // modo "solo enumerar colecciones" (para trocear wallets muy activas en lotes)
+  if (contractsOnly) {
+    const ck2 = new Request(`https://x/tcontracts?v=${CACHE_V}&a=${addr}&c=${chain}`, { method: "GET" });
+    const h2 = await cache.match(ck2);
+    if (h2) return h2;
+    const rows = await bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155" }, (it) => ({
+      contract: (it.token?.address_hash || it.token?.address || "").toLowerCase(),
+      name: it.token?.name || null,
+    }), MAX_PAGES * 2);
+    const seen = new Map();
+    for (const it of rows) {
+      if (!it.contract) continue;
+      const e = seen.get(it.contract) || { contract: it.contract, name: null, count: 0 };
+      e.count++; if (!e.name && it.name) e.name = it.name;
+      seen.set(it.contract, e);
+    }
+    const contracts = [...seen.values()].sort((a, b) => b.count - a.count);
+    const r2 = j({ chain, contracts, truncated }, 200, { "cache-control": "public, max-age=3600" });
+    await cache.put(ck2, r2.clone());
+    return r2;
+  }
+
   const [nft, erc20, sent, nativeIn, rateFetched] = await Promise.all([
     bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155" }, (it) => ({
       contract: (it.token?.address_hash || it.token?.address || "").toLowerCase(),
@@ -108,6 +130,7 @@ async function handle({ request, env }) {
       name: it.token?.name || null,
       method: it.method || null,
       logIndex: it.log_index,
+      toContract: !!(it.to?.is_contract),
     })),
     bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-20" }, (it) => {
       const sym = it.token?.symbol || "";
@@ -211,10 +234,10 @@ async function handle({ request, env }) {
           name: info.name ? `${info.name} #${info.tokenId}` : `#${info.tokenId}`,
           url: `https://opensea.io/assets/${OS_CHAIN[chain]}/${info.contract}/${info.tokenId}`,
           acquired: lot.ts ? { ts: lot.ts, type: lot.kind, priceEth: lot.priceEth, priceUsd: lot.priceUsd || null, gasEth: lot.gasEth, tx: lot.tx } : null,
-          disposed: { ts: e.ts, type: isSale ? "sale" : "transfer_out", priceEth: isSale ? round(grossEth) : null, gasEth, tx: e.tx },
+          disposed: { ts: e.ts, type: isSale ? "sale" : e.toContract ? "sent_to_contract" : "transfer_out", priceEth: isSale ? round(grossEth) : null, gasEth, tx: e.tx },
           status: isSale ? "sold" : "moved_out",
           realizedEth: (isSale && lot.costEth != null) ? round(procEth - lot.costEth) : null,
-          flags: [...new Set([...(lot.flags || []), ...(isSale ? [] : ["sold_elsewhere_or_gift"])])],
+          flags: [...new Set([...(lot.flags || []), ...(isSale ? [] : [e.toContract ? "redeemed_or_bridged" : "sold_elsewhere_or_gift"])])],
         });
       }
     }
