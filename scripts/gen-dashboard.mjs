@@ -635,6 +635,13 @@ padding:6px 13px;cursor:pointer;font-size:13px}
 .wcheck-adv summary::before{content:"▸ ";color:var(--accent)}
 .wcheck-adv[open] summary::before{content:"▾ "}
 .wcheck-adv .wcheck-note{margin-top:8px}
+.pnl-cols:not(:empty){margin-top:12px;display:flex;flex-direction:column;gap:10px}
+.pnl-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.pnl-bar .muted{font-size:12px}
+.pnl-chain{border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+.pnl-ch-hd{font-size:11px;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin-bottom:7px;display:flex;align-items:center;gap:5px}
+.pnl-col{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:2px 0;cursor:pointer}
+.pnl-col input{flex:none}
 .iconbtn{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:6px 9px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
 .iconbtn:hover{border-color:var(--accent);color:var(--accent)}
 .lang{display:flex;gap:0;border:1px solid var(--line);border-radius:5px;overflow:hidden}
@@ -839,8 +846,8 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
     <button data-t="keys"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="5"/><path d="M11.6 11.4 21 2M16.5 6.5l3 3M13.5 9.5l3 3"/></svg><span data-k="tab_keys"></span></button>
     <button data-t="buy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.3 12.1a2 2 0 0 0 2 1.6h8.5a2 2 0 0 0 2-1.6L23 6.5H6"/></svg><span data-k="tab_buy"></span></button>
     <button data-t="floors"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6 6 4-4 8 8"/><path d="M21 15v6h-6"/></svg><span data-k="tab_floors"></span></button>
-    ${data.public ? "" : `<button data-t="spots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5a2 2 0 0 0 0 4 2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 12.5a2 2 0 0 0 0-4z"/><path d="M13 6.5v11" stroke-dasharray="1.5 2.5"/></svg><span data-k="tab_spots"></span></button>
-    <button data-t="wallet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H17v3M3 7.5V17a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3.5M3 7.5h17"/><circle cx="17" cy="12.5" r="1.3" fill="currentColor" stroke="none"/></svg><span data-k="tab_wallet"></span></button>`}
+    ${data.public ? "" : `<button data-t="spots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5a2 2 0 0 0 0 4 2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 12.5a2 2 0 0 0 0-4z"/><path d="M13 6.5v11" stroke-dasharray="1.5 2.5"/></svg><span data-k="tab_spots"></span></button>`}
+    <button data-t="wallet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H17v3M3 7.5V17a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3.5M3 7.5h17"/><circle cx="17" cy="12.5" r="1.3" fill="currentColor" stroke="none"/></svg><span data-k="tab_wallet"></span></button>
   </div>
   <div class="freshline" id="upd"></div>
   <div class="fpanel" id="filtersPanel" hidden>
@@ -912,10 +919,20 @@ ${data.public ? "" : `<section data-p="spots" hidden>
   </div>
   <div class="scroll"><table id="tSpots"></table></div>
   <p class="note" id="spPending"></p>
-</section>
+</section>`}
 
 <section data-p="wallet" hidden>
   <h2 data-k="h_wallet"></h2>
+  ${data.public ? `<div class="wcheck">
+    <div class="wcheck-hd" data-k="pnl_title"></div>
+    <div class="wcheck-in">
+      <input id="pnlAddr" type="text" autocomplete="off" spellcheck="false" placeholder="0x…">
+      <button id="pnlRead" class="chk wc-go" data-k="pnl_read"></button>
+    </div>
+    <div id="pnlCols" class="pnl-cols"></div>
+    <div id="pnlMsg" class="wcheck-msg" hidden></div>
+    <div class="wcheck-note" data-k="pnl_note"></div>
+  </div>` : ""}
   <div class="chains" id="wWallets" hidden></div>
   <div id="wStats" class="wstats"></div>
   <div class="filtrow" id="wFilters" style="margin:6px 14px 0">
@@ -924,7 +941,7 @@ ${data.public ? "" : `<section data-p="spots" hidden>
   </div>
   <div class="scroll"><table id="tWallet"></table></div>
   <p class="note" id="wNote"></p>
-</section>`}
+</section>
 </div>
 
 <div id="alertBanner" hidden></div>
@@ -1248,6 +1265,10 @@ const STR = {
   note_elig:'El feed no trae los nombres de las colecciones elegibles para GTD/FCFS/WL: investígalos en X / web / OpenSea y regístralos con  node log-mint.mjs.',
   h_keys:'Ranking de accesos — utilidad WL/GTD/FCFS frente al precio',
   note_keys:'wl_value = criterio editorial 0–10 (relación acceso/precio). util = 1·GTD + 0.6·FCFS + 0.4·WL sobre mints registrados. ce = util/floor (alto = infravalorada).',
+  pnl_title:'Rentabilidad de tu wallet',pnl_read:'Leer wallet',pnl_analyze:'Analizar seleccionadas',
+  pnl_all:'todas',pnl_access:'solo accesos',pnl_pick:'Marca las colecciones a analizar',
+  pnl_note:'Reconstruye compras/ventas/gas leyendo la cadena (Blockscout PRO), FIFO por NFT. P&L en ETH y $ al cambio de HOY (no histórico). Floor de las que aún tienes vía OpenSea. No mira rarezas. Resultado en caché 6 h. Dirección solo en este navegador.',
+  w_note_pub:'Reconstruido de la blockchain (Blockscout PRO): precio real de cada mint/compra/venta + gas, FIFO por NFT. P&L al cambio de HOY. Floor de OpenSea (muchas de Ink no cotizan → sin floor). Ventas fuera de un marketplace on-chain estándar salen como «movido».',
   wc_title:'¿En qué fases calificas?',wc_connect:'Conectar',wc_check:'Comprobar',
   wc_os_connect:'⚡ Conectar OpenSea',
   wc_note:'Firmas un mensaje en tu wallet (personal_sign — NO es una transacción, no se toca la clave privada). Con eso OpenSea nos dice, fase por fase (GTD / FCFS / WL…) de cada mint del radar, si tu wallet está en la lista. El resultado sale en la columna Access del radar. El token dura ~1 h y no se guarda en ningún servidor.',
@@ -1288,7 +1309,7 @@ const STR = {
   alert_pick:'¿De qué fase te aviso?',alert_any:'cualquier cambio de fase',
   legend:'Fases: <b class="ph-GTD">GTD</b> plaza garantizada · <b class="ph-FCFS">FCFS</b> por orden de llegada · <b class="ph-WL">WL/Holder</b> lista genérica · <b>TEAM/PUBLIC</b> equipo / abierto a todos.  <b>●</b> = abierta ahora · <s>tachada</s> = terminada · <b>×N</b> = NFTs por wallet',
   help:'<h3>Cómo leer Mintscope</h3>'+
-   '<p>Seguimiento en vivo de mints de NFT en Robinhood Chain, Ethereum, Ink y Base. Se actualiza solo cada 10 min. Lo que marques se guarda solo en tu navegador. El buscador de arriba filtra las filas por cualquier texto (nombre, fase, acceso, nota…); la casilla <b>solo mis accesos</b> deja únicamente los mints para los que tienes acceso (marca tus accesos en la pestaña Acceso). Pulsa una cabecera de columna para ordenar.</p>'+
+   '<p>Seguimiento en vivo de mints de NFT en varias cadenas. Se actualiza solo cada 10 min. Lo que marques se guarda solo en tu navegador. El buscador de arriba filtra las filas por cualquier texto (nombre, fase, acceso, nota…); la casilla <b>solo mis accesos</b> deja únicamente los mints para los que tienes acceso (marca tus accesos en la pestaña Acceso). Pulsa una cabecera de columna para ordenar.</p>'+
    '<h4>Una fila del Radar</h4><ul>'+
    '<li><b>Proyecto</b> — nombre + enlaces (X / web / OpenSea). <code>live</code> = minteando ahora, <code>SOON</code> = en menos de 72 h, <b>✓✓</b> = confirmado en 2 fuentes.</li>'+
    '<li><b>Minteado</b> — <code>373 / 4.4K</code> = minteados / supply total. <b>'+ico('bolt')+' +N/15m</b> = ritmo en los últimos 15 min (<code>~</code> = estimación). <b>'+ico('users')+' 294 (79%)</b> = wallets únicas con algún NFT y su % sobre lo minteado: verde ≥70% repartido, ámbar 45–70%, rojo por debajo de 45% = pocas wallets acumulan.</li>'+
@@ -1377,6 +1398,10 @@ const STR = {
   note_elig:'The feed does not include the eligible collection names for GTD/FCFS/WL: research them on X / site / OpenSea and log them with  node log-mint.mjs.',
   h_keys:'Access ranking — WL/GTD/FCFS utility vs. price',
   note_keys:'wl_value = editorial score 0–10 (access value per price). util = 1·GTD + 0.6·FCFS + 0.4·WL over logged mints. ce = util/floor (high = underpriced).',
+  pnl_title:'Your wallet P&L',pnl_read:'Read wallet',pnl_analyze:'Analyze selected',
+  pnl_all:'all',pnl_access:'access only',pnl_pick:'Tick the collections to analyze',
+  pnl_note:'Reconstructs buys/sells/gas by reading the chain (Blockscout PRO), FIFO per NFT. P&L in ETH and $ at TODAY\\'s rate (not historical). Floor for what you still hold via OpenSea. No rarity. Result cached 6 h. Address stays in this browser only.',
+  w_note_pub:'Reconstructed from the blockchain (Blockscout PRO): real price of every mint/buy/sell + gas, FIFO per NFT. P&L at TODAY\\'s rate. Floor from OpenSea (many Ink collections do not trade there → no floor). Sales outside a standard on-chain marketplace show as “moved”.',
   wc_title:'Which phases do you qualify for?',wc_connect:'Connect',wc_check:'Check',
   wc_os_connect:'⚡ Connect OpenSea',
   wc_note:'You sign a message in your wallet (personal_sign — NOT a transaction, no private key involved). OpenSea then tells us, phase by phase (GTD / FCFS / WL…) for every mint in the radar, whether your wallet is on the list. Results show in the radar Access column. The token lasts ~1 h and is not stored on any server.',
@@ -1417,7 +1442,7 @@ const STR = {
   alert_pick:'Which phase should I alert on?',alert_any:'any phase change',
   legend:'Phases: <b class="ph-GTD">GTD</b> guaranteed spot · <b class="ph-FCFS">FCFS</b> first come first served · <b class="ph-WL">WL/Holder</b> generic list · <b>TEAM/PUBLIC</b> team / open to all.  <b>●</b> = open now · <s>struck</s> = ended · <b>×N</b> = NFTs per wallet',
   help:'<h3>How to read Mintscope</h3>'+
-   '<p>Live tracker for NFT mints across Robinhood Chain, Ethereum, Ink and Base. Auto-updates every 10 min. Anything you tick is saved only in your browser. The search box up top filters rows by any text (name, phase, access, note…); the <b>only my access</b> checkbox keeps only mints you qualify for (tick the collections you own in the Access tab). Click a column header to sort.</p>'+
+   '<p>Live tracker for NFT mints across multiple chains. Auto-updates every 10 min. Anything you tick is saved only in your browser. The search box up top filters rows by any text (name, phase, access, note…); the <b>only my access</b> checkbox keeps only mints you qualify for (tick the collections you own in the Access tab). Click a column header to sort.</p>'+
    '<h4>A Radar row</h4><ul>'+
    '<li><b>Project</b> — name + links (X / site / OpenSea). <code>live</code> = minting now, <code>SOON</code> = within 72 h, <b>✓✓</b> = confirmed by 2 sources.</li>'+
    '<li><b>Minted</b> — <code>373 / 4.4K</code> = minted / total supply. <b>'+ico('bolt')+' +N/15m</b> = mint rate in the last 15 min (<code>~</code> = estimate). <b>'+ico('users')+' 294 (79%)</b> = unique holder wallets and their share of minted: green ≥70% spread, amber 45–70%, red under 45% = few wallets hoarding.</li>'+
@@ -1950,7 +1975,7 @@ function renderWallet(){
    +(nRows>CAP?'<tr><td colspan=5 class="muted">'+t('w_more').replace('{n}',nRows-CAP)+'</td></tr>':'')+'</tbody>';
 
   const note=document.getElementById('wNote');
-  if(note) note.textContent = (T.truncated?t('w_truncated')+' ':'')+t('w_note');
+  if(note) note.textContent = (T.truncated?t('w_truncated')+' ':'')+t(D.public?'w_note_pub':'w_note');
 }
 
 function render(){
@@ -2304,6 +2329,83 @@ async function osConnect(){
   }catch(e){ osMsg((L==='es'?'Error: ':'Error: ')+(e.message||e),1); }
 }
 document.getElementById('wOsConnect')?.addEventListener('click',osConnect);
+
+// ---- Cartera / P&L online: lee la wallet -> eliges colecciones -> /api/trades ----
+const PNL_CHAINS = ['robinhood','ethereum','ink'];
+let pnlAddr='', pnlHeld={};  // { chain: [{contract,slug,name}] }
+try{ const st=JSON.parse(localStorage.getItem('mints_pnl')||'null'); if(st){ pnlAddr=st.addr||''; if(st.trades) D.trades=st.trades; } }catch(e){}
+function pnlMsg(txt,err){ const m=document.getElementById('pnlMsg'); if(m){ m.hidden=!txt; m.className='wcheck-msg'+(err?' err':''); m.textContent=txt||''; } }
+function accessSlugs(){ const bs=rankBySlug(); return new Set([...bs.keys()]); }
+function renderPnlCols(){
+  const el=document.getElementById('pnlCols'); if(!el) return;
+  const chains=PNL_CHAINS.filter(c=>(pnlHeld[c]||[]).length);
+  if(!chains.length){ el.innerHTML=''; return; }
+  const acc=accessSlugs();
+  let h='<div class="pnl-bar"><span class="muted">'+t('pnl_pick')+'</span>'+
+    '<button class="chk" data-pnl="all">'+t('pnl_all')+'</button>'+
+    '<button class="chk" data-pnl="access">'+t('pnl_access')+'</button>'+
+    '<button class="chk wc-go" id="pnlGo">'+t('pnl_analyze')+'</button></div>';
+  for(const c of chains){
+    h+='<div class="pnl-chain"><div class="pnl-ch-hd">'+chainIco(c)+' '+esc(chainLabel(c)||c)+'</div>';
+    for(const col of pnlHeld[c]){
+      const on = col._sel!==false && (col._sel===true || acc.has((col.slug||'').toLowerCase()));
+      h+='<label class="pnl-col"><input type="checkbox" data-c="'+esc(c)+'" data-ct="'+esc(col.contract)+'"'+(on?' checked':'')+'> '+esc(col.name||col.slug||col.contract.slice(0,10))+'</label>';
+    }
+    h+='</div>';
+  }
+  el.innerHTML=h;
+}
+async function pnlRead(){
+  const a=(document.getElementById('pnlAddr').value||'').trim().toLowerCase();
+  if(!/^0x[a-f0-9]{40}$/.test(a)){ pnlMsg(L==='es'?'Dirección no válida.':'Invalid address.',1); return; }
+  pnlAddr=a; pnlMsg(L==='es'?'Leyendo wallet…':'Reading wallet…');
+  try{
+    const r=await fetch('/api/wallet?address='+a).then(x=>x.json());
+    if(r.error) throw new Error(r.error);
+    pnlHeld={};
+    for(const col of (r.collections||[])){
+      for(const ch of (col.chains||[])){ if(!PNL_CHAINS.includes(ch)) continue; (pnlHeld[ch]||(pnlHeld[ch]=[])).push({contract:col.contract,slug:col.slug,name:col.name}); }
+    }
+    renderPnlCols();
+    const n=Object.values(pnlHeld).reduce((a,x)=>a+x.length,0);
+    pnlMsg(n?(L==='es'?n+' colecciones. Marca las que quieras y pulsa Analizar.':n+' collections. Tick the ones you want and hit Analyze.'):(L==='es'?'Sin colecciones en estas redes.':'No collections on these chains.'));
+  }catch(e){ pnlMsg((L==='es'?'Error: ':'Error: ')+e.message,1); }
+}
+async function pnlAnalyze(){
+  const boxes=[...document.querySelectorAll('#pnlCols input[type=checkbox]:checked')];
+  if(!boxes.length){ pnlMsg(L==='es'?'No has marcado ninguna colección.':'No collections selected.',1); return; }
+  const byChain={};
+  for(const b of boxes){ (byChain[b.dataset.c]||(byChain[b.dataset.c]=[])).push(b.dataset.ct); }
+  const label=pnlAddr.slice(0,6)+'…'+pnlAddr.slice(-4);
+  pnlMsg(L==='es'?'Analizando '+Object.keys(byChain).length+' red(es)… (puede tardar)':'Analyzing '+Object.keys(byChain).length+' chain(s)… (may take a bit)');
+  const all=[]; let rate=ETHUSD, trunc=false, err=false;
+  for(const [chain,cols] of Object.entries(byChain)){
+    try{
+      const r=await fetch('/api/trades',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address:pnlAddr,chain,collections:cols,ethUsd:ETHUSD})}).then(x=>x.json());
+      if(r.error){ err=true; continue; }
+      rate=r.ethUsd||rate; trunc=trunc||r.truncated;
+      for(const p of (r.positions||[])){ p.wallet=label; all.push(p); }
+    }catch(e){ err=true; }
+  }
+  D.trades={ ethUsd:rate, wallets:[{label}], positions:all, truncated:trunc };
+  try{ localStorage.setItem('mints_pnl',JSON.stringify({addr:pnlAddr,trades:D.trades})); }catch(e){}
+  render();
+  pnlMsg('✓ '+all.length+(L==='es'?' NFT analizados':' NFTs analyzed')+(trunc?(L==='es'?' · wallet grande, puede faltar lo más antiguo':' · large wallet, oldest may be missing'):'')+(err?(L==='es'?' · alguna red falló':' · a chain failed'):''));
+}
+document.getElementById('pnlRead')?.addEventListener('click',pnlRead);
+document.getElementById('pnlAddr')?.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); pnlRead(); } });
+document.getElementById('pnlCols')?.addEventListener('click',e=>{
+  const b=e.target.closest('[data-pnl]');
+  if(b){ const mode=b.dataset.pnl, acc=accessSlugs();
+    document.querySelectorAll('#pnlCols input[type=checkbox]').forEach(cb=>{
+      const box=[...document.querySelectorAll('#pnlCols .pnl-col')].find(x=>x.contains(cb));
+      cb.checked = mode==='all' ? true : acc.has((pnlHeld[cb.dataset.c]||[]).find(x=>x.contract===cb.dataset.ct)?.slug?.toLowerCase()||'');
+    });
+    return;
+  }
+  if(e.target.id==='pnlGo') pnlAnalyze();
+});
+if(pnlAddr){ const el=document.getElementById('pnlAddr'); if(el) el.value=pnlAddr; }
 
 render();
 try{ if(!localStorage.getItem('mints_help_seen')) openHelp(); }catch(e){}
