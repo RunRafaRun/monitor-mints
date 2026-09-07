@@ -2482,7 +2482,7 @@ async function pnlAnalyze(full){
           contracts=(lr.contracts||[]).map(c=>c.contract); if(lr.truncated) trunc=true;
         }catch(e){ failed.push(cn); continue; }
       }
-      if(!contracts.length) continue;
+      if(!contracts.length){ failed.push(cn+(L==='es'?' (demasiada actividad — usa "colecciones que elija")':' (too busy — use "collections I pick")')); continue; }
       let nb=Math.ceil(contracts.length/PNL_BATCH);
       if(nb>PNL_MAXB){ nb=PNL_MAXB; trunc=true; contracts=contracts.slice(0,PNL_MAXB*PNL_BATCH); }
       for(let bi=0;bi<nb;bi++){
