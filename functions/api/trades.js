@@ -18,6 +18,7 @@ const STABLE = /USD|DOLLAR|^DAI$|^GHO$|^PYUSD$/i;
 const ETHLIKE = /^(W?ETH|WETH\.E)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
+const CACHE_V = "3";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
 const MAX_PAGES = 16;      // ~800 movimientos por lista
 const MAX_FLOOR = 18;
 
@@ -36,7 +37,7 @@ export async function onRequestPost({ request, env }) {
     : null;
 
   const cacheKey = new Request(
-    `https://x/trades?a=${addr}&c=${chain}&k=${want ? [...want].sort().join(",").slice(0, 400) : "all"}`,
+    `https://x/trades?v=${CACHE_V}&a=${addr}&c=${chain}&k=${want ? [...want].sort().join(",").slice(0, 400) : "all"}`,
     { method: "GET" },
   );
   const cache = caches.default;
