@@ -1270,7 +1270,7 @@ const STR = {
   w_truncated:'⚠️ wallet muy grande: puede faltar lo más antiguo.',w_more:'…y {n} más (filtra por wallet o usa "ocultar lo que sigo teniendo").',
   c_bought:'Comprado',c_soldfloor:'Vendido / Floor',c_pnl:'P&L',c_state:'Estado',
   st_held:'en cartera',st_sold:'vendido',st_moved:'movido fuera',
-  ty_mint:'mint',ty_buy:'compra',ty_transfer_in:'recibido',ty_sale:'venta',ty_transfer_out:'enviado',
+  ty_mint:'mint',ty_buy:'compra',ty_transfer_in:'recibido',ty_gift:'regalo',ty_sale:'venta',ty_transfer_out:'enviado',
   hdr_show:'mostrar filtros',hdr_hide:'ocultar filtros',
   filters:'Filtros',chain_lbl:'Red',
   sched_os:'agenda oficial de OpenSea (SeaDrop) — sustituye a la del feed',
@@ -1405,7 +1405,7 @@ const STR = {
   w_truncated:'⚠️ very large wallet: the oldest items may be missing.',w_more:'…and {n} more (filter by wallet or use "hide what I still hold").',
   c_bought:'Bought',c_soldfloor:'Sold / Floor',c_pnl:'P&L',c_state:'Status',
   st_held:'held',st_sold:'sold',st_moved:'moved out',
-  ty_mint:'mint',ty_buy:'buy',ty_transfer_in:'received',ty_sale:'sale',ty_transfer_out:'sent',
+  ty_mint:'mint',ty_buy:'buy',ty_transfer_in:'received',ty_gift:'gift',ty_sale:'sale',ty_transfer_out:'sent',
   hdr_show:'show filters',hdr_hide:'hide filters',
   filters:'Filters',chain_lbl:'Chain',
   sched_os:'official OpenSea drop schedule (SeaDrop) — overrides the feed',
@@ -1938,11 +1938,8 @@ function renderWallet(){
   const hideHeld=document.getElementById('wHeldHide').checked;
   let rows=P.slice();
   if(hideHeld) rows=rows.filter(p=>p.status!=='held');
-  if(realOnly) rows=rows.filter(p=>{
-    if(p.realizedEth!=null) return true;                       // venta con coste conocido
-    const a=p.acquired;
-    return p.status==='held' && a && a.priceEth>1e-9;          // pagaste algo por ella y aún la tienes
-  });
+  if(realOnly) rows=rows.filter(p=>
+    !(p.flags||[]).some(f=>f==='cost_unknown'||f==='no_acq'));  // solo oculta coste DESCONOCIDO (regalo/mint gratis = coste 0 real, se quedan)
 
   // tope de filas para no petar el navegador con wallets enormes
   const CAP=400; const nRows=rows.length;
@@ -1962,7 +1959,7 @@ function renderWallet(){
   tbl.innerHTML='<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_bought')+'</th><th>'+t('c_soldfloor')+'</th><th>'+t('c_pnl')+'</th><th>'+t('c_state')+'</th></tr></thead><tbody>'+
    (rows.map(p=>{
      const a=p.acquired, dp=p.disposed;
-     const mintCost0 = a && a.type==='mint' && !(a.priceEth>1e-9);   // mint realmente gratis
+     const mintCost0 = a && (a.type==='mint'||a.type==='gift') && !(a.priceEth>1e-9);   // mint gratis o regalo -> coste 0 real
      const pnl = p.realizedEth!=null ? p.realizedEth : (p.status==='held' ? p.unrealizedEth : null);
      const pnlUsd = p.realizedUsd!=null ? p.realizedUsd : null;
      const pct = (a&&a.priceEth>0&&pnl!=null) ? Math.round(pnl/a.priceEth*100) : null;

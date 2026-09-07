@@ -159,8 +159,12 @@ export async function onRequestPost({ request, env }) {
         const gasEth = S ? S.gasEth : 0;
         const costEth = priceEth + (priceUsd ? priceUsd / rate : 0) + gasEth;
         const paid = priceEth > 0 || priceUsd > 0;
-        lots.push({ ts: e.ts, kind: isMint ? "mint" : paid ? "buy" : "transfer_in", costEth, gasEth, tx: e.tx,
-          flags: isMint && !paid ? ["free_mint"] : (!isMint && !paid) ? ["cost_unknown"] : [] });
+        // recibida sin pago Y la wallet NO firmó la tx ni movió tokens -> regalo/airdrop
+        // (coste 0 REAL). Si la wallet firmó pero no detectamos pago -> coste desconocido.
+        const isGift = !isMint && !paid && !S && !(P && P.length);
+        const kind = isMint ? "mint" : paid ? "buy" : isGift ? "gift" : "transfer_in";
+        lots.push({ ts: e.ts, kind, costEth, gasEth, tx: e.tx,
+          flags: isMint && !paid ? ["free_mint"] : isGift ? ["gift"] : (!isMint && !paid) ? ["cost_unknown"] : [] });
       } else if (dis) {
         const inc = payTotals(P, e.from, "in");
         const isSale = (inc.eth + inc.usd) > 0;
