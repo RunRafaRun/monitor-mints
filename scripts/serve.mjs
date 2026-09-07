@@ -40,7 +40,7 @@ rebuild(); // primera carga en segundo plano
 
 const LOADING = `<!doctype html><meta charset=utf-8><meta http-equiv=refresh content=3>
 <body style="font:15px system-ui;background:#0f1115;color:#e7e9ee;padding:40px">
-🚨 Monitor MINTS — cargando datos (feed + floors)… <br><br>se recarga sola.</body>`;
+mintscope_ — cargando datos (feed + floors)… <br><br>se recarga sola.</body>`;
 
 const server = createServer(async (req, res) => {
   const path = req.url.split("?")[0];
@@ -168,7 +168,7 @@ function kickElig() {
 // NO deben quedar expuestos a la red local.
 server.listen(PORT, "127.0.0.1", () => {
   const u = `http://localhost:${PORT}/`;
-  console.log(`\n🚨 Monitor MINTS  →  ${u}`);
+  console.log(`\n  mintscope_  →  ${u}`);
   console.log("   Checkboxes de 'Tengo' → se guardan en data/colecciones.json");
   console.log("   Feed de mints: refresco automático cada 15 min");
   console.log(noFloors ? "   Floors: desactivados (--no-floors)" : "   Floors (OpenSea): cada 60 min");

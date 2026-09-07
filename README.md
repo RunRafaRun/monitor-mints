@@ -1,4 +1,6 @@
-# Monitor MINTS — Robinhood Chain
+# Mintscope — Robinhood Chain
+
+(antes «Monitor MINTS». La carpeta del proyecto sigue llamándose `Monitor MINTS/`.)
 
 Sistema para detectar nuevos minteos en **Robinhood Chain** y decidir rápido si
 tenemos (o nos interesa comprar) una **llave** que dé acceso a **GTD / FCFS / WL**.
