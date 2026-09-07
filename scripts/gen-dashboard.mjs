@@ -927,6 +927,7 @@ ${data.public ? "" : `<section data-p="spots" hidden>
     <div class="wcheck-hd" data-k="pnl_title"></div>
     <div class="wcheck-in">
       <input id="pnlAddr" type="text" autocomplete="off" spellcheck="false" placeholder="0x…">
+      <button id="pnlConnect" class="chk" data-k="wc_connect"></button>
       <button id="pnlRead" class="chk wc-go" data-k="pnl_read"></button>
     </div>
     <div id="pnlCols" class="pnl-cols"></div>
@@ -1254,6 +1255,7 @@ const STR = {
   w_realized:'Realizado',w_unrealized:'No realizado',w_sold:'Vendidos',w_held:'En cartera',w_moved:'Movidos fuera',
   w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',w_gas:'Gas total',w_net_sell:'neto si vendes',w_mkt:'~mercado',w_mkt_tip:'Sin floor de OpenSea: mínimo de las últimas ventas on-chain de la colección',w_exit_gas:'floor menos el gas estimado para vender (mediana del gas que pagaste al entrar en esa red)',
   w_none:'Sin datos de cartera. Ejecuta  node scripts/fetch-trades.mjs  (necesita wallets.json + OPENSEA_API_KEY).',
+  w_none_pub:'Conecta o pega una dirección arriba y pulsa «Leer wallet».',
   w_truncated:'⚠️ wallet muy grande: puede faltar lo más antiguo.',w_more:'…y {n} más (filtra por wallet o usa "ocultar lo que sigo teniendo").',
   c_bought:'Comprado',c_soldfloor:'Vendido / Floor',c_pnl:'P&L',c_state:'Estado',
   st_held:'en cartera',st_sold:'vendido',st_moved:'movido fuera',
@@ -1387,6 +1389,7 @@ const STR = {
   w_realized:'Realized',w_unrealized:'Unrealized',w_sold:'Sold',w_held:'Held',w_moved:'Moved out',
   w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',w_gas:'Total gas',w_net_sell:'net if you sell',w_mkt:'~market',w_mkt_tip:'No OpenSea floor: lowest of the collection last on-chain sales',w_exit_gas:'floor minus estimated gas to sell (median of the gas you paid to enter on that chain)',
   w_none:'No portfolio data. Run  node scripts/fetch-trades.mjs  (needs wallets.json + OPENSEA_API_KEY).',
+  w_none_pub:'Connect or paste an address above and hit “Read wallet”.',
   w_truncated:'⚠️ very large wallet: the oldest items may be missing.',w_more:'…and {n} more (filter by wallet or use "hide what I still hold").',
   c_bought:'Bought',c_soldfloor:'Sold / Floor',c_pnl:'P&L',c_state:'Status',
   st_held:'held',st_sold:'sold',st_moved:'moved out',
@@ -1876,9 +1879,10 @@ function renderWallet(){
   if(filt) filt.hidden = !T;
   if(!T){
     box.innerHTML='';
-    tbl.innerHTML = '<tbody><tr><td class="muted">'+t('w_none')+'</td></tr></tbody>';
+    const empty = D.public ? t('w_none_pub') : t('w_none');
+    tbl.innerHTML = '<tbody><tr><td class="muted">'+empty+'</td></tr></tbody>';
     const n0=document.getElementById('wNote');
-    if(n0) n0.textContent = t('w_none');
+    if(n0) n0.textContent = D.public ? '' : t('w_none');
     return;
   }
   const tile=(k,v)=>'<div class="wstat"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>';
@@ -2394,6 +2398,13 @@ async function pnlAnalyze(){
 }
 document.getElementById('pnlRead')?.addEventListener('click',pnlRead);
 document.getElementById('pnlAddr')?.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); pnlRead(); } });
+document.getElementById('pnlConnect')?.addEventListener('click',async()=>{
+  if(!window.ethereum){ pnlMsg(L==='es'?'No hay wallet en el navegador — pega la dirección.':'No browser wallet — paste the address.',1); return; }
+  try{ const acc=await window.ethereum.request({method:'eth_requestAccounts'}); if(acc&&acc[0]){ document.getElementById('pnlAddr').value=acc[0]; pnlRead(); } }catch(e){}
+});
+// pre-rellenar con una dirección ya conocida (OpenSea conectado, o chequeo de holdings)
+{ const known = (typeof osAddr!=='undefined'&&osAddr) || pnlAddr || walletList[0] || '';
+  const el=document.getElementById('pnlAddr'); if(el && known && !el.value) el.value=known; }
 document.getElementById('pnlCols')?.addEventListener('click',e=>{
   const b=e.target.closest('[data-pnl]');
   if(b){ const mode=b.dataset.pnl, acc=accessSlugs();
