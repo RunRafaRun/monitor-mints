@@ -18,7 +18,7 @@ const STABLE = /USD|DOLLAR|^DAI$|^GHO$|^PYUSD$/i;
 const ETHLIKE = /^(W?ETH|WETH\.E)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
-const CACHE_V = "8";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
+const CACHE_V = "9";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
 const MAX_PAGES = 16;      // ~800 movimientos por lista
 const MAX_FLOOR = 18;
 
@@ -113,15 +113,14 @@ async function handle({ request, env }) {
     // 1) colecciones que la wallet tiene AHORA (1 fila por colección -> barato).
     //    /tokens es más ligero que /nft/collections en wallets enormes; se usan los dos.
     const cmap = (it) => ({ ct: (it.token?.address_hash || it.token?.address || "").toLowerCase(), name: it.token?.name || null, n: Number(it.amount || it.value) || (it.token_instances || []).length || 1 });
-    const [collA, collB, tokA] = await Promise.all([
-      bsList(`/addresses/${addr}/nft/collections`, { type: "ERC-721" }, cmap, 6),
+    const [collA, collB] = await Promise.all([
+      bsList(`/addresses/${addr}/nft/collections`, { type: "ERC-721" }, cmap, 5),
       bsList(`/addresses/${addr}/nft/collections`, { type: "ERC-1155" }, cmap, 3),
-      bsList(`/addresses/${addr}/tokens`, { type: "ERC-721,ERC-1155" }, cmap, 6),
     ]);
-    for (const x of [...collA, ...collB, ...tokA]) add(x.ct, x.name, x.n, true);
+    for (const x of [...collA, ...collB]) add(x.ct, x.name, x.n, true);
     // 2) barrido corto de transferencias recientes -> colecciones ya vendidas/salidas
     const tmap = (it) => ({ ct: (it.token?.address_hash || it.token?.address || "").toLowerCase(), name: it.token?.name || null });
-    const recent = await bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155" }, tmap, 6);
+    const recent = await bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155" }, tmap, 5);
     for (const x of recent) if (!seen.has(x.ct)) add(x.ct, x.name, 1, false);
     const contracts = [...seen.values()].sort((a, b) => (b.held - a.held) || (b.count - a.count));
     const r2 = j({ chain, contracts, truncated, subreq }, 200,
