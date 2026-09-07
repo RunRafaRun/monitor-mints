@@ -638,8 +638,9 @@ padding:6px 13px;cursor:pointer;font-size:13px}
 .pnl-cols:not(:empty){margin-top:12px;display:flex;flex-direction:column;gap:10px}
 .pnl-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
 .pnl-bar .muted{font-size:12px}
-.pnl-full{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);cursor:pointer}
-.pnl-full input{flex:none}
+.pnl-mode{display:flex;flex-wrap:wrap;gap:6px 16px;margin:8px 0 2px}
+.pnl-mode label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--fg);cursor:pointer}
+.pnl-mode input{flex:none}
 .pnl-chain{border:1px solid var(--line);border-radius:8px;padding:9px 11px}
 .pnl-ch-hd{font-size:11px;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin-bottom:7px;display:flex;align-items:center;gap:5px}
 .pnl-col{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:2px 0;cursor:pointer}
@@ -939,7 +940,14 @@ ${data.public ? "" : `<section data-p="spots" hidden>
     <div class="wcheck-in">
       <input id="pnlAddr" type="text" autocomplete="off" spellcheck="false" placeholder="0x…">
       <button id="pnlConnect" class="chk" data-k="wc_connect"></button>
+    </div>
+    <div class="pnl-mode">
+      <label><input type="radio" name="pnlMode" value="pick" checked> <span data-k="pnl_mode_pick"></span></label>
+      <label><input type="radio" name="pnlMode" value="full"> <span data-k="pnl_mode_full"></span></label>
+    </div>
+    <div class="wcheck-in">
       <button id="pnlRead" class="chk wc-go" data-k="pnl_read"></button>
+      <button id="pnlGoFull" class="chk wc-go" data-k="pnl_analyze_full" hidden></button>
     </div>
     <div id="pnlCols" class="pnl-cols"></div>
     <div id="pnlMsg" class="wcheck-msg" hidden></div>
@@ -1281,9 +1289,10 @@ const STR = {
   note_elig_pub:'Las colecciones que dan GTD/FCFS/WL se añaden a mano y algunas pueden faltar. Usa «Conectar OpenSea» en la pestaña Access para comprobar tu propia wallet contra cada drop.',
   h_keys:'Ranking de accesos — utilidad WL/GTD/FCFS frente al precio',
   note_keys:'wl_value = criterio editorial 0–10 (relación acceso/precio). util = 1·GTD + 0.6·FCFS + 0.4·WL sobre mints registrados. ce = util/floor (alto = infravalorada).',
-  pnl_title:'Rentabilidad de tu wallet',pnl_read:'Leer wallet',pnl_analyze:'Analizar seleccionadas',
+  pnl_title:'Rentabilidad de tu wallet',pnl_read:'Ver colecciones',pnl_analyze:'Analizar seleccionadas',
+  pnl_analyze_full:'Analizar wallet entera',
+  pnl_mode_pick:'Solo las colecciones que elija',pnl_mode_full:'Todo el historial (incluye lo vendido)',
   pnl_all:'todas',pnl_access:'solo accesos',pnl_pick:'Marca las colecciones a analizar',
-  pnl_full:'incluir vendidos (historial completo)',
   pnl_note:'Reconstruye compras/ventas/gas leyendo la cadena (Blockscout PRO), FIFO por NFT. P&L en ETH y $ al cambio de HOY (no histórico). Floor de las que aún tienes vía OpenSea. Las vendidas o traspasadas siguen apareciendo con su P&L realizado. No mira rarezas. Resultado en caché 6 h. Dirección solo en este navegador.',
   w_note_pub:'Reconstruido de la blockchain (Blockscout PRO): precio real de cada mint/compra/venta + gas, FIFO por NFT. P&L al cambio de HOY. Floor de OpenSea (muchas de Ink no cotizan → sin floor). Ventas fuera de un marketplace on-chain estándar salen como «movido».',
   wc_title:'¿En qué fases calificas?',wc_connect:'Conectar',wc_check:'Comprobar',
@@ -1418,9 +1427,10 @@ const STR = {
   note_elig_pub:'Collections that grant GTD/FCFS/WL access are added by hand and some may be missing. Use “Connect OpenSea” in the Access tab to check your own wallet against each drop.',
   h_keys:'Access ranking — WL/GTD/FCFS utility vs. price',
   note_keys:'wl_value = editorial score 0–10 (access value per price). util = 1·GTD + 0.6·FCFS + 0.4·WL over logged mints. ce = util/floor (high = underpriced).',
-  pnl_title:'Your wallet P&L',pnl_read:'Read wallet',pnl_analyze:'Analyze selected',
+  pnl_title:'Your wallet P&L',pnl_read:'Load collections',pnl_analyze:'Analyze selected',
+  pnl_analyze_full:'Analyze whole wallet',
+  pnl_mode_pick:'Only collections I pick',pnl_mode_full:'Full history (includes sold)',
   pnl_all:'all',pnl_access:'access only',pnl_pick:'Tick the collections to analyze',
-  pnl_full:'include sold (full history)',
   pnl_note:'Reconstructs buys/sells/gas by reading the chain (Blockscout PRO), FIFO per NFT. P&L in ETH and $ at TODAY\\'s rate (not historical). Floor for what you still hold via OpenSea. Sold or transferred-out NFTs still show with their realized P&L. No rarity. Result cached 6 h. Address stays in this browser only.',
   w_note_pub:'Reconstructed from the blockchain (Blockscout PRO): real price of every mint/buy/sell + gas, FIFO per NFT. P&L at TODAY\\'s rate. Floor from OpenSea (many Ink collections do not trade there → no floor). Sales outside a standard on-chain marketplace show as “moved”.',
   wc_title:'Which phases do you qualify for?',wc_connect:'Connect',wc_check:'Check',
@@ -2386,7 +2396,6 @@ function renderPnlCols(){
   let h='<div class="pnl-bar"><span class="muted">'+t('pnl_pick')+'</span>'+
     '<button class="chk" data-pnl="all">'+t('pnl_all')+'</button>'+
     '<button class="chk" data-pnl="access">'+t('pnl_access')+'</button>'+
-    '<label class="pnl-full"><input type="checkbox" id="pnlFull"> '+t('pnl_full')+'</label>'+
     '<button class="chk wc-go" id="pnlGo">'+t('pnl_analyze')+'</button></div>';
   for(const c of chains){
     h+='<div class="pnl-chain" data-cc="'+esc(c)+'"><label class="pnl-ch-hd"><input type="checkbox" class="pnl-ch-all" data-c="'+esc(c)+'">'+chainIco(c)+' '+esc(chainLabel(c)||c)+' <span class="muted">('+pnlHeld[c].length+')</span></label>';
@@ -2423,16 +2432,18 @@ async function pnlRead(){
     pnlMsg(n?(L==='es'?n+' colecciones. Marca las que quieras y pulsa Analizar.':n+' collections. Tick the ones you want and hit Analyze.'):(L==='es'?'Sin colecciones en estas redes.':'No collections on these chains.'));
   }catch(e){ pnlMsg((L==='es'?'Error: ':'Error: ')+e.message,1); }
 }
-async function pnlAnalyze(){
-  const full=!!document.getElementById('pnlFull')?.checked;
+async function pnlAnalyze(full){
+  full=!!full;
   const boxes=[...document.querySelectorAll('#pnlCols .pnl-col input:checked')];
   const byChain={};
   for(const b of boxes){ (byChain[b.dataset.c]||(byChain[b.dataset.c]=[])).push(b.dataset.ct); }
-  if(full && !boxes.length){
-    // historial completo sin nada marcado: se analizan todas las redes con holdings
-    for(const c of Object.keys(pnlHeld)){ if((pnlHeld[c]||[]).length) byChain[c]=[]; }
+  if(full){
+    // historial completo: todas las redes (o solo las de lo marcado), sin filtro de colección
+    const chains=boxes.length ? [...new Set(boxes.map(b=>b.dataset.c))] : PNL_CHAINS.slice();
+    for(const c of chains) byChain[c]=[];
   }
-  if(!Object.keys(byChain).length){ pnlMsg(L==='es'?(full?'No hay colecciones que leer.':'No has marcado ninguna colección.'):'No collections selected.',1); return; }
+  if(!Object.keys(byChain).length){ pnlMsg(L==='es'?'No has marcado ninguna colección.':'No collections selected.',1); return; }
+  if(!/^0x[a-f0-9]{40}$/.test(pnlAddr||'')){ pnlMsg(L==='es'?'Pon una dirección válida.':'Enter a valid address.',1); return; }
   const label=pnlAddr.slice(0,6)+'…'+pnlAddr.slice(-4);
   pnlMsg(L==='es'?'Analizando '+Object.keys(byChain).length+' red(es)… (puede tardar)':'Analyzing '+Object.keys(byChain).length+' chain(s)… (may take a bit)');
   const all=[]; let rate=ETHUSD, trunc=false, err=false;
@@ -2483,11 +2494,26 @@ function exportPnlCsv(){
   setTimeout(()=>{ URL.revokeObjectURL(url); el.remove(); }, 4000);
 }
 document.getElementById('wExport')?.addEventListener('click',exportPnlCsv);
+function pnlMode(){ return document.querySelector('input[name=pnlMode]:checked')?.value || 'pick'; }
+function syncPnlMode(){
+  const full=pnlMode()==='full';
+  const rd=document.getElementById('pnlRead'), gf=document.getElementById('pnlGoFull'), cols=document.getElementById('pnlCols');
+  if(rd) rd.hidden=full; if(gf) gf.hidden=!full; if(cols) cols.hidden=full;
+  pnlMsg('');
+}
+document.querySelectorAll('input[name=pnlMode]').forEach(r=>r.addEventListener('change',syncPnlMode));
+syncPnlMode();
+function pnlGrabAddr(){
+  const a=(document.getElementById('pnlAddr').value||'').trim().toLowerCase();
+  if(!/^0x[a-f0-9]{40}$/.test(a)){ pnlMsg(L==='es'?'Dirección no válida.':'Invalid address.',1); return false; }
+  pnlAddr=a; return true;
+}
 document.getElementById('pnlRead')?.addEventListener('click',pnlRead);
-document.getElementById('pnlAddr')?.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); pnlRead(); } });
+document.getElementById('pnlGoFull')?.addEventListener('click',()=>{ if(pnlGrabAddr()) pnlAnalyze(true); });
+document.getElementById('pnlAddr')?.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); pnlMode()==='full' ? (pnlGrabAddr()&&pnlAnalyze(true)) : pnlRead(); } });
 document.getElementById('pnlConnect')?.addEventListener('click',async()=>{
   if(!window.ethereum){ pnlMsg(L==='es'?'No hay wallet en el navegador — pega la dirección.':'No browser wallet — paste the address.',1); return; }
-  try{ const acc=await window.ethereum.request({method:'eth_requestAccounts'}); if(acc&&acc[0]){ document.getElementById('pnlAddr').value=acc[0]; pnlRead(); } }catch(e){}
+  try{ const acc=await window.ethereum.request({method:'eth_requestAccounts'}); if(acc&&acc[0]){ document.getElementById('pnlAddr').value=acc[0]; pnlMode()==='full' ? (pnlGrabAddr()&&pnlAnalyze(true)) : pnlRead(); } }catch(e){}
 });
 // pre-rellenar con una dirección ya conocida (OpenSea conectado, o chequeo de holdings)
 { const known = (typeof osAddr!=='undefined'&&osAddr) || pnlAddr || walletList[0] || '';
@@ -2501,7 +2527,7 @@ document.getElementById('pnlCols')?.addEventListener('click',e=>{
     syncPnlChAll();
     return;
   }
-  if(e.target.id==='pnlGo'){ pnlAnalyze(); return; }
+  if(e.target.id==='pnlGo'){ pnlAnalyze(false); return; }
 });
 document.getElementById('pnlCols')?.addEventListener('change',e=>{
   const all=e.target.closest('.pnl-ch-all');
