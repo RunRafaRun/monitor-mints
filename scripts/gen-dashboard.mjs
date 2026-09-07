@@ -297,7 +297,7 @@ export async function buildData({ pub = false } = {}) {
           minted: null, supply: e.supply, mintRate: null,
           hype: 0, tier: null, team: null,
           xFollowers: null, xPosts: null, xAgeDays: -1, socials: 0,
-          pop: "🔴 sin X",
+          pop: "sin X",
           priceEth: null, free: e.phases.some((p) => p.free),
           when: (live || next)?.startMs ?? e.mintDate ?? null,
           phases: e.phases.filter((p) => p.kind !== "OTHER").map((p) => ({
@@ -621,6 +621,8 @@ a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 tr.row-out td{opacity:.5}
 .pop-hi{color:var(--now)}.pop-mid{color:var(--gold)}.pop-lo{color:var(--mut)}
 .v2{color:var(--now);font-size:11px;font-weight:700;letter-spacing:-1px}
+.ico{width:1.15em;height:1.15em;vertical-align:-.2em;flex:none;stroke-width:1.9}
+.ico+.ico{margin-left:1px}
 .have-key{color:var(--now);font-weight:700;font-size:11px;margin-bottom:2px}
 .pill.k-own{color:var(--now);border-color:color-mix(in srgb,var(--now) 55%,var(--line))}
 .wchip{display:inline-block;font-size:10px;padding:0 4px;border-radius:4px;background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--fg);margin-left:3px;vertical-align:middle}
@@ -673,7 +675,7 @@ padding:22px 26px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .hm-box li{font-size:12.5px;line-height:1.65;margin-bottom:.35em}
 .hm-box code{background:color-mix(in srgb,var(--fg) 13%,transparent);padding:0 4px;border-radius:4px;font-size:11.5px}
 .bell{background:transparent;border:0;cursor:pointer;font-size:13px;opacity:.45;padding:0 4px;line-height:1;vertical-align:middle}
-.bell:hover{opacity:.9}.bell.on{opacity:1}
+.bell:hover{opacity:.9}.bell.on{opacity:1;color:var(--accent)}
 .filtrow{margin-top:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 #q{width:100%;max-width:440px;background:var(--card);color:var(--fg);border:1px solid var(--line);
 border-radius:8px;padding:7px 12px;font-size:13px}
@@ -822,7 +824,7 @@ ${data.public ? "" : `<section data-p="spots" hidden>
 
 <div id="helpModal" hidden>
   <div class="hm-box">
-    <button id="helpClose" class="hm-x" title="✕">✕</button>
+    <button id="helpClose" class="hm-x" title="cerrar" aria-label="cerrar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
     <div id="helpBody"></div>
   </div>
 </div>
@@ -926,7 +928,7 @@ function checkSpotsMatched(){
 function spotBadge(m){
   const s = spotFor(m.name); if(!s || !s.phases.length) return '';
   const kinds = new Set((m.phases||[]).map(p=>p.k));
-  return '<div class="have-spot">🎟️ '+t('spot_lbl')+' '+
+  return '<div class="have-spot">'+ico('ticket')+' '+t('spot_lbl')+' '+
     s.phases.slice().sort((a,b)=>a.k.localeCompare(b.k))
       .map(p=>'<span class="pill spot'+(kinds.has(p.k)?' spot-on':'')+'">'+esc(p.k)+' ×'+p.qty+'</span>').join(' ')+
     (s.note ? ' <span class="muted" style="font-weight:400">'+esc(s.note)+'</span>' : '')+
@@ -984,7 +986,7 @@ function renderWlBar(){
   const bar=document.getElementById('wlBar'); if(!bar) return;
   const meta=D&&D.wlElig, s=wlStatus;
   if(!SERVED && !meta){ bar.hidden=true; return; }
-  let h='🔎 <b>'+t('wl_conn')+'</b> ';
+  let h=ico('scope')+' <b>'+t('wl_conn')+'</b> ';
   if(s&&s.connected){
     h+='· '+(s.label?esc(s.label)+' ':'')+wlShort(s.address)+wlExpTxt(s.expiresAt)
       +' <button class="chk wl-btn" data-wl="refresh">'+t('wl_refresh')+'</button>'
@@ -1039,6 +1041,34 @@ document.addEventListener('click',async e=>{
   b.disabled=false;
 });
 
+// iconos SVG (trazo, heredan color; estilo cripto/terminal acorde a la paleta).
+// Definido ANTES de STR: los textos de ayuda concatenan ico(...) al construirse.
+const ICN = {
+  key:'M14.5 3a6.5 6.5 0 0 0-6.2 8.5L3 16.8V21h4.2l1-1v-2h2v-2h2l1.3-1.3A6.5 6.5 0 1 0 14.5 3Zm2 5.5h.01',
+  scope:'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 4v8m-4-4h8m3 9-4.5-4.5',
+  ticket:'M4 9a2 2 0 0 0 2-2h12a2 2 0 0 0 2 2 2 2 0 0 0 0 4 2 2 0 0 0-2 2H6a2 2 0 0 0-2-2 2 2 0 0 0 0-4Zm9-3v12',
+  check:'M4 12.5 9 17.5 20 6.5',
+  x:'M6 6 18 18M18 6 6 18',
+  bell:'M6 16V10a6 6 0 0 1 12 0v6l2 2H4l2-2Zm4 3a2.5 2.5 0 0 0 4 0',
+  belloff:'M8.5 4.9A6 6 0 0 1 18 10v6l2 2H7m-1-2v-4a6 6 0 0 1 .3-1.9M4 3l17 18M10 19a2.5 2.5 0 0 0 4 0',
+  bolt:'M13 3 5 13.5h5.5L9 21l8-10.5h-5.5L13 3Z',
+  users:'M9 11a3.2 3.2 0 1 0 0-6.4A3.2 3.2 0 0 0 9 11Zm7.5-.5a2.8 2.8 0 1 0-2.3-4.4M4 19c0-2.8 2.2-4.6 5-4.6s5 1.8 5 4.6m1-4.4c2.3.2 3.9 1.9 3.9 4.4',
+  coin:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9 15l6-6M9.5 9.2v.01M14.5 14.8v.01',
+  trash:'M4 7h16M9 7V4.5h6V7m-9 0 1 13h8l1-13',
+  target:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-4.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9ZM12 2v3m0 14v3M2 12h3m14 0h3',
+  clock:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-13v5l3.5 2',
+  wallet:'M4 8.5A2.5 2.5 0 0 1 6.5 6H17v3M4 8.5V17a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3.5M4 8.5H17m3 4h-3a1.5 1.5 0 0 0 0 3h3',
+  link:'M14 10a4 4 0 0 1 0 5.7l-2.5 2.5A4 4 0 0 1 5.8 12.5L7 11.3M10 14a4 4 0 0 1 0-5.7L12.5 5.8A4 4 0 0 1 18.2 11.5L17 12.7',
+  dip:'M3 6l6 7 4-4 8 9M21 18v-5h-5'
+};
+const ico = (n,cls) => '<svg class="ico'+(cls?' '+cls:'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+ICN[n]+'"/></svg>';
+// prioridad de compra: rombo (relleno = tier alto), color por familia. Sigue leyendo
+// el string original de colecciones.json (🥇🥈💎👑) — el orden/sort no cambia.
+function prioCell(p){
+  const m = {'👑':['var(--accent)',1],'💎':['var(--accent)',0],'🥇':['var(--gold)',1],'🥈':['var(--gold)',0]}[p];
+  if(!m) return esc(p||'');
+  return '<svg class="ico" viewBox="0 0 24 24" style="color:'+m[0]+'" fill="'+(m[1]?'currentColor':'none')+'" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 21.5 12 12 21.5 2.5 12Z"/></svg>';
+}
 const STR = {
  es:{tab_radar:'Radar',tab_keys:'Llaves',tab_buy:'Comprar',tab_floors:'Floors',tab_spots:'Plazas',
   h_now:'Minteando ahora / fase abierta',h_soon:'Próximas 72 h',
@@ -1056,8 +1086,8 @@ const STR = {
   sp_assign:'— asignar a un mint —',
   sp_note_ph:'nota (dónde/cómo la conseguiste…)',
   sp_added_pending:'Plaza guardada como PENDIENTE: ese proyecto aún no está en el radar. Cuando tenga fecha te aviso; si sale con otro nombre, asígnalo desde la columna Estado.',
-  sp_now_live:'🎟️ ¡Ya hay fecha! {p} está en el radar y tienes plaza.',
-  sp_pending_count:'🎟️ {n} plaza(s) pendientes (proyecto sin fecha de mint todavía).',
+  sp_now_live:'¡Ya hay fecha! {p} está en el radar y tienes plaza.',
+  sp_pending_count:'{n} plaza(s) pendientes (proyecto sin fecha de mint todavía).',
   sp_del_project:'borrar el proyecto y todas sus plazas',
   wl_os:'OpenSea:',
   wl_none_lists:'no estás en ninguna lista (comprobado)',
@@ -1067,7 +1097,7 @@ const STR = {
   wl_refresh:'Actualizar elegibilidad',
   wl_expires:'caduca',wl_expired:'sesión caducada',
   wl_connecting:'Abriendo OpenSea… aprueba el permiso en la pestaña nueva.',
-  wl_connected:'✅ OpenSea conectado',
+  wl_connected:'OpenSea conectado',
   wl_checking:'Comprobando tus listas en OpenSea…',
   wl_checked:'Elegibilidad actualizada ✓',
   wl_need_cli:'Necesita el CLI de OpenSea. En una terminal:  npm i -g @opensea/cli  ·  luego  opensea login --scopes read:eligibility',
@@ -1115,12 +1145,12 @@ const STR = {
   limit_tip:'NFTs máximos por wallet en esta fase',two_src:'confirmado en 2 fuentes',
   owners_tip:'Wallets únicas que poseen algún NFT, y qué % son del total minteado. Cerca del 100% = muy repartido. Bajo = pocas wallets acumulan muchos (🐳 si <45%).',
   fee_tip:'Creator fee / royalty: % que se lleva el proyecto en cada reventa',
-  fee_lbl:'💸 royalty',
+  fee_lbl:'royalty',
   vol_tip:'Volumen de ventas en las últimas 24 h (moneda del floor)',
   alert_tip:'Avisarme ~10 min antes de un cambio de fase — elige qué fase (deja la pestaña abierta)',
   alert_set:'🔔 Alerta activada. Te avisaré ~10 min antes. Deja esta pestaña abierta.',
   alert_set_toast:'🔔 Alerta activada (aviso en la propia página; las notificaciones del navegador están bloqueadas).',
-  alert_off:'🔕 Alerta quitada',
+  alert_off:'Alerta quitada',
   alert_clear_all:'descartar todo',
   alert_body:'cambio de fase en ~{m} min',
   alert_body_ph:'fase {p} en ~{m} min',
@@ -1131,18 +1161,18 @@ const STR = {
    '<p>Seguimiento en vivo de los mints de Robinhood Chain. Se actualiza solo cada 10 min. Lo que marques se guarda solo en tu navegador. El buscador de arriba filtra las filas por cualquier texto (nombre, fase, llave, nota…); la casilla <b>solo mis llaves</b> deja únicamente los mints para los que tienes llave (marca tus llaves en la pestaña Llaves). Pulsa una cabecera de columna para ordenar.</p>'+
    '<h4>Una fila del Radar</h4><ul>'+
    '<li><b>Proyecto</b> — nombre + enlaces (X / web / OpenSea). <code>live</code> = minteando ahora, <code>SOON</code> = en menos de 72 h, <b>✓✓</b> = confirmado en 2 fuentes.</li>'+
-   '<li><b>Minteado</b> — <code>373 / 4.4K</code> = minteados / supply total. <b>⚡ +N/15m</b> = ritmo en los últimos 15 min (<code>~</code> = estimación). <b>👤 294 (79%)</b> = wallets únicas con algún NFT y su % sobre lo minteado: verde ≥70% repartido, ámbar 45–70%, rojo + 🐳 por debajo de 45% = pocas wallets acumulan.</li>'+
+   '<li><b>Minteado</b> — <code>373 / 4.4K</code> = minteados / supply total. <b>'+ico('bolt')+' +N/15m</b> = ritmo en los últimos 15 min (<code>~</code> = estimación). <b>'+ico('users')+' 294 (79%)</b> = wallets únicas con algún NFT y su % sobre lo minteado: verde ≥70% repartido, ámbar 45–70%, rojo por debajo de 45% = pocas wallets acumulan.</li>'+
    '<li><b>Hype / Popularidad / Actividad X</b> — hype del feed, lectura ALTA/MEDIA/BAJA de la cuenta de X, y los números en crudo: seguidores · posts · antigüedad. Antigüedad marcada = cuenta con menos de 30 días.</li>'+
    '<li><b>Fases</b> — una pastilla por fase con su precio. <b class="ph-GTD">GTD</b> plaza garantizada · <b class="ph-FCFS">FCFS</b> por orden de llegada · <b class="ph-WL">WL/Holder</b> lista genérica · <b>TEAM/PUBLIC</b> equipo / abierto a todos. <b>●</b> abierta ahora · <s>tachada</s> terminada · <code>×N</code> máximo de NFTs por wallet.</li>'+
-   '<li><b>Llaves</b> — qué colecciones te dan acceso a ese mint. <b>⭐ TIENES LLAVE</b> si posees una; <i>elegibilidad sin investigar</i> = aún sin averiguar (las listas se anuncian en X/Discord).</li>'+
-   '<li><b>Precio public</b> — precio de mint público ($ + ETH). <b>💸 royalty X%</b> = comisión del creador en cada reventa.</li>'+
+   '<li><b>Llaves</b> — qué colecciones te dan acceso a ese mint. <b>'+ico('key')+' TIENES LLAVE</b> si posees una; <i>elegibilidad sin investigar</i> = aún sin averiguar (las listas se anuncian en X/Discord).</li>'+
+   '<li><b>Precio public</b> — precio de mint público ($ + ETH). <b>'+ico('coin')+' royalty X%</b> = comisión del creador en cada reventa.</li>'+
    '<li><b>Floor</b> — floor del mercado secundario. <code>· 2.8×</code> = floor frente al precio de mint (verde sube / rojo baja); <code>FREE→$X</code> en mints gratis; <i>sin mercado / mercado mínimo</i> cuando hay pocas ventas.</li>'+
-   '<li><b>Cuándo</b> — cuenta atrás + hora exacta (UTC y tu hora local). Pulsa <b>🔕/🔔</b> y elige la fase (p.ej. solo PUBLIC): ~10 min antes de ese cambio salta un <b>banner rojo arriba + pitido</b> (y notificación del sistema si la permites). Solo con la pestaña abierta.</li>'+
+   '<li><b>Cuándo</b> — cuenta atrás + hora exacta (UTC y tu hora local). Pulsa la campana y elige la fase (p.ej. solo PUBLIC): ~10 min antes de ese cambio salta un <b>banner arriba + pitido</b> (y notificación del sistema si la permites). Solo con la pestaña abierta.</li>'+
    '</ul><h4>Otras pestañas</h4><ul>'+
-   '<li><b>🔑 Llaves</b> — todas las colecciones llave ordenadas por utilidad WL frente al precio. <code>wl_value</code> criterio editorial 0–10 · <code>util</code> GTD/FCFS/WL ponderado del registro de mints · <code>ce</code> = util ÷ floor (alto = infravalorada). Marca aquí lo que tienes.</li>'+
-   '<li><b>🛒 Comprar</b> — lista corta de llaves top que aún no tienes, por prioridad y wl_value.</li>'+
-   '<li><b>📉 Floors</b> — llaves cuyo floor se movió ±15% en 7 días. <b>🛒</b> marca una caída fuerte en una llave prioritaria.</li>'+
-   ${data.public ? "''" : "'<li><b>🎟️ Plazas</b> — apunta a mano los proyectos donde ya tienes plaza confirmada (GTD/FCFS/WL/PUBLIC…) y cuántas. Es local a tu navegador. Puedes añadir un proyecto aunque aún no tenga fecha de mint: queda <i>pendiente</i> y, cuando aparezca en el radar con ese nombre, se asigna solo y te aviso (si sale con otro nombre lo asignas a mano). El Radar marca esos mints con <b>🎟️</b> y resalta la fila con borde dorado.</li>'"}+
+   '<li><b>Llaves</b> — todas las colecciones llave ordenadas por utilidad WL frente al precio. <code>wl_value</code> criterio editorial 0–10 · <code>util</code> GTD/FCFS/WL ponderado del registro de mints · <code>ce</code> = util ÷ floor (alto = infravalorada). Marca aquí lo que tienes.</li>'+
+   '<li><b>Comprar</b> — lista corta de llaves top que aún no tienes, por prioridad y wl_value.</li>'+
+   '<li><b>Floors</b> — llaves cuyo floor se movió ±15% en 7 días. El icono '+ico('dip')+' marca una caída fuerte en una llave prioritaria.</li>'+
+   ${data.public ? "''" : "'<li><b>Plazas</b> — apunta a mano los proyectos donde ya tienes plaza confirmada (GTD/FCFS/WL/PUBLIC…) y cuántas. Es local a tu navegador. Puedes añadir un proyecto aunque aún no tenga fecha de mint: queda <i>pendiente</i> y, cuando aparezca en el radar con ese nombre, se asigna solo y te aviso (si sale con otro nombre lo asignas a mano). El Radar marca esos mints con el icono de ticket y resalta la fila con borde dorado.</li>'"}+
    '</ul>'},
  en:{tab_radar:'Radar',tab_keys:'Keys',tab_buy:'Buy',tab_floors:'Floors',tab_spots:'Spots',
   h_now:'Minting now / open phase',h_soon:'Next 72 h',
@@ -1160,8 +1190,8 @@ const STR = {
   sp_assign:'— assign to a mint —',
   sp_note_ph:'note (where/how you got it…)',
   sp_added_pending:'Spot saved as PENDING: that project is not in the radar yet. You will get a heads-up when it gets a date; if it shows under a different name, assign it from the Status column.',
-  sp_now_live:'🎟️ It has a date now! {p} is in the radar and you hold a spot.',
-  sp_pending_count:'🎟️ {n} pending spot(s) (project has no mint date yet).',
+  sp_now_live:'It has a date now! {p} is in the radar and you hold a spot.',
+  sp_pending_count:'{n} pending spot(s) (project has no mint date yet).',
   sp_del_project:'delete the project and all its spots',
   wl_os:'OpenSea:',
   wl_none_lists:'not on any list (checked)',
@@ -1171,7 +1201,7 @@ const STR = {
   wl_refresh:'Refresh eligibility',
   wl_expires:'expires',wl_expired:'session expired',
   wl_connecting:'Opening OpenSea… approve the grant in the new tab.',
-  wl_connected:'✅ OpenSea connected',
+  wl_connected:'OpenSea connected',
   wl_checking:'Checking your OpenSea lists…',
   wl_checked:'Eligibility refreshed ✓',
   wl_need_cli:'Needs the OpenSea CLI. In a terminal:  npm i -g @opensea/cli  ·  then  opensea login --scopes read:eligibility',
@@ -1219,12 +1249,12 @@ const STR = {
   limit_tip:'Max NFTs per wallet in this phase',two_src:'confirmed by 2 sources',
   owners_tip:'Unique wallets holding at least one NFT, and what % of total minted that is. Near 100% = well spread. Low = few wallets hoarding many (🐳 if <45%).',
   fee_tip:'Creator fee / royalty: % the project takes on every resale',
-  fee_lbl:'💸 royalty',
+  fee_lbl:'royalty',
   vol_tip:'Sales volume in the last 24 h (floor currency)',
   alert_tip:'Alert me ~10 min before a phase change — pick which phase (keep this tab open)',
   alert_set:'🔔 Alert on. I will warn you ~10 min before. Keep this tab open.',
   alert_set_toast:'🔔 Alert on (in-page only; browser notifications are blocked).',
-  alert_off:'🔕 Alert removed',
+  alert_off:'Alert removed',
   alert_clear_all:'dismiss all',
   alert_body:'phase change in ~{m} min',
   alert_body_ph:'{p} phase in ~{m} min',
@@ -1235,18 +1265,18 @@ const STR = {
    '<p>Live tracker for Robinhood Chain mints. Auto-updates every 10 min. Anything you tick is saved only in your browser. The search box up top filters rows by any text (name, phase, key, note…); the <b>only my keys</b> checkbox keeps only mints you hold a key for (tick your keys in the Keys tab). Click a column header to sort.</p>'+
    '<h4>A Radar row</h4><ul>'+
    '<li><b>Project</b> — name + links (X / site / OpenSea). <code>live</code> = minting now, <code>SOON</code> = within 72 h, <b>✓✓</b> = confirmed by 2 sources.</li>'+
-   '<li><b>Minted</b> — <code>373 / 4.4K</code> = minted / total supply. <b>⚡ +N/15m</b> = mint rate in the last 15 min (<code>~</code> = estimate). <b>👤 294 (79%)</b> = unique holder wallets and their share of minted: green ≥70% spread, amber 45–70%, red + 🐳 under 45% = few wallets hoarding.</li>'+
+   '<li><b>Minted</b> — <code>373 / 4.4K</code> = minted / total supply. <b>'+ico('bolt')+' +N/15m</b> = mint rate in the last 15 min (<code>~</code> = estimate). <b>'+ico('users')+' 294 (79%)</b> = unique holder wallets and their share of minted: green ≥70% spread, amber 45–70%, red under 45% = few wallets hoarding.</li>'+
    '<li><b>Hype / Popularity / X activity</b> — feed hype score, a HIGH/MED/LOW read of the X account, and raw followers · posts · account age. A flagged age = account under 30 days old.</li>'+
    '<li><b>Phases</b> — one pill per phase with its price. <b class="ph-GTD">GTD</b> guaranteed spot · <b class="ph-FCFS">FCFS</b> first come first served · <b class="ph-WL">WL/Holder</b> generic list · <b>TEAM/PUBLIC</b> team / open to all. <b>●</b> open now · <s>struck</s> ended · <code>×N</code> max NFTs per wallet.</li>'+
-   '<li><b>Keys</b> — which collections make you eligible for that mint. <b>⭐ YOU HAVE A KEY</b> if you own one; <i>eligibility not researched</i> = not figured out yet (allowlists are announced on X/Discord).</li>'+
-   '<li><b>Public price</b> — public mint price ($ + ETH). <b>💸 royalty X%</b> = creator fee taken on every resale.</li>'+
+   '<li><b>Keys</b> — which collections make you eligible for that mint. <b>'+ico('key')+' YOU HAVE A KEY</b> if you own one; <i>eligibility not researched</i> = not figured out yet (allowlists are announced on X/Discord).</li>'+
+   '<li><b>Public price</b> — public mint price ($ + ETH). <b>'+ico('coin')+' royalty X%</b> = creator fee taken on every resale.</li>'+
    '<li><b>Floor</b> — secondary-market floor. <code>· 2.8×</code> = floor vs mint price (green up / red down); <code>FREE→$X</code> for free mints; <i>no / thin market</i> when sales are too few to trust.</li>'+
-   '<li><b>When</b> — countdown + exact time (UTC and your local time). Click <b>🔕/🔔</b> and pick a phase (e.g. PUBLIC only): ~10 min before that change you get a <b>red banner on top + a beep</b> (plus a system notification if you allow it). Only while the tab is open.</li>'+
+   '<li><b>When</b> — countdown + exact time (UTC and your local time). Click the bell and pick a phase (e.g. PUBLIC only): ~10 min before that change you get a <b>banner on top + a beep</b> (plus a system notification if you allow it). Only while the tab is open.</li>'+
    '</ul><h4>Other tabs</h4><ul>'+
-   '<li><b>🔑 Keys</b> — every key collection ranked by WL utility vs price. <code>wl_value</code> editorial 0–10 · <code>util</code> weighted GTD/FCFS/WL from the mint log · <code>ce</code> = util ÷ floor (high = underpriced). Tick what you own here.</li>'+
-   '<li><b>🛒 Buy</b> — shortlist of top-tier keys you do not own yet, by priority and wl_value.</li>'+
-   '<li><b>📉 Floors</b> — keys whose floor moved ±15% over 7 days. <b>🛒</b> marks a big drop on a high-priority key.</li>'+
-   ${data.public ? "''" : "'<li><b>🎟️ Spots</b> — manually note the projects where you already hold a confirmed spot (GTD/FCFS/WL/PUBLIC…) and how many. Local to your browser. You can add a project with no mint date yet: it stays <i>pending</i> and, once it shows in the radar under that name, it is assigned automatically and you get a heads-up (assign it by hand if the name differs). The Radar flags those mints with <b>🎟️</b> and highlights the row with a gold border.</li>'"}+
+   '<li><b>Keys</b> — every key collection ranked by WL utility vs price. <code>wl_value</code> editorial 0–10 · <code>util</code> weighted GTD/FCFS/WL from the mint log · <code>ce</code> = util ÷ floor (high = underpriced). Tick what you own here.</li>'+
+   '<li><b>Buy</b> — shortlist of top-tier keys you do not own yet, by priority and wl_value.</li>'+
+   '<li><b>Floors</b> — keys whose floor moved ±15% over 7 days. The '+ico('dip')+' icon marks a big drop on a high-priority key.</li>'+
+   ${data.public ? "''" : "'<li><b>Spots</b> — manually note the projects where you already hold a confirmed spot (GTD/FCFS/WL/PUBLIC…) and how many. Local to your browser. You can add a project with no mint date yet: it stays <i>pending</i> and, once it shows in the radar under that name, it is assigned automatically and you get a heads-up (assign it by hand if the name differs). The Radar flags those mints with the ticket icon and highlights the row with a gold border.</li>'"}+
    '</ul>'}
 };
 let L = localStorage.getItem('mints_lang') || 'en';
@@ -1343,8 +1373,8 @@ function wlEligCell(m){
   }
   const yes = Object.keys(byK).filter(k=>byK[k].eligible===true);
   if(!yes.length) return '';   // solo interesa cuando SÍ estás en alguna lista
-  return '<div class="wl-elig wl-elig-yes" title="'+t('wl_os_tip')+'">🔎 '+t('wl_os')+' '+
-    yes.map(k=>'<span class="pill wl-in">✅ '+esc(k)+'</span>').join(' ')+'</div>';
+  return '<div class="wl-elig wl-elig-yes" title="'+t('wl_os_tip')+'">'+ico('scope')+' '+t('wl_os')+' '+
+    yes.map(k=>'<span class="pill wl-in">'+ico('check')+' '+esc(k)+'</span>').join(' ')+'</div>';
 }
 const wlEligYes = m => !!(m.wlElig && m.wlElig.stages.some(s=>s.eligible===true && s.k!=='PUBLIC'));
 function needCell(m){
@@ -1353,10 +1383,10 @@ function needCell(m){
   const need = (m.need||[]).map(n=>({name:n.name, owned: isOwned(n.name), wallets: n.wallets||[]}));
   if(!need.length) return wl + spot + (wl||spot?'':'<span class="muted" style="font-size:11px">'+t('need_unknown')+'</span>');
   const have = need.some(n=>n.owned);
-  return wl + spot + (have?'<div class="have-key">⭐ '+t('have_key')+'</div>':'')
+  return wl + spot + (have?'<div class="have-key">'+ico('key')+' '+t('have_key')+'</div>':'')
     + need.map(n=>{
         const w = n.wallets.length ? '<span class="wchip" title="'+t('in_wallet')+'">'+n.wallets.map(esc).join('/')+'</span>' : '';
-        return '<span class="pill '+(n.owned?'k-own':'')+'">'+(n.owned?'✅ ':'')+esc(n.name)+w+'</span>';
+        return '<span class="pill '+(n.owned?'k-own':'')+'">'+(n.owned?ico('check')+' ':'')+esc(n.name)+w+'</span>';
       }).join(' ');
 }
 
@@ -1488,7 +1518,7 @@ function renderAlertBanner(){
   if(!alertQ.length){ el.hidden=true; setBadge(); return; }
   el.hidden=false;
   el.innerHTML =
-    alertQ.map((a,i)=>'<div class="ab-row"><span>🔔 '+esc(evText(a))+'</span><button data-abi="'+i+'">✕</button></div>').join('')
+    alertQ.map((a,i)=>'<div class="ab-row"><span>'+ico('bell')+' '+esc(evText(a))+'</span><button data-abi="'+i+'">'+ico('x')+'</button></div>').join('')
     + (alertQ.length>1 ? '<button class="ab-all" data-abi="all">'+t('alert_clear_all')+'</button>' : '');
   setBadge();
 }
@@ -1505,7 +1535,7 @@ function bellBtn(m){
   if(!canAlert(m)) return '';
   const on=isArmed(m), f=on?armedFilter(m):null;
   const tag = on && f!=='*' ? '<sub style="font-size:8px">'+esc(f)+'</sub>' : '';
-  return '<button class="bell'+(on?' on':'')+'" data-alert="'+esc(m.name)+'" title="'+t('alert_tip')+'">'+(on?'🔔':'🔕')+tag+'</button> ';
+  return '<button class="bell'+(on?' on':'')+'" data-alert="'+esc(m.name)+'" title="'+t('alert_tip')+'">'+(on?ico('bell'):ico('belloff'))+tag+'</button> ';
 }
 // menú flotante para elegir la fase de la alerta
 function openAlertMenu(name, x, y){
@@ -1513,8 +1543,8 @@ function openAlertMenu(name, x, y){
   const m = D.mints.find(mm=>aKey(mm.name)===aKey(name)); if(!m) return;
   const on = armed.has(aKey(name));
   const rows = [];
-  if(on) rows.push('<button data-f="__off">✕ '+t('alert_off').replace('🔕 ','')+'</button>');
-  rows.push('<button data-f="*">🔔 '+t('alert_any')+'</button>');
+  if(on) rows.push('<button data-f="__off">'+ico('x')+' '+t('alert_off')+'</button>');
+  rows.push('<button data-f="*">'+ico('bell')+' '+t('alert_any')+'</button>');
   for(const k of alertableKinds(m)) rows.push('<button data-f="'+esc(k)+'"'+(on&&armedFilter(m)===k?' class="sel"':'')+'>'+esc(k)+'</button>');
   const el = document.createElement('div');
   el.id='alertMenu'; el.dataset.name=name;
@@ -1560,22 +1590,22 @@ function ownersCell(m){
   if(m.owners==null) return '';
   const pct = m.ownersPct!=null ? Math.round(m.ownersPct*100) : null;
   const cls = pct==null?'muted':pct>=70?'rise':pct>=45?'pop-mid':'drop';
-  const whale = pct!=null && pct<45 ? ' 🐳' : '';
-  return '<br><span class="'+cls+'" style="font-size:11px" title="'+t('owners_tip')+'">👤 '+nf(m.owners)+(pct!=null?' ('+pct+'%)':'')+whale+'</span>';
+  const conc = '';
+  return '<br><span class="'+cls+'" style="font-size:11px" title="'+t('owners_tip')+'">'+ico('users')+' '+nf(m.owners)+(pct!=null?' ('+pct+'%)':'')+conc+'</span>';
 }
 // creator fee (royalty) que cobra el proyecto en cada reventa
 function feeCell(m){
-  return m.fee!=null ? '<br><span class="eth" title="'+t('fee_tip')+'">'+t('fee_lbl')+' '+(+m.fee)+'%</span>' : '';
+  return m.fee!=null ? '<br><span class="eth" title="'+t('fee_tip')+'">'+ico('coin')+' '+t('fee_lbl')+' '+(+m.fee)+'%</span>' : '';
 }
 function rateCell(m){
   // ritmo real (muestras de OpenSea) si lo hay; si no, estimación desde el feed (2h/8)
   if(m.rate15!=null)
-    return '<br><span class="pill" title="'+t('rate_tip15')+'">⚡ +'+m.rate15+'/15m</span>';
+    return '<br><span class="pill" title="'+t('rate_tip15')+'">'+ico('bolt')+' +'+m.rate15+'/15m</span>';
   const mm = m.mintRate && String(m.mintRate).match(/([\\d,]+)\\s*IN\\s*(\\d+)\\s*H/i);
   if(mm){
     const per2h = +mm[1].replace(/,/g,''), hrs = +mm[2] || 2;
     const est = Math.round(per2h / (hrs*4));  // por 15 min
-    return '<br><span class="pill muted" title="'+t('rate_tip')+'">⚡ ~+'+est+'/15m</span>';
+    return '<br><span class="pill muted" title="'+t('rate_tip')+'">'+ico('bolt')+' ~+'+est+'/15m</span>';
   }
   return '';
 }
@@ -1681,7 +1711,7 @@ function renderWallet(){
     tile(t('w_unrealized'), wPnl(s.unrealizedEth||0, null))+
     tile(t('w_held_value'), s.heldFloorEth ? wPrice(s.heldFloorEth, null) : '—')+
     (s.gasEth ? tile(t('w_gas'), '<span class="pnl-neg">'+wPrice(s.gasEth, null)+'</span>') : '')+
-    tile(t('w_sold'), s.sold+' <small>'+s.wins+'✅ / '+s.losses+'❌</small>')+
+    tile(t('w_sold'), s.sold+' <small>'+s.wins+' '+ico('check')+' / '+s.losses+' '+ico('x')+'</small>')+
     tile(t('w_held'), s.held)+
     tile(t('w_moved'), s.movedOut);
 
@@ -1766,7 +1796,7 @@ function render(){
   const RANKING = D.ranking.filter(inChain);
   setBadge();   // título + h1 según la red seleccionada
   const cart = D.holdings
-    ? ' · 👛 ' + (D.holdings.keys.length
+    ? ' · ' + ico('wallet') + ' ' + (D.holdings.keys.length
         ? D.holdings.keys.length + ' ' + t('cartera') + ' (' + D.holdings.wallets.join(', ') + ')'
         : t('cartera_none'))
     : '';
@@ -1791,8 +1821,8 @@ function render(){
    RANKING.map((c,i)=>{const own=isOwned(c.name);return '<tr class="'+(own?'row-have':'')+'">'+
     cell(t('c_have'), '<input type="checkbox" class="ownchk" data-name="'+esc(c.name)+'"'+(own?' checked':'')+'>')+
     cell('#', (i+1), 'num')+
-    cell(t('c_coll'), chainPill(c.chain)+esc(c.name)+(own?' ✅':'')+(c.wallets&&c.wallets.length?' <span class="wchip" title="'+t('in_wallet')+'">'+c.wallets.map(esc).join('/')+'</span>':'')+osA(c.opensea), own?'owned':'')+
-    cell(t('c_prio'), c.priority)+cell(t('c_tier'), c.tier)+
+    cell(t('c_coll'), chainPill(c.chain)+esc(c.name)+(own?' '+ico('check'):'')+(c.wallets&&c.wallets.length?' <span class="wchip" title="'+t('in_wallet')+'">'+c.wallets.map(esc).join('/')+'</span>':'')+osA(c.opensea), own?'owned':'')+
+    cell(t('c_prio'), prioCell(c.priority))+cell(t('c_tier'), c.tier)+
     cell(t('c_floor'), money(c.floorEth), 'num')+
     cell(t('c_wl'), (c.wlValue??'—'), 'num')+
     cell(t('c_ev'), c.gtd+'/'+c.fcfs+'/'+c.wl, 'num')+
@@ -1808,16 +1838,16 @@ function render(){
   document.getElementById('tBuy').innerHTML =
    '<thead><tr><th>'+t('c_prio')+'</th><th>'+t('c_coll')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_wl')+'</th><th>'+t('c_note')+'</th></tr></thead><tbody>'+
    buy.map(c=>{const own=isOwned(c.name);return '<tr'+(own?' class="row-have"':'')+'>'+
-    cell(t('c_prio'), c.priority)+
-    cell(t('c_coll'), chainPill(c.chain)+(own?'<span class="owned">✅ </span>':'')+'<b'+(own?' style="opacity:.55"':'')+'>'+esc(c.name)+'</b>'+(own?' <span class="v2">'+t('have_key')+'</span>':'')+osA(c.opensea))+
+    cell(t('c_prio'), prioCell(c.priority))+
+    cell(t('c_coll'), chainPill(c.chain)+(own?'<span class="owned">'+ico('check')+' </span>':'')+'<b'+(own?' style="opacity:.55"':'')+'>'+esc(c.name)+'</b>'+(own?' <span class="v2">'+t('have_key')+'</span>':'')+osA(c.opensea))+
     cell(t('c_floor'), money(c.floorEth), 'num')+
     cell(t('c_wl'), (c.wlValue??'—'), 'num')+cell(t('c_note'), esc(c.notes), 'muted')+'</tr>';}).join('')+'</tbody>';
 
   document.getElementById('tFloors').innerHTML =
    '<thead><tr><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_before')+'</th><th>'+t('c_after')+'</th><th>Δ</th></tr></thead><tbody>'+
-   (D.alerts.map(a=>'<tr>'+cell(t('c_coll'), esc(a.name)+osA(rankOs(a.name)))+cell(t('c_prio'), a.priority)+
+   (D.alerts.map(a=>'<tr>'+cell(t('c_coll'), esc(a.name)+osA(rankOs(a.name)))+cell(t('c_prio'), prioCell(a.priority))+
     cell(t('c_before'), money(a.from), 'num')+cell(t('c_after'), money(a.to), 'num')+
-    cell('Δ', a.change.toFixed(0)+'%'+(a.change<=-15&&['👑','💎','🥇','🥈'].includes(a.priority)?' 🛒':''), 'num '+(a.change<0?'drop':'rise'))+'</tr>').join('')
+    cell('Δ', a.change.toFixed(0)+'%'+(a.change<=-15&&['👑','💎','🥇','🥈'].includes(a.priority)?' '+ico('dip'):''), 'num '+(a.change<0?'drop':'rise'))+'</tr>').join('')
     || '<tr><td colspan=5 class=muted>'+t('no_hist')+'</td></tr>')+'</tbody>';
 
   // ---- Plazas (local: solo fuera del build público) ----
@@ -1836,19 +1866,19 @@ function render(){
     const m=mintByNorm.get(k);
     if(!m) spPend++;
     const status=m
-      ? '<span class="sp-on">🎯 '+t(m.status==='now'?'sp_live':'sp_soon')+'</span>'
-      : '<span class="sp-pend">⏳ '+t('sp_nodate')+'</span>'+
+      ? '<span class="sp-on">'+ico('target')+' '+t(m.status==='now'?'sp_live':'sp_soon')+'</span>'
+      : '<span class="sp-pend">'+ico('clock')+' '+t('sp_nodate')+'</span>'+
         '<select class="spassign" data-sk="'+esc(k)+'">'+assignOpts+'</select>';
     const phasesHtml=e.phases.slice().sort((x,y)=>x.k.localeCompare(y.k)).map(p=>
       '<div class="spphase"><span class="pill ph-'+esc(p.k)+'">'+esc(p.k)+'</span> × '+
       '<input type="number" min="1" value="'+esc(p.qty)+'" class="spqty" data-sk="'+esc(k)+'" data-sp="'+esc(p.k)+'">'+
-      ' <button class="chk spdel" data-sk="'+esc(k)+'" data-sp="'+esc(p.k)+'" title="✕">✕</button></div>').join('');
+      ' <button class="chk spdel" data-sk="'+esc(k)+'" data-sp="'+esc(p.k)+'" title="quitar">'+ico('x')+'</button></div>').join('');
     return '<tr>'+
       cell(t('c_project'), esc(e.name), null, e.name.toLowerCase())+
       cell(t('sp_status'), status, null, m?(m.status==='now'?0:1):2)+
       cell(t('sp_phases_col'), phasesHtml)+
       cell(t('c_note'), '<input class="spnote" data-sk="'+esc(k)+'" value="'+esc(e.note||'')+'" placeholder="'+esc(t('sp_note_ph'))+'">')+
-      cell('', '<button class="chk spdelall" data-sk="'+esc(k)+'" title="'+esc(t('sp_del_project'))+'">🗑</button>')+
+      cell('', '<button class="chk spdelall" data-sk="'+esc(k)+'" title="'+esc(t('sp_del_project'))+'">'+ico('trash')+'</button>')+
     '</tr>';
   });
   const tSpotsEl=document.getElementById('tSpots');
@@ -1951,7 +1981,9 @@ function applyHdr(){
   let v; try{ v=localStorage.getItem('mints_hdr'); }catch(e){}
   const collapsed = v==='1';
   hdrEl.classList.toggle('hcollapsed', collapsed);
-  hdrTog.textContent = collapsed ? '☰' : '✕';
+  hdrTog.innerHTML = collapsed
+    ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'
+    : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg>';
   hdrTog.title = t(collapsed ? 'hdr_show' : 'hdr_hide');
 }
 hdrTog.addEventListener('click',()=>{

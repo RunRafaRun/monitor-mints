@@ -123,10 +123,10 @@ function classifyPhase(s) {
 export function popularityVerdict(c) {
   const f = c.xFollowers ?? 0, p = c.xPosts ?? 0, age = c.xAgeDays ?? -1;
   const h = c.hype ?? 0;
-  if (age < 0 || !c.x) return "🔴 sin X";
-  if (f > 6000 && h >= 45 && age > 45) return "🟢 ALTO";
-  if (f > 2500 && h >= 30) return "🟢 ALTO";
-  if (f > 1000 && (p > 5 || h >= 30)) return "🟡 MEDIO";
-  if (f > 300) return "🟡 MEDIO";
-  return "🔴 BAJO";
+  if (age < 0 || !c.x) return "sin X";
+  if (f > 6000 && h >= 45 && age > 45) return "ALTO";
+  if (f > 2500 && h >= 30) return "ALTO";
+  if (f > 1000 && (p > 5 || h >= 30)) return "MEDIO";
+  if (f > 300) return "MEDIO";
+  return "BAJO";
 }
