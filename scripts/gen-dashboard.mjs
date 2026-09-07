@@ -2451,7 +2451,7 @@ async function pnlRead(){
     pnlMsg(n?(L==='es'?n+' colecciones. Marca las que quieras y pulsa Analizar.':n+' collections. Tick the ones you want and hit Analyze.'):(L==='es'?'Sin colecciones en estas redes.':'No collections on these chains.'));
   }catch(e){ pnlMsg((L==='es'?'Error: ':'Error: ')+e.message,1); }
 }
-const PNL_BATCH=10, PNL_MAXB=28;   // colecciones por petición · tope de lotes por red
+const PNL_BATCH=5, PNL_MAXB=40;   // colecciones por petición · tope de lotes por red
 async function pnlAnalyze(full){
   full=!!full;
   const boxes=[...document.querySelectorAll('#pnlCols .pnl-col input:checked')];

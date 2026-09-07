@@ -18,7 +18,7 @@ const STABLE = /USD|DOLLAR|^DAI$|^GHO$|^PYUSD$/i;
 const ETHLIKE = /^(W?ETH|WETH\.E)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
-const CACHE_V = "5";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
+const CACHE_V = "6";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
 const MAX_PAGES = 16;      // ~800 movimientos por lista
 const MAX_FLOOR = 18;
 
@@ -88,7 +88,7 @@ async function handle({ request, env }) {
     let params = { ...baseParams };
     for (let p = 0; p < maxPages; p++) {
       const jr = await bs(path, params);
-      if (!jr) break;
+      if (!jr) { if (p > 0) truncated = true; break; }   // corte a media paginación -> resultado incompleto
       for (const it of jr.items || []) { const v = map(it); if (v) out.push(v); }
       if (!jr.next_page_params) break;
       params = jr.next_page_params;
@@ -102,10 +102,14 @@ async function handle({ request, env }) {
     const ck2 = new Request(`https://x/tcontracts?v=${CACHE_V}&a=${addr}&c=${chain}`, { method: "GET" });
     const h2 = await cache.match(ck2);
     if (h2) return h2;
-    const rows = await bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155" }, (it) => ({
+    const map = (it) => ({
       contract: (it.token?.address_hash || it.token?.address || "").toLowerCase(),
       name: it.token?.name || null,
-    }), MAX_PAGES * 2);
+    });
+    const rows = [
+      ...await bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721" }, map, 20),
+      ...await bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-1155" }, map, 12),
+    ];
     const seen = new Map();
     for (const it of rows) {
       if (!it.contract) continue;
@@ -114,24 +118,34 @@ async function handle({ request, env }) {
       seen.set(it.contract, e);
     }
     const contracts = [...seen.values()].sort((a, b) => b.count - a.count);
-    const r2 = j({ chain, contracts, truncated }, 200, { "cache-control": "public, max-age=3600" });
-    await cache.put(ck2, r2.clone());
+    const r2 = j({ chain, contracts, truncated, rows: rows.length, subreq }, 200,
+      { "cache-control": `public, max-age=${truncated || !contracts.length ? 120 : 3600}` });
+    if (!truncated && contracts.length) await cache.put(ck2, r2.clone());
     return r2;
   }
 
+  const nftMap = (it) => ({
+    contract: (it.token?.address_hash || it.token?.address || "").toLowerCase(),
+    tokenId: it.total?.token_id ?? it.total?.id ?? null,
+    from: (it.from?.hash || "").toLowerCase(),
+    to: (it.to?.hash || "").toLowerCase(),
+    ts: Date.parse(it.timestamp) || null,
+    tx: it.transaction_hash,
+    name: it.token?.name || null,
+    method: it.method || null,
+    logIndex: it.log_index,
+    toContract: !!(it.to?.is_contract),
+  });
+  // si el filtro de colecciones es corto -> pide los NFT colección a colección
+  // (acotado y completo); si no, la lista entera de la wallet (puede truncarse)
+  const nftFetch = want && want.size <= 10
+    ? Promise.all([...want].map((ct) =>
+        bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155", token: ct }, nftMap, 8),
+      )).then((a) => a.flat())
+    : bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155" }, nftMap, MAX_PAGES);
+
   const [nft, erc20, sent, nativeIn, rateFetched] = await Promise.all([
-    bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155" }, (it) => ({
-      contract: (it.token?.address_hash || it.token?.address || "").toLowerCase(),
-      tokenId: it.total?.token_id ?? it.total?.id ?? null,
-      from: (it.from?.hash || "").toLowerCase(),
-      to: (it.to?.hash || "").toLowerCase(),
-      ts: Date.parse(it.timestamp) || null,
-      tx: it.transaction_hash,
-      name: it.token?.name || null,
-      method: it.method || null,
-      logIndex: it.log_index,
-      toContract: !!(it.to?.is_contract),
-    })),
+    nftFetch,
     bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-20" }, (it) => {
       const sym = it.token?.symbol || "";
       const kind = ETHLIKE.test(sym) ? "eth" : STABLE.test(sym) ? "usd" : null;
