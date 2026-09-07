@@ -1288,7 +1288,7 @@ const STR = {
   alert_pick:'¿De qué fase te aviso?',alert_any:'cualquier cambio de fase',
   legend:'Fases: <b class="ph-GTD">GTD</b> plaza garantizada · <b class="ph-FCFS">FCFS</b> por orden de llegada · <b class="ph-WL">WL/Holder</b> lista genérica · <b>TEAM/PUBLIC</b> equipo / abierto a todos.  <b>●</b> = abierta ahora · <s>tachada</s> = terminada · <b>×N</b> = NFTs por wallet',
   help:'<h3>Cómo leer Mintscope</h3>'+
-   '<p>Seguimiento en vivo de los mints de Robinhood Chain. Se actualiza solo cada 10 min. Lo que marques se guarda solo en tu navegador. El buscador de arriba filtra las filas por cualquier texto (nombre, fase, acceso, nota…); la casilla <b>solo mis accesos</b> deja únicamente los mints para los que tienes acceso (marca tus accesos en la pestaña Acceso). Pulsa una cabecera de columna para ordenar.</p>'+
+   '<p>Seguimiento en vivo de mints de NFT en Robinhood Chain, Ethereum, Ink y Base. Se actualiza solo cada 10 min. Lo que marques se guarda solo en tu navegador. El buscador de arriba filtra las filas por cualquier texto (nombre, fase, acceso, nota…); la casilla <b>solo mis accesos</b> deja únicamente los mints para los que tienes acceso (marca tus accesos en la pestaña Acceso). Pulsa una cabecera de columna para ordenar.</p>'+
    '<h4>Una fila del Radar</h4><ul>'+
    '<li><b>Proyecto</b> — nombre + enlaces (X / web / OpenSea). <code>live</code> = minteando ahora, <code>SOON</code> = en menos de 72 h, <b>✓✓</b> = confirmado en 2 fuentes.</li>'+
    '<li><b>Minteado</b> — <code>373 / 4.4K</code> = minteados / supply total. <b>'+ico('bolt')+' +N/15m</b> = ritmo en los últimos 15 min (<code>~</code> = estimación). <b>'+ico('users')+' 294 (79%)</b> = wallets únicas con algún NFT y su % sobre lo minteado: verde ≥70% repartido, ámbar 45–70%, rojo por debajo de 45% = pocas wallets acumulan.</li>'+
@@ -1417,7 +1417,7 @@ const STR = {
   alert_pick:'Which phase should I alert on?',alert_any:'any phase change',
   legend:'Phases: <b class="ph-GTD">GTD</b> guaranteed spot · <b class="ph-FCFS">FCFS</b> first come first served · <b class="ph-WL">WL/Holder</b> generic list · <b>TEAM/PUBLIC</b> team / open to all.  <b>●</b> = open now · <s>struck</s> = ended · <b>×N</b> = NFTs per wallet',
   help:'<h3>How to read Mintscope</h3>'+
-   '<p>Live tracker for Robinhood Chain mints. Auto-updates every 10 min. Anything you tick is saved only in your browser. The search box up top filters rows by any text (name, phase, access, note…); the <b>only my access</b> checkbox keeps only mints you qualify for (tick the collections you own in the Access tab). Click a column header to sort.</p>'+
+   '<p>Live tracker for NFT mints across Robinhood Chain, Ethereum, Ink and Base. Auto-updates every 10 min. Anything you tick is saved only in your browser. The search box up top filters rows by any text (name, phase, access, note…); the <b>only my access</b> checkbox keeps only mints you qualify for (tick the collections you own in the Access tab). Click a column header to sort.</p>'+
    '<h4>A Radar row</h4><ul>'+
    '<li><b>Project</b> — name + links (X / site / OpenSea). <code>live</code> = minting now, <code>SOON</code> = within 72 h, <b>✓✓</b> = confirmed by 2 sources.</li>'+
    '<li><b>Minted</b> — <code>373 / 4.4K</code> = minted / total supply. <b>'+ico('bolt')+' +N/15m</b> = mint rate in the last 15 min (<code>~</code> = estimate). <b>'+ico('users')+' 294 (79%)</b> = unique holder wallets and their share of minted: green ≥70% spread, amber 45–70%, red under 45% = few wallets hoarding.</li>'+

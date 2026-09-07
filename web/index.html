@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mintscope — the mint radar for Robinhood Chain</title>
-<meta name="description" content="What's minting, when each phase opens, which key it needs, and where the floor is. Robinhood Chain, Ethereum, Ink and Base — on one screen that refreshes itself.">
-<meta property="og:title" content="Mintscope — the mint radar for Robinhood Chain">
-<meta property="og:description" content="GTD / FCFS / WL phases, keys, floors and hype on a single screen.">
+<title>Mintscope — the multichain NFT mint radar</title>
+<meta name="description" content="What's minting across Robinhood Chain, Ethereum, Ink and Base — phases, access, floors and hype on one screen that refreshes itself every 10 minutes.">
+<meta property="og:title" content="Mintscope — the multichain NFT mint radar">
+<meta property="og:description" content="GTD / FCFS / WL phases, access, floors and hype for Robinhood Chain, Ethereum, Ink and Base on a single screen.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://mintscope.fun/">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='25' fill='none' stroke='%235ad1c8' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='10.5' fill='none' stroke='%235ad1c8' stroke-width='4'/%3E%3Cline x1='32' y1='32' x2='52' y2='16' stroke='%235ad1c8' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -62,6 +62,11 @@
   .strip .lbl{color:var(--dim);font-family:'IBM Plex Sans',sans-serif}
   .strip .sep{color:#33403f}
   .strip .spacer{flex:1}
+  @media(max-width:720px){
+    .strip .wrap{gap:7px 12px;padding:14px 18px}
+    .strip .spacer{display:none}
+    .strip .lbl:last-child{flex-basis:100%;margin-top:2px}
+  }
 
   /* section */
   section{padding:76px 0}
@@ -101,7 +106,7 @@
       </div>
       <div class="navlinks">
         <a href="/app/">Radar</a>
-        <a href="/app/">Keys</a>
+        <a href="/app/">Access</a>
         <a href="/app/">Floors</a>
       </div>
     </nav>
@@ -125,9 +130,9 @@
       </svg>
       mintscope<span class="cur">_</span>
     </div>
-    <div class="kicker mono">// MINT RADAR · ROBINHOOD CHAIN</div>
-    <h1>The mint radar for<br>Robinhood Chain.</h1>
-    <p class="lead">What's minting, when each phase opens, which key it needs, and where the floor sits. One screen, refreshed for you every 10 minutes.</p>
+    <div class="kicker mono">// MULTICHAIN MINT RADAR</div>
+    <h1>The mint radar<br>for every chain.</h1>
+    <p class="lead">What's minting, when each phase opens, which collection unlocks it, and where the floor sits — across Robinhood Chain, Ethereum, Ink and Base. One screen, refreshed every 10 minutes.</p>
     <div class="cta">
       <a class="btn" href="/app/">[ open the radar ]</a>
       <span class="note">no wallet connection</span>
@@ -151,7 +156,7 @@
   <div class="wrap">
     <h2 class="h2">// WHAT YOU GET</h2>
     <div class="shot">
-      <img src="shot.jpg" alt="The Mintscope radar: live mints, GTD/FCFS/WL phases, keys and floors per project">
+      <img src="shot.jpg" alt="The Mintscope radar: live mints, GTD/FCFS/WL phases, access and floors per project">
     </div>
     <div class="feats">
       <div class="feat">
@@ -161,8 +166,8 @@
       </div>
       <div class="feat">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="5"/><path d="M11.6 11.4 21 2M16.5 6.5l3 3M13.5 9.5l3 3"/></svg></div>
-        <h3>Ranked keys</h3>
-        <p>The collections that grant whitelist, ranked by utility against their floor. Tick the ones you hold and filter the radar by them.</p>
+        <h3>Ranked access</h3>
+        <p>The collections that grant whitelist, ranked by utility against their floor. Connect a wallet to see which mints you qualify for — checked against OpenSea.</p>
       </div>
       <div class="feat">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6 6 4-4 8 8"/><path d="M21 15v6h-6"/></svg></div>
