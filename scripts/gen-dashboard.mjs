@@ -554,33 +554,46 @@ if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}` || proce
 
 export function html(data, { served = false } = {}) {
   const J = JSON.stringify(data).replace(/</g, "\\u003c");
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8">
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 ${data.public ? '<meta http-equiv="refresh" content="600">' : ""}
-<title>Monitor MINTS</title>
-<link rel="icon" id="fav" href="data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><text x="6" y="52" font-size="52">🚨</text></svg>')}">
+<title>Mintscope</title>
+<link rel="icon" id="fav" href="data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="25" fill="none" stroke="#5ad1c8" stroke-width="4"/><circle cx="32" cy="32" r="10.5" fill="none" stroke="#5ad1c8" stroke-width="4"/><line x1="32" y1="32" x2="52" y2="17" stroke="#5ad1c8" stroke-width="4" stroke-linecap="round"/></svg>')}">
 <style>
-:root{color-scheme:light dark;--bg:#0f1115;--card:#191d24;--fg:#e7e9ee;--mut:#9aa4b2;--line:#2a2f3a;
---now:#2ecc71;--soon:#4aa3ff;--warn:#ff6b6b;--gold:#f1c40f;--accent:#7aa2ff}
-@media(prefers-color-scheme:light){:root{--bg:#f6f7f9;--card:#fff;--fg:#1a1d24;--mut:#5b6572;--line:#e3e6eb}}
+:root{color-scheme:light dark;
+--bg:#0a0f10;--card:#121a1b;--fg:#e7efee;--mut:#8fa1a0;--line:#243230;
+--now:#3ddc84;--soon:#5aa9f0;--warn:#ff6b6b;--gold:#e8b45c;
+--accent:#5ad1c8;--accent-ink:#04211f;--accent-dim:rgba(90,209,200,.13)}
+@media(prefers-color-scheme:light){:root{--bg:#f3f6f5;--card:#fff;--fg:#12201f;--mut:#5c6b69;--line:#d7e2e0;
+--now:#12a150;--soon:#2f6fd0;--gold:#a9741c;--accent:#0d857b;--accent-ink:#fff;--accent-dim:rgba(13,133,123,.1)}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);
 font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-header{padding:14px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
-.hrow{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-h1{margin:0;font-size:17px}h2{margin:20px 14px 8px;font-size:14px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
-.sub{color:var(--mut);font-size:12px;margin-top:4px}
+header{padding:15px 14px 11px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5;box-shadow:0 2px 0 var(--accent-dim)}
+.hrow{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+h1{margin:0;display:flex;align-items:center;gap:13px;flex-wrap:wrap}
+.brand{font-family:ui-monospace,'SF Mono','IBM Plex Mono',Menlo,monospace;font-weight:600;font-size:27px;letter-spacing:.005em;line-height:1;display:inline-flex;align-items:center;gap:11px}
+.brand .mark{width:31px;height:31px;color:var(--accent);flex:none}
+.brandcur{color:var(--accent);margin-left:-5px}
+.h1chain{color:var(--mut);font-weight:500;font-size:13px;font-family:ui-monospace,'SF Mono',Menlo,monospace;align-self:center}
+h2{margin:22px 14px 8px;font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.14em;font-weight:600;font-family:ui-monospace,Menlo,monospace}
+.sub{color:var(--mut);font-size:12px;margin-top:5px}
 .wrap{max-width:1900px;margin:0 auto;padding-bottom:60px}
-.tabs{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.tabs{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
 .tabs button,.lang button,.chk{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:999px;
-padding:5px 12px;cursor:pointer;font-size:13px}
-.tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+padding:6px 13px;cursor:pointer;font-size:13px}
+.tabs button{display:inline-flex;align-items:center;gap:6px;font-weight:500}
+.tabs button svg,.iconbtn svg{width:15px;height:15px;flex:none}
+.tabs button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.tabs button:not(.on):hover{border-color:var(--accent)}
+.iconbtn{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 9px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.iconbtn:hover{border-color:var(--accent);color:var(--accent)}
 .lang{display:flex;gap:0;border:1px solid var(--line);border-radius:999px;overflow:hidden}
-.lang button{border:0;border-radius:0;padding:5px 10px}.lang button.on{background:var(--accent);color:#fff}
+.lang button{border:0;border-radius:0;padding:6px 11px;font-weight:600}.lang button.on{background:var(--accent);color:var(--accent-ink)}
 .chk{display:inline-flex;gap:6px;align-items:center;margin:0 14px 4px}
 [hidden]{display:none!important}
 table{width:calc(100% - 28px);margin:0 14px;border-collapse:collapse;font-size:13px}
 th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--mut);font-weight:600;cursor:pointer;white-space:nowrap;user-select:none}
+th{color:var(--mut);font-weight:600;cursor:pointer;white-space:nowrap;user-select:none;background:var(--accent-dim);border-bottom-color:color-mix(in srgb,var(--accent) 30%,var(--line))}
 tr:hover td{background:color-mix(in srgb,var(--card) 60%,transparent)}
 .pill{display:inline-block;font-size:11px;color:var(--mut);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin:1px 2px 1px 0}
 .ph-GTD{color:var(--now);border-color:color-mix(in srgb,var(--now) 45%,var(--line))}
@@ -688,7 +701,7 @@ padding:3px 9px;font-size:12px;font-weight:700;flex:none}
 .chains[hidden]{display:none}
 .chains button{background:var(--card);color:var(--mut);border:1px solid var(--line);border-radius:999px;
 padding:3px 11px;cursor:pointer;font-size:12px}
-.chains button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.chains button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .chpill{font-size:9px;padding:1px 4px;border:1px solid var(--line);border-radius:4px;color:var(--mut);
 vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
 
@@ -725,23 +738,23 @@ vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
 <div class="wrap">
 <header>
   <div class="hrow">
-    <h1 id="h1">🚨 Monitor MINTS</h1>
+    <h1 id="h1"><span class="brand"><svg class="mark" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="13" cy="13" r="10.5"/><circle cx="13" cy="13" r="4.3"/><line x1="13" y1="13" x2="21.6" y2="6.6" stroke-linecap="round"/></svg>mintscope<span class="brandcur">_</span></span><span id="h1chain" class="h1chain"></span></h1>
     <div style="display:flex;gap:8px;align-items:center">
       ${served ? '<button id="refreshBtn" class="chk" style="border-radius:8px"><span data-k="refresh"></span></button>' : ""}
-      <button id="hdrToggle" class="chk" style="border-radius:8px;font-weight:700">☰</button>
-      <button id="helpBtn" class="chk" style="border-radius:8px;font-weight:700" title="?">?</button>
-      <div class="lang" id="lang"><button data-l="es">ES</button><button data-l="en">EN</button></div>
+      <button id="hdrToggle" class="iconbtn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" width="16" height="16"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <button id="helpBtn" class="iconbtn" title="?" aria-label="Help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" width="16" height="16"><circle cx="12" cy="12" r="9"/><path d="M9.2 9.3a2.8 2.8 0 0 1 5.4 1c0 1.9-2.6 2.3-2.6 3.9"/><circle cx="12" cy="17.4" r="0.6" fill="currentColor"/></svg></button>
+      <div class="lang" id="lang"><button data-l="en">EN</button><button data-l="es">ES</button></div>
     </div>
   </div>
   <div class="sub" id="upd"></div>
   <div class="sub" id="wlBar" hidden></div>
   <div class="tabs" id="tabs">
-    <button data-t="radar" class="on">🔥 <span data-k="tab_radar"></span></button>
-    <button data-t="keys">🔑 <span data-k="tab_keys"></span></button>
-    <button data-t="buy">🛒 <span data-k="tab_buy"></span></button>
-    <button data-t="floors">📉 <span data-k="tab_floors"></span></button>
-    ${data.public ? "" : `<button data-t="spots">🎟️ <span data-k="tab_spots"></span></button>
-    <button data-t="wallet">💰 <span data-k="tab_wallet"></span></button>`}
+    <button data-t="radar" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l3-8 4 16 3-8h4"/></svg><span data-k="tab_radar"></span></button>
+    <button data-t="keys"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="5"/><path d="M11.6 11.4 21 2M16.5 6.5l3 3M13.5 9.5l3 3"/></svg><span data-k="tab_keys"></span></button>
+    <button data-t="buy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.3 12.1a2 2 0 0 0 2 1.6h8.5a2 2 0 0 0 2-1.6L23 6.5H6"/></svg><span data-k="tab_buy"></span></button>
+    <button data-t="floors"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6 6 4-4 8 8"/><path d="M21 15v6h-6"/></svg><span data-k="tab_floors"></span></button>
+    ${data.public ? "" : `<button data-t="spots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5a2 2 0 0 0 0 4 2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 12.5a2 2 0 0 0 0-4z"/><path d="M13 6.5v11" stroke-dasharray="1.5 2.5"/></svg><span data-k="tab_spots"></span></button>
+    <button data-t="wallet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H17v3M3 7.5V17a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3.5M3 7.5h17"/><circle cx="17" cy="12.5" r="1.3" fill="currentColor" stroke="none"/></svg><span data-k="tab_wallet"></span></button>`}
   </div>
   <div class="chains" id="chains" hidden></div>
   <div class="filtrow">
@@ -1114,7 +1127,7 @@ const STR = {
   search_ph:'Buscar… (nombre, fase, llave, nota…)',
   alert_pick:'¿De qué fase te aviso?',alert_any:'cualquier cambio de fase',
   legend:'Fases: <b class="ph-GTD">GTD</b> plaza garantizada · <b class="ph-FCFS">FCFS</b> por orden de llegada · <b class="ph-WL">WL/Holder</b> lista genérica · <b>TEAM/PUBLIC</b> equipo / abierto a todos.  <b>●</b> = abierta ahora · <s>tachada</s> = terminada · <b>×N</b> = NFTs por wallet',
-  help:'<h3>Cómo leer Monitor MINTS</h3>'+
+  help:'<h3>Cómo leer Mintscope</h3>'+
    '<p>Seguimiento en vivo de los mints de Robinhood Chain. Se actualiza solo cada 10 min. Lo que marques se guarda solo en tu navegador. El buscador de arriba filtra las filas por cualquier texto (nombre, fase, llave, nota…); la casilla <b>solo mis llaves</b> deja únicamente los mints para los que tienes llave (marca tus llaves en la pestaña Llaves). Pulsa una cabecera de columna para ordenar.</p>'+
    '<h4>Una fila del Radar</h4><ul>'+
    '<li><b>Proyecto</b> — nombre + enlaces (X / web / OpenSea). <code>live</code> = minteando ahora, <code>SOON</code> = en menos de 72 h, <b>✓✓</b> = confirmado en 2 fuentes.</li>'+
@@ -1218,7 +1231,7 @@ const STR = {
   search_ph:'Search… (name, phase, key, note…)',
   alert_pick:'Which phase should I alert on?',alert_any:'any phase change',
   legend:'Phases: <b class="ph-GTD">GTD</b> guaranteed spot · <b class="ph-FCFS">FCFS</b> first come first served · <b class="ph-WL">WL/Holder</b> generic list · <b>TEAM/PUBLIC</b> team / open to all.  <b>●</b> = open now · <s>struck</s> = ended · <b>×N</b> = NFTs per wallet',
-  help:'<h3>How to read Monitor MINTS</h3>'+
+  help:'<h3>How to read Mintscope</h3>'+
    '<p>Live tracker for Robinhood Chain mints. Auto-updates every 10 min. Anything you tick is saved only in your browser. The search box up top filters rows by any text (name, phase, key, note…); the <b>only my keys</b> checkbox keeps only mints you hold a key for (tick your keys in the Keys tab). Click a column header to sort.</p>'+
    '<h4>A Radar row</h4><ul>'+
    '<li><b>Project</b> — name + links (X / site / OpenSea). <code>live</code> = minting now, <code>SOON</code> = within 72 h, <b>✓✓</b> = confirmed by 2 sources.</li>'+
@@ -1236,8 +1249,8 @@ const STR = {
    ${data.public ? "''" : "'<li><b>🎟️ Spots</b> — manually note the projects where you already hold a confirmed spot (GTD/FCFS/WL/PUBLIC…) and how many. Local to your browser. You can add a project with no mint date yet: it stays <i>pending</i> and, once it shows in the radar under that name, it is assigned automatically and you get a heads-up (assign it by hand if the name differs). The Radar flags those mints with <b>🎟️</b> and highlights the row with a gold border.</li>'"}+
    '</ul>'}
 };
-let L = localStorage.getItem('mints_lang') || (navigator.language||'es').slice(0,2);
-if(!STR[L]) L='es';
+let L = localStorage.getItem('mints_lang') || 'en';
+if(!STR[L]) L='en';
 const t = k => (STR[L][k] ?? k);
 let chainSel = localStorage.getItem('mints_chain') || 'robinhood';
 const chainLabel = id => { const c=(D.chains||[]).find(x=>x.id===(id||'robinhood')); return c?c.label:null; };
@@ -1421,7 +1434,7 @@ const saveQ = () => { try{ localStorage.setItem('mints_alerts_pending', JSON.str
 function chainName(id){ const c=(D.chains||[]).find(x=>x.id===id); return c ? (c.name||c.label) : null; }
 function baseTitle(){
   const n = chainSel==='all' ? null : chainName(chainSel);
-  return n ? 'Monitor MINTS — '+n : 'Monitor MINTS';
+  return n ? 'Mintscope — '+n : 'Mintscope';
 }
 
 // pitido corto (Web Audio, sin fichero). Se "desbloquea" con un gesto del usuario.
@@ -1448,7 +1461,8 @@ function setBadge(){
   const n = alertQ.length;
   const bt = baseTitle();
   document.title = n ? '🔔('+n+') '+bt : bt;
-  const h1 = document.getElementById('h1'); if(h1) h1.textContent = '🚨 '+bt;
+  const h1c = document.getElementById('h1chain');
+  if(h1c){ const cn = chainSel==='all' ? '' : (chainName(chainSel)||''); h1c.textContent = cn ? '— '+cn : ''; }
   if(!favEl) return;
   if(!n){ favEl.href = FAV_DEFAULT; return; }
   try{
@@ -1481,7 +1495,7 @@ function renderAlertBanner(){
 function fireAlert(m,ev){
   const msg = evText({name:m.name, k:ev.k, ts:ev.ts});
   if('Notification' in window && Notification.permission==='granted'){
-    try{ new Notification('🚨 Monitor MINTS', { body: msg, requireInteraction:true, tag:aKey(m.name)+ev.ts }); }catch(e){}
+    try{ new Notification('Mintscope', { body: msg, requireInteraction:true, tag:aKey(m.name)+ev.ts }); }catch(e){}
   }
   alertQ.push({ name:m.name, k:ev.k, ts:ev.ts, at:Date.now() });
   saveQ(); renderAlertBanner(); beep();

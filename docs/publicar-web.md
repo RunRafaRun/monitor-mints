@@ -5,6 +5,9 @@ Objetivo: una URL que puedas pasar a un grupo, donde **todos ven los mismos dato
 
 ## Cómo funciona
 
+- El sitio tiene dos piezas: la **landing** estática `web/index.html` se sirve en
+  `mintscope.fun/` y el **radar** (`data/dashboard.html`) en `mintscope.fun/app/`.
+  El workflow copia `web/` a la raíz y el dashboard a `/app/`.
 - El dashboard público es el mismo `data/dashboard.html`, pero generado con
   `node scripts/gen-dashboard.mjs --public` (o `PUBLIC=1`). Ese modo **elimina del
   HTML** todo lo personal: `owned`, wallets, `holdings`, la cabecera "👛 N llaves",

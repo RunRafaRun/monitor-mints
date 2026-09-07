@@ -56,8 +56,9 @@ jobs:
 
       - name: Preparar carpeta de publicación
         run: |
-          mkdir -p site
-          cp data/dashboard.html site/index.html
+          mkdir -p site/app
+          cp -r web/. site/                           # landing + assets -> mintscope.fun/
+          cp data/dashboard.html site/app/index.html  # radar            -> mintscope.fun/app/
 
       - name: Desplegar en Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

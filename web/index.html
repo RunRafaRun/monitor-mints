@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mintscope — the mint radar for Robinhood Chain</title>
+<meta name="description" content="What's minting, when each phase opens, which key it needs, and where the floor is. Robinhood Chain, Ethereum, Ink and Base — on one screen that refreshes itself.">
+<meta property="og:title" content="Mintscope — the mint radar for Robinhood Chain">
+<meta property="og:description" content="GTD / FCFS / WL phases, keys, floors and hype on a single screen.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://mintscope.fun/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='25' fill='none' stroke='%235ad1c8' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='10.5' fill='none' stroke='%235ad1c8' stroke-width='4'/%3E%3Cline x1='32' y1='32' x2='52' y2='16' stroke='%235ad1c8' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0f10; --panel:#121a1b; --line:#243230;
+    --fg:#e7efee; --mut:#8fa1a0; --dim:#7c8f8d;
+    --accent:#5ad1c8; --accent-ink:#04211f; --gold:#e8b45c;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font-family:'IBM Plex Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent);text-decoration:none}
+  a:hover{color:#8fe3dc}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+  svg{display:block}
+
+  /* nav */
+  header{border-bottom:1px solid var(--line)}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:18px 0}
+  .lockup{display:flex;align-items:center;gap:11px;font-weight:600;letter-spacing:.005em}
+  .lockup .cur{color:var(--accent)}
+  .nav-lockup{font-size:22px}
+  .nav-lockup .mk{width:26px;height:26px;color:var(--accent);flex:none}
+  .navlinks{display:flex;gap:24px;font-size:13px;color:var(--mut)}
+  .navlinks a{color:var(--mut)} .navlinks a:hover{color:var(--fg)}
+
+  /* hero */
+  .hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
+  .hero .wrap{padding-top:76px;padding-bottom:72px;position:relative;z-index:1}
+  .radar{position:absolute;right:-200px;top:-160px;opacity:.16;pointer-events:none;z-index:0}
+  .hero-lockup{font-size:clamp(40px,7vw,68px);margin-bottom:30px}
+  .hero-lockup .mk{width:clamp(46px,8vw,78px);height:clamp(46px,8vw,78px);color:var(--accent);flex:none}
+  .kicker{font-size:12px;letter-spacing:.24em;color:var(--accent);margin-bottom:18px}
+  h1{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:clamp(28px,4.6vw,46px);line-height:1.14;margin:0 0 20px;letter-spacing:-.01em}
+  .lead{font-size:clamp(16px,2.1vw,19px);line-height:1.6;color:#b8c6c4;max-width:600px;margin:0 0 34px}
+  .cta{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  .btn{font-family:'IBM Plex Mono',monospace;border:1px solid var(--accent);color:var(--accent);padding:14px 28px;font-size:14px;font-weight:500;letter-spacing:.03em;transition:background .15s,color .15s}
+  .btn:hover{background:var(--accent);color:var(--accent-ink)}
+  .cta .note{font-size:13px;color:var(--dim)}
+
+  /* chains strip */
+  .strip{border-bottom:1px solid var(--line);background:var(--panel)}
+  .strip .wrap{display:flex;align-items:center;gap:24px;flex-wrap:wrap;padding:18px 28px;font-family:'IBM Plex Mono',monospace;font-size:13px}
+  .strip .lbl{color:var(--dim);font-family:'IBM Plex Sans',sans-serif}
+  .strip .sep{color:#33403f}
+  .strip .spacer{flex:1}
+
+  /* section */
+  section{padding:76px 0}
+  .h2{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.24em;color:var(--accent);margin:0 0 28px}
+  .shot{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);box-shadow:0 0 0 1px rgba(90,209,200,.08)}
+  .shot img{display:block;width:100%;height:auto}
+
+  .feats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:26px;margin-top:36px}
+  .feat h3{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;margin:0 0 8px}
+  .feat p{font-size:14px;line-height:1.6;color:var(--mut);margin:0}
+  .feat .ico{color:var(--accent);margin-bottom:12px}
+  .feat .ico svg{width:24px;height:24px}
+
+  /* footer */
+  footer{border-top:1px solid var(--line);padding:30px 0;font-size:12px;color:var(--dim)}
+  footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+
+  @media(max-width:720px){
+    .feats{grid-template-columns:1fr}
+    .navlinks{display:none}
+    .hero .wrap{padding-top:52px;padding-bottom:52px}
+    section{padding:52px 0}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <div class="lockup nav-lockup mono">
+        <svg class="mk" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="13" cy="13" r="10.5"/><circle cx="13" cy="13" r="4.3"/>
+          <line x1="13" y1="13" x2="21.6" y2="6.6" stroke-linecap="round"/>
+        </svg>
+        mintscope<span class="cur">_</span>
+      </div>
+      <div class="navlinks">
+        <a href="/app/">Radar</a>
+        <a href="/app/">Keys</a>
+        <a href="/app/">Floors</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <svg class="radar" width="820" height="820" viewBox="0 0 760 760">
+    <circle cx="380" cy="380" r="120" fill="none" stroke="#5ad1c8" stroke-width="1"/>
+    <circle cx="380" cy="380" r="230" fill="none" stroke="#5ad1c8" stroke-width="1"/>
+    <circle cx="380" cy="380" r="340" fill="none" stroke="#5ad1c8" stroke-width="1"/>
+    <line x1="380" y1="40" x2="380" y2="720" stroke="#5ad1c8" stroke-width="1"/>
+    <line x1="40" y1="380" x2="720" y2="380" stroke="#5ad1c8" stroke-width="1"/>
+    <path d="M380 380 L380 40 A340 340 0 0 1 680 300 Z" fill="#5ad1c8" opacity="0.12"/>
+  </svg>
+  <div class="wrap">
+    <div class="lockup hero-lockup mono">
+      <svg class="mk" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7">
+        <circle cx="13" cy="13" r="10.5"/><circle cx="13" cy="13" r="4.3"/>
+        <line x1="13" y1="13" x2="21.6" y2="6.6" stroke-linecap="round"/>
+      </svg>
+      mintscope<span class="cur">_</span>
+    </div>
+    <div class="kicker mono">// MINT RADAR · ROBINHOOD CHAIN</div>
+    <h1>The mint radar for<br>Robinhood Chain.</h1>
+    <p class="lead">What's minting, when each phase opens, which key it needs, and where the floor sits. One screen, refreshed for you every 10 minutes.</p>
+    <div class="cta">
+      <a class="btn" href="/app/">[ open the radar ]</a>
+      <span class="note">no wallet connection</span>
+    </div>
+  </div>
+</div>
+
+<div class="strip">
+  <div class="wrap">
+    <span class="lbl">Covers</span>
+    <span class="mono">Robinhood</span><span class="sep">·</span>
+    <span class="mono">Ethereum</span><span class="sep">·</span>
+    <span class="mono">Ink</span><span class="sep">·</span>
+    <span class="mono">Base</span>
+    <span class="spacer"></span>
+    <span class="lbl">floors via OpenSea</span>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <h2 class="h2">// WHAT YOU GET</h2>
+    <div class="shot">
+      <img src="shot.jpg" alt="The Mintscope radar: live mints, GTD/FCFS/WL phases, keys and floors per project">
+    </div>
+    <div class="feats">
+      <div class="feat">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l3-8 4 16 3-8h4"/></svg></div>
+        <h3>Live phases</h3>
+        <p>GTD, FCFS, WL, TEAM and PUBLIC for every mint, with open time and mints per wallet. The one that's open right now is marked.</p>
+      </div>
+      <div class="feat">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="5"/><path d="M11.6 11.4 21 2M16.5 6.5l3 3M13.5 9.5l3 3"/></svg></div>
+        <h3>Ranked keys</h3>
+        <p>The collections that grant whitelist, ranked by utility against their floor. Tick the ones you hold and filter the radar by them.</p>
+      </div>
+      <div class="feat">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6 6 4-4 8 8"/><path d="M21 15v6h-6"/></svg></div>
+        <h3>Floors &amp; hype</h3>
+        <p>Floor in ETH and USD via OpenSea, a history of drops, and each project's X followers and post activity from the feed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>mintscope.fun · public data · not financial advice</span>
+    <a href="/app/">Open the radar →</a>
+  </div>
+</footer>
+
+</body>
+</html>
