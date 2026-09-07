@@ -566,7 +566,7 @@ ${data.public ? '<meta http-equiv="refresh" content="600">' : ""}
 --accent:#5ad1c8;--accent-ink:#04211f;--accent-dim:rgba(90,209,200,.13)}
 @media(prefers-color-scheme:light){:root{--bg:#f3f6f5;--card:#fff;--fg:#12201f;--mut:#5c6b69;--line:#d7e2e0;
 --now:#12a150;--soon:#2f6fd0;--gold:#a9741c;--accent:#0d857b;--accent-ink:#fff;--accent-dim:rgba(13,133,123,.1)}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);
+*{box-sizing:border-box}html,body{max-width:100%;overflow-x:hidden}body{margin:0;background:var(--bg);color:var(--fg);
 font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 header{padding:12px 14px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:20;box-shadow:0 2px 0 var(--accent-dim)}
 .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px}
@@ -773,14 +773,19 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
 /* ---- móvil ---- */
 @media (max-width:640px){
   header{padding:10px 10px 9px}
+  .topbar{gap:8px}
+  h1{min-width:0;flex:1 1 auto}
+  .brand{font-size:19px;gap:8px;min-width:0;overflow:hidden}
+  .brand .mark{width:22px;height:22px}
+  .h1chain{display:none}
+  .tools{gap:4px;flex:none}
   #searchBtn{display:inline-flex}
   .searchbar{display:none;margin-top:12px}
   .searchbar.open{display:block}
-  .brand{font-size:22px}
-  .brand .mark{width:25px;height:25px}
+  .iconbtn{padding:6px 7px}
   .iconbtn .btn-lbl{display:none}
-  .tools{gap:5px}
-  .h1chain .chico{width:19px;height:19px}
+  .lang button{padding:6px 8px}
+  .freshline{margin-left:0}
   #helpModal{padding:0;align-items:stretch}
   .hm-box{border-radius:0;border:0;min-height:100%;padding:14px 14px 44px}
   .hm-x{position:fixed;top:8px;right:8px;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px;z-index:3}
@@ -808,6 +813,10 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
   td[data-label=""]::before,td:not([data-label])::before{display:none}
   td:first-child{font-size:16px;font-weight:600;border-bottom:1px solid var(--line);padding:10px 0 9px;margin-bottom:2px}
   td:first-child+td{border-top:0}
+  td>*{max-width:100%}
+  .phwrap{display:block;white-space:normal;margin:3px 0}
+  .phwrap .pill{white-space:normal;display:inline}
+  .phwhen{display:inline}
   tr.row-have{outline:2px solid color-mix(in srgb,var(--now) 45%,transparent)}
   tr.row-spot{outline:2px solid color-mix(in srgb,var(--gold) 60%,transparent)}
   .hm-box{padding:18px 16px}
