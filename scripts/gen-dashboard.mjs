@@ -1965,7 +1965,7 @@ function renderWallet(){
   tbl.innerHTML='<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_bought')+'</th><th>'+t('c_soldfloor')+'</th><th>'+t('c_pnl')+'</th><th>'+t('c_state')+'</th></tr></thead><tbody>'+
    (rows.map(p=>{
      const a=p.acquired, dp=p.disposed;
-     const mintCost0 = a && (a.type==='mint'||a.type==='gift') && !(a.priceEth>1e-9);   // mint gratis o regalo -> coste 0 real
+     const mintCost0 = a && (a.type==='mint'||a.type==='gift') && !(a.priceEth>1e-9) && !(a.priceUsd>1e-9);   // mint gratis o regalo -> coste 0 real
      const pnl = p.realizedEth!=null ? p.realizedEth : (p.status==='held' ? p.unrealizedEth : null);
      const pnlUsd = p.realizedUsd!=null ? p.realizedUsd : null;
      const pct = (a&&a.priceEth>0&&pnl!=null) ? Math.round(pnl/a.priceEth*100) : null;
@@ -2460,10 +2460,11 @@ function exportPnlCsv(){
   const rows=T.positions.map(p=>{
     const a=p.acquired||{}, d=p.disposed||{};
     const costEth=a.priceEth!=null?a.priceEth:'';
+    const costUsd=a.priceUsd!=null&&a.priceUsd>0 ? a.priceUsd : (costEth!==''?+(costEth*rate).toFixed(2):'');
     return [
       p.name, p.chain, p.tokenId, p.status,
       iso(a.ts), a.type||'',
-      costEth, costEth!==''?+(costEth*rate).toFixed(2):'',
+      costEth, costUsd,
       a.gasEth||'',
       iso(d.ts), d.type||'', d.priceEth!=null?d.priceEth:'',
       p.realizedEth!=null?p.realizedEth:'',

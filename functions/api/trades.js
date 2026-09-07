@@ -155,11 +155,14 @@ export async function onRequestPost({ request, env }) {
       const S = sentByTx.get(e.tx) || null;
       if (acq) {
         const isMint = e.from === ZERO;
-        let priceEth = 0, priceUsd = 0;
-        if (isMint) { if (S) priceEth = S.nativeEth; }
-        else { const o = payTotals(P, e.to, "out"); priceEth = o.eth; priceUsd = o.usd; if (S?.nativeEth) priceEth += S.nativeEth; }
+        // pago = tokens ERC-20 que la wallet manda en la tx + valor nativo de la tx.
+        // También para mints: hay colecciones que cobran el mint en USDG/USDC o en nativo.
+        const o = payTotals(P, e.to, "out");
+        let priceEth = o.eth, priceUsd = o.usd;
+        if (S?.nativeEth) priceEth += S.nativeEth;
         const gasEth = S ? S.gasEth : 0;
-        const costEth = priceEth + (priceUsd ? priceUsd / rate : 0) + gasEth;
+        const priceTotalEth = priceEth + (priceUsd ? priceUsd / rate : 0);  // precio real, SIN gas
+        const costEth = priceTotalEth + gasEth;                             // coste con gas -> P&L FIFO
         const paid = priceEth > 0 || priceUsd > 0;
         // ¿la tx parece una compra en un marketplace? (método fulfill/order/match…)
         const looksSale = SALE_METHODS.test(e.method || "");
@@ -167,20 +170,21 @@ export async function onRequestPost({ request, env }) {
         // Con pinta de venta pero sin pago decodificado -> coste DESCONOCIDO.
         const isGift = !isMint && !paid && !looksSale;
         const kind = isMint ? "mint" : paid ? "buy" : isGift ? "gift" : "transfer_in";
-        lots.push({ ts: e.ts, kind, costEth, gasEth, tx: e.tx,
+        lots.push({ ts: e.ts, kind, priceEth: round(priceTotalEth), priceUsd: round(priceUsd), costEth, gasEth, tx: e.tx,
           flags: isMint && !paid ? ["free_mint"] : isGift ? ["gift"] : (!isMint && !paid) ? ["cost_unknown"] : [] });
       } else if (dis) {
         const inc = payTotals(P, e.from, "in");
         const isSale = (inc.eth + inc.usd) > 0;
         const gasEth = S ? S.gasEth : 0;
-        const procEth = isSale ? (inc.eth + (inc.usd ? inc.usd / rate : 0)) - gasEth : null;
-        const lot = lots.shift() || { ts: null, kind: "unknown", costEth: null, gasEth: 0, flags: ["no_acq"] };
+        const grossEth = isSale ? inc.eth + (inc.usd ? inc.usd / rate : 0) : null;   // ingreso bruto
+        const procEth = grossEth != null ? grossEth - gasEth : null;                 // neto de gas -> realized
+        const lot = lots.shift() || { ts: null, kind: "unknown", priceEth: null, costEth: null, gasEth: 0, flags: ["no_acq"] };
         positions.push({
           chain, contract: info.contract, tokenId: info.tokenId,
           name: info.name ? `${info.name} #${info.tokenId}` : `#${info.tokenId}`,
           url: `https://opensea.io/assets/${OS_CHAIN[chain]}/${info.contract}/${info.tokenId}`,
-          acquired: lot.ts ? { ts: lot.ts, type: lot.kind, priceEth: lot.costEth, gasEth: lot.gasEth, tx: lot.tx } : null,
-          disposed: { ts: e.ts, type: isSale ? "sale" : "transfer_out", priceEth: isSale ? procEth : null, gasEth, tx: e.tx },
+          acquired: lot.ts ? { ts: lot.ts, type: lot.kind, priceEth: lot.priceEth, priceUsd: lot.priceUsd || null, gasEth: lot.gasEth, tx: lot.tx } : null,
+          disposed: { ts: e.ts, type: isSale ? "sale" : "transfer_out", priceEth: isSale ? round(grossEth) : null, gasEth, tx: e.tx },
           status: isSale ? "sold" : "moved_out",
           realizedEth: (isSale && lot.costEth != null) ? round(procEth - lot.costEth) : null,
           flags: [...new Set([...(lot.flags || []), ...(isSale ? [] : ["sold_elsewhere_or_gift"])])],
@@ -192,7 +196,7 @@ export async function onRequestPost({ request, env }) {
         chain, contract: info.contract, tokenId: info.tokenId,
         name: info.name ? `${info.name} #${info.tokenId}` : `#${info.tokenId}`,
         url: `https://opensea.io/assets/${OS_CHAIN[chain]}/${info.contract}/${info.tokenId}`,
-        acquired: { ts: lot.ts, type: lot.kind, priceEth: lot.costEth, gasEth: lot.gasEth, tx: lot.tx },
+        acquired: { ts: lot.ts, type: lot.kind, priceEth: lot.priceEth, priceUsd: lot.priceUsd || null, gasEth: lot.gasEth, tx: lot.tx },
         disposed: null, status: "held", realizedEth: null, flags: lot.flags || [],
       });
     }
