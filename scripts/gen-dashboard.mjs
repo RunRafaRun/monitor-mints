@@ -566,7 +566,7 @@ ${data.public ? '<meta http-equiv="refresh" content="600">' : ""}
 --accent:#5ad1c8;--accent-ink:#04211f;--accent-dim:rgba(90,209,200,.13)}
 @media(prefers-color-scheme:light){:root{--bg:#f3f6f5;--card:#fff;--fg:#12201f;--mut:#5c6b69;--line:#d7e2e0;
 --now:#12a150;--soon:#2f6fd0;--gold:#a9741c;--accent:#0d857b;--accent-ink:#fff;--accent-dim:rgba(13,133,123,.1)}}
-*{box-sizing:border-box}html,body{max-width:100%;overflow-x:hidden}body{margin:0;background:var(--bg);color:var(--fg);
+*{box-sizing:border-box}html,body{max-width:100%;overflow-x:hidden;overflow-anchor:none}body{margin:0;background:var(--bg);color:var(--fg);
 font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 header{padding:12px 14px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:20;box-shadow:0 2px 0 var(--accent-dim)}
 .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px}
@@ -975,6 +975,9 @@ ${data.public ? "" : `<section data-p="spots" hidden>
 </div>
 
 <script>
+// pull-to-refresh en móvil: que recargue arriba (con los filtros a la vista),
+// no en mitad de la tabla + sin "saltos" mientras las tablas se rellenan por JS
+try{ if('scrollRestoration' in history) history.scrollRestoration='manual'; }catch(e){}
 let D = ${J};
 const SERVED = ${served ? "true" : "false"};
 const ETHUSD = D.ethUsd || 2400;
@@ -2540,6 +2543,7 @@ document.getElementById('pnlCols')?.addEventListener('change',e=>{
 if(pnlAddr){ const el=document.getElementById('pnlAddr'); if(el) el.value=pnlAddr; }
 
 render();
+try{ window.scrollTo(0,0); }catch(e){}
 try{ if(!localStorage.getItem('mints_help_seen')) openHelp(); }catch(e){}
 renderWalletList();
 if(osJwt){ osMsg(L==='es'?'Sesión de OpenSea activa.':'OpenSea session active.'); osCheckElig(true); }
