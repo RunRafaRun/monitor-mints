@@ -638,6 +638,8 @@ padding:6px 13px;cursor:pointer;font-size:13px}
 .pnl-cols:not(:empty){margin-top:12px;display:flex;flex-direction:column;gap:10px}
 .pnl-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
 .pnl-bar .muted{font-size:12px}
+.pnl-full{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);cursor:pointer}
+.pnl-full input{flex:none}
 .pnl-chain{border:1px solid var(--line);border-radius:8px;padding:9px 11px}
 .pnl-ch-hd{font-size:11px;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin-bottom:7px;display:flex;align-items:center;gap:5px}
 .pnl-col{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:2px 0;cursor:pointer}
@@ -1280,7 +1282,8 @@ const STR = {
   note_keys:'wl_value = criterio editorial 0–10 (relación acceso/precio). util = 1·GTD + 0.6·FCFS + 0.4·WL sobre mints registrados. ce = util/floor (alto = infravalorada).',
   pnl_title:'Rentabilidad de tu wallet',pnl_read:'Leer wallet',pnl_analyze:'Analizar seleccionadas',
   pnl_all:'todas',pnl_access:'solo accesos',pnl_pick:'Marca las colecciones a analizar',
-  pnl_note:'Reconstruye compras/ventas/gas leyendo la cadena (Blockscout PRO), FIFO por NFT. P&L en ETH y $ al cambio de HOY (no histórico). Floor de las que aún tienes vía OpenSea. No mira rarezas. Resultado en caché 6 h. Dirección solo en este navegador.',
+  pnl_full:'incluir vendidos (historial completo)',
+  pnl_note:'Reconstruye compras/ventas/gas leyendo la cadena (Blockscout PRO), FIFO por NFT. P&L en ETH y $ al cambio de HOY (no histórico). Floor de las que aún tienes vía OpenSea. Las vendidas o traspasadas siguen apareciendo con su P&L realizado. No mira rarezas. Resultado en caché 6 h. Dirección solo en este navegador.',
   w_note_pub:'Reconstruido de la blockchain (Blockscout PRO): precio real de cada mint/compra/venta + gas, FIFO por NFT. P&L al cambio de HOY. Floor de OpenSea (muchas de Ink no cotizan → sin floor). Ventas fuera de un marketplace on-chain estándar salen como «movido».',
   wc_title:'¿En qué fases calificas?',wc_connect:'Conectar',wc_check:'Comprobar',
   wc_os_connect:'⚡ Conectar OpenSea',
@@ -1415,7 +1418,8 @@ const STR = {
   note_keys:'wl_value = editorial score 0–10 (access value per price). util = 1·GTD + 0.6·FCFS + 0.4·WL over logged mints. ce = util/floor (high = underpriced).',
   pnl_title:'Your wallet P&L',pnl_read:'Read wallet',pnl_analyze:'Analyze selected',
   pnl_all:'all',pnl_access:'access only',pnl_pick:'Tick the collections to analyze',
-  pnl_note:'Reconstructs buys/sells/gas by reading the chain (Blockscout PRO), FIFO per NFT. P&L in ETH and $ at TODAY\\'s rate (not historical). Floor for what you still hold via OpenSea. No rarity. Result cached 6 h. Address stays in this browser only.',
+  pnl_full:'include sold (full history)',
+  pnl_note:'Reconstructs buys/sells/gas by reading the chain (Blockscout PRO), FIFO per NFT. P&L in ETH and $ at TODAY\\'s rate (not historical). Floor for what you still hold via OpenSea. Sold or transferred-out NFTs still show with their realized P&L. No rarity. Result cached 6 h. Address stays in this browser only.',
   w_note_pub:'Reconstructed from the blockchain (Blockscout PRO): real price of every mint/buy/sell + gas, FIFO per NFT. P&L at TODAY\\'s rate. Floor from OpenSea (many Ink collections do not trade there → no floor). Sales outside a standard on-chain marketplace show as “moved”.',
   wc_title:'Which phases do you qualify for?',wc_connect:'Connect',wc_check:'Check',
   wc_os_connect:'⚡ Connect OpenSea',
@@ -2357,6 +2361,7 @@ function renderPnlCols(){
   let h='<div class="pnl-bar"><span class="muted">'+t('pnl_pick')+'</span>'+
     '<button class="chk" data-pnl="all">'+t('pnl_all')+'</button>'+
     '<button class="chk" data-pnl="access">'+t('pnl_access')+'</button>'+
+    '<label class="pnl-full"><input type="checkbox" id="pnlFull"> '+t('pnl_full')+'</label>'+
     '<button class="chk wc-go" id="pnlGo">'+t('pnl_analyze')+'</button></div>';
   for(const c of chains){
     h+='<div class="pnl-chain" data-cc="'+esc(c)+'"><label class="pnl-ch-hd"><input type="checkbox" class="pnl-ch-all" data-c="'+esc(c)+'">'+chainIco(c)+' '+esc(chainLabel(c)||c)+' <span class="muted">('+pnlHeld[c].length+')</span></label>';
@@ -2396,6 +2401,7 @@ async function pnlRead(){
 async function pnlAnalyze(){
   const boxes=[...document.querySelectorAll('#pnlCols input[type=checkbox]:checked')];
   if(!boxes.length){ pnlMsg(L==='es'?'No has marcado ninguna colección.':'No collections selected.',1); return; }
+  const full=!!document.getElementById('pnlFull')?.checked;
   const byChain={};
   for(const b of boxes){ (byChain[b.dataset.c]||(byChain[b.dataset.c]=[])).push(b.dataset.ct); }
   const label=pnlAddr.slice(0,6)+'…'+pnlAddr.slice(-4);
@@ -2403,7 +2409,9 @@ async function pnlAnalyze(){
   const all=[]; let rate=ETHUSD, trunc=false, err=false;
   for(const [chain,cols] of Object.entries(byChain)){
     try{
-      const r=await fetch('/api/trades',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address:pnlAddr,chain,collections:cols,ethUsd:ETHUSD})}).then(x=>x.json());
+      const body={address:pnlAddr,chain,ethUsd:ETHUSD};
+      if(!full) body.collections=cols;
+      const r=await fetch('/api/trades',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
       if(r.error){ err=true; continue; }
       rate=r.ethUsd||rate; trunc=trunc||r.truncated;
       for(const p of (r.positions||[])){ p.wallet=label; all.push(p); }
