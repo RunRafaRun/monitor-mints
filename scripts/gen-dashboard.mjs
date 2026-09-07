@@ -1900,7 +1900,7 @@ function renderWallet(){
   }
 
   // el resumen respeta el filtro de red y de wallet
-  const inCh=p=>(chainSel==='all'||p.chain===chainSel) && (wSel==='all'||p.wallet===wSel);
+  const inCh=p=>(D.public || chainSel==='all' || p.chain===chainSel) && (wSel==='all'||p.wallet===wSel);
   const P=T.positions.filter(inCh);
   const sold=P.filter(p=>p.status==='sold'), held=P.filter(p=>p.status==='held');
   const sm=(arr,f)=>arr.reduce((a,x)=>a+(f(x)||0),0);
@@ -2350,7 +2350,7 @@ function renderPnlCols(){
     '<button class="chk" data-pnl="access">'+t('pnl_access')+'</button>'+
     '<button class="chk wc-go" id="pnlGo">'+t('pnl_analyze')+'</button></div>';
   for(const c of chains){
-    h+='<div class="pnl-chain"><div class="pnl-ch-hd">'+chainIco(c)+' '+esc(chainLabel(c)||c)+'</div>';
+    h+='<div class="pnl-chain" data-cc="'+esc(c)+'"><label class="pnl-ch-hd"><input type="checkbox" class="pnl-ch-all" data-c="'+esc(c)+'">'+chainIco(c)+' '+esc(chainLabel(c)||c)+' <span class="muted">('+pnlHeld[c].length+')</span></label>';
     for(const col of pnlHeld[c]){
       const on = col._sel!==false && (col._sel===true || acc.has((col.slug||'').toLowerCase()));
       h+='<label class="pnl-col"><input type="checkbox" data-c="'+esc(c)+'" data-ct="'+esc(col.contract)+'"'+(on?' checked':'')+'> '+esc(col.name||col.slug||col.contract.slice(0,10))+'</label>';
@@ -2358,6 +2358,15 @@ function renderPnlCols(){
     h+='</div>';
   }
   el.innerHTML=h;
+  syncPnlChAll();
+}
+function syncPnlChAll(){
+  document.querySelectorAll('#pnlCols .pnl-chain').forEach(box=>{
+    const cbs=[...box.querySelectorAll('.pnl-col input')];
+    const on=cbs.filter(x=>x.checked).length;
+    const head=box.querySelector('.pnl-ch-all');
+    if(head){ head.checked = on>0 && on===cbs.length; head.indeterminate = on>0 && on<cbs.length; }
+  });
 }
 async function pnlRead(){
   const a=(document.getElementById('pnlAddr').value||'').trim().toLowerCase();
@@ -2408,13 +2417,21 @@ document.getElementById('pnlConnect')?.addEventListener('click',async()=>{
 document.getElementById('pnlCols')?.addEventListener('click',e=>{
   const b=e.target.closest('[data-pnl]');
   if(b){ const mode=b.dataset.pnl, acc=accessSlugs();
-    document.querySelectorAll('#pnlCols input[type=checkbox]').forEach(cb=>{
-      const box=[...document.querySelectorAll('#pnlCols .pnl-col')].find(x=>x.contains(cb));
+    document.querySelectorAll('#pnlCols .pnl-col input').forEach(cb=>{
       cb.checked = mode==='all' ? true : acc.has((pnlHeld[cb.dataset.c]||[]).find(x=>x.contract===cb.dataset.ct)?.slug?.toLowerCase()||'');
     });
+    syncPnlChAll();
     return;
   }
-  if(e.target.id==='pnlGo') pnlAnalyze();
+  if(e.target.id==='pnlGo'){ pnlAnalyze(); return; }
+});
+document.getElementById('pnlCols')?.addEventListener('change',e=>{
+  const all=e.target.closest('.pnl-ch-all');
+  if(all){
+    const box=all.closest('.pnl-chain');
+    box.querySelectorAll('.pnl-col input').forEach(cb=>cb.checked=all.checked);
+  }
+  syncPnlChAll();
 });
 if(pnlAddr){ const el=document.getElementById('pnlAddr'); if(el) el.value=pnlAddr; }
 
