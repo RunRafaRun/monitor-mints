@@ -15,6 +15,7 @@ const OS_CHAIN = { robinhood: "robinhood", ethereum: "ethereum", ink: "ink", bas
 const ZERO = "0x0000000000000000000000000000000000000000";
 const STABLE = /^(USDG|USDC|USDC\.E|USDT|USD.0|DAI|USDB|USDB\.E)$/i;
 const ETHLIKE = /^(W?ETH)$/i;
+const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
 const MAX_PAGES = 16;      // ~800 movimientos por lista
 const MAX_FLOOR = 18;
@@ -90,6 +91,7 @@ export async function onRequestPost({ request, env }) {
       ts: Date.parse(it.timestamp) || null,
       tx: it.transaction_hash,
       name: it.token?.name || null,
+      method: it.method || null,
       logIndex: it.log_index,
     })),
     bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-20" }, (it) => {
@@ -159,9 +161,11 @@ export async function onRequestPost({ request, env }) {
         const gasEth = S ? S.gasEth : 0;
         const costEth = priceEth + (priceUsd ? priceUsd / rate : 0) + gasEth;
         const paid = priceEth > 0 || priceUsd > 0;
-        // recibida sin pago Y la wallet NO firmó la tx ni movió tokens -> regalo/airdrop
-        // (coste 0 REAL). Si la wallet firmó pero no detectamos pago -> coste desconocido.
-        const isGift = !isMint && !paid && !S && !(P && P.length);
+        // ¿la tx parece una compra en un marketplace? (método fulfill/order/match…)
+        const looksSale = SALE_METHODS.test(e.method || "");
+        // recibida sin pago y SIN pinta de venta -> regalo/airdrop/claim (coste 0 REAL).
+        // Con pinta de venta pero sin pago decodificado -> coste DESCONOCIDO.
+        const isGift = !isMint && !paid && !looksSale;
         const kind = isMint ? "mint" : paid ? "buy" : isGift ? "gift" : "transfer_in";
         lots.push({ ts: e.ts, kind, costEth, gasEth, tx: e.tx,
           flags: isMint && !paid ? ["free_mint"] : isGift ? ["gift"] : (!isMint && !paid) ? ["cost_unknown"] : [] });
