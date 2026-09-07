@@ -641,6 +641,7 @@ padding:6px 13px;cursor:pointer;font-size:13px}
 .pnl-mode{display:flex;flex-wrap:wrap;gap:6px 16px;margin:8px 0 2px}
 .pnl-mode label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--fg);cursor:pointer}
 .pnl-mode input{flex:none}
+.pnl-prog{margin-top:8px;font-size:12.5px;font-family:ui-monospace,Menlo,monospace;color:var(--accent);letter-spacing:.02em}
 .pnl-chain{border:1px solid var(--line);border-radius:8px;padding:9px 11px}
 .pnl-ch-hd{font-size:11px;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin-bottom:7px;display:flex;align-items:center;gap:5px}
 .pnl-col{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:2px 0;cursor:pointer}
@@ -940,6 +941,7 @@ ${data.public ? "" : `<section data-p="spots" hidden>
     <div class="wcheck-in">
       <input id="pnlAddr" type="text" autocomplete="off" spellcheck="false" placeholder="0x…">
       <button id="pnlConnect" class="chk" data-k="wc_connect"></button>
+      <button id="pnlClear" class="chk" data-k="pnl_clear" hidden></button>
     </div>
     <div class="pnl-mode">
       <label><input type="radio" name="pnlMode" value="pick" checked> <span data-k="pnl_mode_pick"></span></label>
@@ -949,6 +951,7 @@ ${data.public ? "" : `<section data-p="spots" hidden>
       <button id="pnlRead" class="chk wc-go" data-k="pnl_read"></button>
       <button id="pnlGoFull" class="chk wc-go" data-k="pnl_analyze_full" hidden></button>
     </div>
+    <div id="pnlProg" class="pnl-prog" hidden></div>
     <div id="pnlCols" class="pnl-cols"></div>
     <div id="pnlMsg" class="wcheck-msg" hidden></div>
     <div class="wcheck-note" data-k="pnl_note"></div>
@@ -1293,7 +1296,8 @@ const STR = {
   h_keys:'Ranking de accesos — utilidad WL/GTD/FCFS frente al precio',
   note_keys:'wl_value = criterio editorial 0–10 (relación acceso/precio). util = 1·GTD + 0.6·FCFS + 0.4·WL sobre mints registrados. ce = util/floor (alto = infravalorada).',
   pnl_title:'Rentabilidad de tu wallet',pnl_read:'Ver colecciones',pnl_analyze:'Analizar seleccionadas',
-  pnl_analyze_full:'Analizar wallet entera',
+  pnl_analyze_full:'Analizar wallet entera',pnl_clear:'Limpiar',
+  pnl_changed:'Dirección cambiada — vuelve a analizar',
   pnl_mode_pick:'Solo las colecciones que elija',pnl_mode_full:'Todo el historial (incluye lo vendido)',
   pnl_all:'todas',pnl_access:'solo accesos',pnl_pick:'Marca las colecciones a analizar',
   pnl_note:'Reconstruye compras/ventas/gas leyendo la cadena (Blockscout PRO), FIFO por NFT. P&L en ETH y $ al cambio de HOY (no histórico). Floor de las que aún tienes vía OpenSea. Las vendidas o traspasadas siguen apareciendo con su P&L realizado. No mira rarezas. Resultado en caché 6 h. Dirección solo en este navegador.',
@@ -1431,7 +1435,8 @@ const STR = {
   h_keys:'Access ranking — WL/GTD/FCFS utility vs. price',
   note_keys:'wl_value = editorial score 0–10 (access value per price). util = 1·GTD + 0.6·FCFS + 0.4·WL over logged mints. ce = util/floor (high = underpriced).',
   pnl_title:'Your wallet P&L',pnl_read:'Load collections',pnl_analyze:'Analyze selected',
-  pnl_analyze_full:'Analyze whole wallet',
+  pnl_analyze_full:'Analyze whole wallet',pnl_clear:'Clear',
+  pnl_changed:'Address changed — analyze again',
   pnl_mode_pick:'Only collections I pick',pnl_mode_full:'Full history (includes sold)',
   pnl_all:'all',pnl_access:'access only',pnl_pick:'Tick the collections to analyze',
   pnl_note:'Reconstructs buys/sells/gas by reading the chain (Blockscout PRO), FIFO per NFT. P&L in ETH and $ at TODAY\\'s rate (not historical). Floor for what you still hold via OpenSea. Sold or transferred-out NFTs still show with their realized P&L. No rarity. Result cached 6 h. Address stays in this browser only.',
@@ -2390,6 +2395,16 @@ const PNL_CHAINS = ['robinhood','ethereum','ink'];
 let pnlAddr='', pnlHeld={};  // { chain: [{contract,slug,name}] }
 try{ const st=JSON.parse(localStorage.getItem('mints_pnl')||'null'); if(st){ pnlAddr=st.addr||''; if(st.trades) D.trades=st.trades; } }catch(e){}
 function pnlMsg(txt,err){ const m=document.getElementById('pnlMsg'); if(m){ m.hidden=!txt; m.className='wcheck-msg'+(err?' err':''); m.textContent=txt||''; } }
+function pnlProg(txt){ const p=document.getElementById('pnlProg'); if(p){ p.hidden=!txt; p.textContent=txt||''; } }
+function pnlSyncClear(){ const b=document.getElementById('pnlClear'); if(b) b.hidden = !(pnlAddr || (D.trades&&D.trades.positions&&D.trades.positions.length) || Object.keys(pnlHeld).length); }
+function pnlWipe(alsoAddr){
+  pnlHeld={}; D.trades=null;
+  try{ localStorage.removeItem('mints_pnl'); }catch(e){}
+  const c=document.getElementById('pnlCols'); if(c) c.innerHTML='';
+  if(alsoAddr){ pnlAddr=''; const el=document.getElementById('pnlAddr'); if(el) el.value=''; }
+  pnlMsg(''); pnlProg('');
+  render(); pnlSyncClear();
+}
 function accessSlugs(){ const bs=rankBySlug(); return new Set([...bs.keys()]); }
 function renderPnlCols(){
   const el=document.getElementById('pnlCols'); if(!el) return;
@@ -2422,7 +2437,8 @@ function syncPnlChAll(){
 async function pnlRead(){
   const a=(document.getElementById('pnlAddr').value||'').trim().toLowerCase();
   if(!/^0x[a-f0-9]{40}$/.test(a)){ pnlMsg(L==='es'?'Dirección no válida.':'Invalid address.',1); return; }
-  pnlAddr=a; pnlMsg(L==='es'?'Leyendo wallet…':'Reading wallet…');
+  if(a!==pnlAddr) pnlWipe();            // wallet nueva -> fuera lo anterior
+  pnlAddr=a; pnlSyncClear(); pnlMsg(L==='es'?'Leyendo wallet…':'Reading wallet…');
   try{
     const r=await fetch('/api/wallet?address='+a).then(x=>x.json());
     if(r.error) throw new Error(r.error);
@@ -2448,22 +2464,31 @@ async function pnlAnalyze(full){
   if(!Object.keys(byChain).length){ pnlMsg(L==='es'?'No has marcado ninguna colección.':'No collections selected.',1); return; }
   if(!/^0x[a-f0-9]{40}$/.test(pnlAddr||'')){ pnlMsg(L==='es'?'Pon una dirección válida.':'Enter a valid address.',1); return; }
   const label=pnlAddr.slice(0,6)+'…'+pnlAddr.slice(-4);
-  pnlMsg(L==='es'?'Analizando '+Object.keys(byChain).length+' red(es)… (puede tardar)':'Analyzing '+Object.keys(byChain).length+' chain(s)… (may take a bit)');
-  const all=[]; let rate=ETHUSD, trunc=false, err=false;
-  for(const [chain,cols] of Object.entries(byChain)){
+  const chList=Object.entries(byChain), N=chList.length;
+  const all=[]; let rate=ETHUSD, trunc=false; const failed=[];
+  pnlMsg(''); pnlSyncClear();
+  for(let i=0;i<N;i++){
+    const [chain,cols]=chList[i];
+    const cn=chainLabel(chain)||chain;
+    let secs=0; pnlProg('⏳ '+cn+' — '+(i+1)+'/'+N+' · '+(all.length?all.length+(L==='es'?' NFT':' NFTs')+' · ':'')+'0s');
+    const tick=setInterval(()=>{ secs++; pnlProg('⏳ '+cn+' — '+(i+1)+'/'+N+' · '+(all.length?all.length+(L==='es'?' NFT':' NFTs')+' · ':'')+secs+'s'); },1000);
     try{
       const body={address:pnlAddr,chain,ethUsd:ETHUSD};
       if(!full) body.collections=cols;
       const r=await fetch('/api/trades',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
-      if(r.error){ err=true; continue; }
-      rate=r.ethUsd||rate; trunc=trunc||r.truncated;
-      for(const p of (r.positions||[])){ p.wallet=label; all.push(p); }
-    }catch(e){ err=true; }
+      if(r.error){ failed.push(cn+(r.detail?' ('+r.detail+')':r.error?' ('+r.error+')':'')); }
+      else {
+        rate=r.ethUsd||rate; trunc=trunc||r.truncated;
+        for(const p of (r.positions||[])){ p.wallet=label; all.push(p); }
+      }
+    }catch(e){ failed.push(cn); }
+    clearInterval(tick);
   }
+  pnlProg('');
   D.trades={ ethUsd:rate, wallets:[{label}], positions:all, truncated:trunc };
   try{ localStorage.setItem('mints_pnl',JSON.stringify({addr:pnlAddr,trades:D.trades})); }catch(e){}
-  render();
-  pnlMsg('✓ '+all.length+(L==='es'?' NFT analizados':' NFTs analyzed')+(trunc?(L==='es'?' · wallet grande, puede faltar lo más antiguo':' · large wallet, oldest may be missing'):'')+(err?(L==='es'?' · alguna red falló':' · a chain failed'):''));
+  render(); pnlSyncClear();
+  pnlMsg('✓ '+all.length+(L==='es'?' NFT analizados':' NFTs analyzed')+(trunc?(L==='es'?' · wallet grande, puede faltar lo más antiguo':' · large wallet, oldest may be missing'):'')+(failed.length?(L==='es'?' · falló: ':' · failed: ')+failed.join(', '):''), failed.length&&!all.length?1:0);
 }
 function exportPnlCsv(){
   const T=D.trades; if(!T||!T.positions||!T.positions.length) return;
@@ -2509,8 +2534,16 @@ syncPnlMode();
 function pnlGrabAddr(){
   const a=(document.getElementById('pnlAddr').value||'').trim().toLowerCase();
   if(!/^0x[a-f0-9]{40}$/.test(a)){ pnlMsg(L==='es'?'Dirección no válida.':'Invalid address.',1); return false; }
-  pnlAddr=a; return true;
+  if(a!==pnlAddr) pnlWipe();
+  pnlAddr=a; pnlSyncClear(); return true;
 }
+document.getElementById('pnlClear')?.addEventListener('click',()=>pnlWipe(true));
+document.getElementById('pnlAddr')?.addEventListener('input',()=>{
+  const a=(document.getElementById('pnlAddr').value||'').trim().toLowerCase();
+  if(pnlAddr && a!==pnlAddr && ((D.trades&&D.trades.positions&&D.trades.positions.length)||Object.keys(pnlHeld).length)){
+    pnlWipe(); pnlMsg(t('pnl_changed'));
+  }
+});
 document.getElementById('pnlRead')?.addEventListener('click',pnlRead);
 document.getElementById('pnlGoFull')?.addEventListener('click',()=>{ if(pnlGrabAddr()) pnlAnalyze(true); });
 document.getElementById('pnlAddr')?.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); pnlMode()==='full' ? (pnlGrabAddr()&&pnlAnalyze(true)) : pnlRead(); } });
@@ -2541,6 +2574,7 @@ document.getElementById('pnlCols')?.addEventListener('change',e=>{
   syncPnlChAll();
 });
 if(pnlAddr){ const el=document.getElementById('pnlAddr'); if(el) el.value=pnlAddr; }
+pnlSyncClear();
 
 render();
 try{ window.scrollTo(0,0); }catch(e){}
