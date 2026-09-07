@@ -628,6 +628,13 @@ padding:6px 13px;cursor:pointer;font-size:13px}
 .wcheck-msg{margin-top:10px;font-size:12px;color:var(--mut)}
 .wcheck-msg.err{color:var(--warn)}
 .wcheck-note{margin-top:10px;font-size:11px;line-height:1.5;color:var(--dim,var(--mut))}
+.wcheck-in #wOsMsg{align-self:center;margin:0}
+.wcheck-adv{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.wcheck-adv summary{cursor:pointer;font-size:12px;color:var(--mut);list-style:none}
+.wcheck-adv summary::-webkit-details-marker{display:none}
+.wcheck-adv summary::before{content:"▸ ";color:var(--accent)}
+.wcheck-adv[open] summary::before{content:"▾ "}
+.wcheck-adv .wcheck-note{margin-top:8px}
 .iconbtn{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:6px 9px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
 .iconbtn:hover{border-color:var(--accent);color:var(--accent)}
 .lang{display:flex;gap:0;border:1px solid var(--line);border-radius:5px;overflow:hidden}
@@ -852,13 +859,21 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
   ${data.public ? `<div class="wcheck">
     <div class="wcheck-hd" data-k="wc_title"></div>
     <div class="wcheck-in">
-      <input id="wAddr" type="text" autocomplete="off" spellcheck="false" placeholder="0x…">
-      <button id="wConnect" class="chk" data-k="wc_connect"></button>
-      <button id="wCheck" class="chk wc-go" data-k="wc_check"></button>
+      <button id="wOsConnect" class="chk wc-go" data-k="wc_os_connect"></button>
+      <span id="wOsMsg" class="wcheck-msg"></span>
     </div>
-    <div id="wList" class="wcheck-list"></div>
-    <div id="wMsg" class="wcheck-msg" hidden></div>
     <div class="wcheck-note" data-k="wc_note"></div>
+    <details class="wcheck-adv">
+      <summary data-k="wc_adv"></summary>
+      <div class="wcheck-in" style="margin-top:9px">
+        <input id="wAddr" type="text" autocomplete="off" spellcheck="false" placeholder="0x…">
+        <button id="wConnect" class="chk" data-k="wc_connect"></button>
+        <button id="wCheck" class="chk" data-k="wc_check"></button>
+      </div>
+      <div id="wList" class="wcheck-list"></div>
+      <div id="wMsg" class="wcheck-msg" hidden></div>
+      <div class="wcheck-note" data-k="wc_adv_note"></div>
+    </details>
   </div>` : ""}
   <p class="note" data-k="note_keys"></p>
   <div class="scroll"><table id="tKeys"></table></div>
@@ -1224,8 +1239,11 @@ const STR = {
   note_elig:'El feed no trae los nombres de las colecciones elegibles para GTD/FCFS/WL: investígalos en X / web / OpenSea y regístralos con  node log-mint.mjs.',
   h_keys:'Ranking de accesos — utilidad WL/GTD/FCFS frente al precio',
   note_keys:'wl_value = criterio editorial 0–10 (relación acceso/precio). util = 1·GTD + 0.6·FCFS + 0.4·WL sobre mints registrados. ce = util/floor (alto = infravalorada).',
-  wc_title:'Comprueba tus wallets',wc_connect:'Conectar',wc_check:'Comprobar',
-  wc_note:'Lee de OpenSea qué colecciones tienes y marca las que dan acceso a WL/GTD/FCFS. Si estás literalmente en la lista firmada de un drop solo lo sabe OpenSea con la sesión de esa wallet (modo local). La dirección se guarda solo en este navegador.',
+  wc_title:'¿En qué fases calificas?',wc_connect:'Conectar',wc_check:'Comprobar',
+  wc_os_connect:'⚡ Conectar OpenSea',
+  wc_note:'Firmas un mensaje en tu wallet (personal_sign — NO es una transacción, no se toca la clave privada). Con eso OpenSea nos dice, fase por fase (GTD / FCFS / WL…) de cada mint del radar, si tu wallet está en la lista. El resultado sale en la columna Access del radar. El token dura ~1 h y no se guarda en ningún servidor.',
+  wc_adv:'Otra opción: solo ver qué colecciones tengo',
+  wc_adv_note:'Sin firmar: lee de OpenSea qué colecciones tiene la dirección y marca las que dan acceso. No dice si estás en la lista firmada de un drop concreto.',
   h_buy:'Prioridad de compra',
   h_floors:'Alertas de floor (±15 % / 7 días)',
   note_floors:'Se llena según  node fetch-floors.mjs  va acumulando histórico.',
@@ -1350,8 +1368,11 @@ const STR = {
   note_elig:'The feed does not include the eligible collection names for GTD/FCFS/WL: research them on X / site / OpenSea and log them with  node log-mint.mjs.',
   h_keys:'Access ranking — WL/GTD/FCFS utility vs. price',
   note_keys:'wl_value = editorial score 0–10 (access value per price). util = 1·GTD + 0.6·FCFS + 0.4·WL over logged mints. ce = util/floor (high = underpriced).',
-  wc_title:'Check your wallets',wc_connect:'Connect',wc_check:'Check',
-  wc_note:'Reads from OpenSea which collections you hold and flags the ones that grant WL/GTD/FCFS access. Whether you are literally on the signed list of a drop is something only OpenSea knows, using that wallet session (local mode). The address is stored only in this browser.',
+  wc_title:'Which phases do you qualify for?',wc_connect:'Connect',wc_check:'Check',
+  wc_os_connect:'⚡ Connect OpenSea',
+  wc_note:'You sign a message in your wallet (personal_sign — NOT a transaction, no private key involved). OpenSea then tells us, phase by phase (GTD / FCFS / WL…) for every mint in the radar, whether your wallet is on the list. Results show in the radar Access column. The token lasts ~1 h and is not stored on any server.',
+  wc_adv:'Or: just check which collections I hold',
+  wc_adv_note:'No signature: reads from OpenSea which collections the address holds and flags the access-granting ones. Does not tell you if you are on a specific drop signed list.',
   h_buy:'Buy priority',
   h_floors:'Floor alerts (±15% / 7 days)',
   note_floors:'Fills up as  node fetch-floors.mjs  accumulates history.',
@@ -2226,9 +2247,59 @@ document.getElementById('wConnect')?.addEventListener('click',async()=>{
 });
 document.getElementById('wList')?.addEventListener('click',e=>{ const b=e.target.closest('[data-wrm]'); if(b) removeWallet(b.dataset.wrm); });
 
+// ---- elegibilidad REAL contra OpenSea (SIWE: firmas un mensaje, no una tx) ----
+let osJwt=null, osAddr=null, osExp=0;
+try{ const st=JSON.parse(sessionStorage.getItem('mints_os')||'null'); if(st && st.exp>Date.now()+60000){ osJwt=st.jwt; osAddr=st.addr; osExp=st.exp; } }catch(e){}
+function osMsg(txt,err){ const m=document.getElementById('wOsMsg'); if(m){ m.className='wcheck-msg'+(err?' err':''); m.textContent=txt||''; } }
+function siweMessage(addr,nonce){
+  return 'opensea.io wants you to sign in with your Ethereum account:\\n'+addr+
+    '\\n\\nClick to sign in and accept the OpenSea Terms of Service (https://opensea.io/tos) and Privacy Policy (https://opensea.io/privacy).\\n\\n'+
+    'URI: https://opensea.io\\nVersion: 1\\nChain ID: 1\\nNonce: '+nonce+'\\nIssued At: '+new Date().toISOString();
+}
+async function osCheckElig(quiet){
+  if(!osJwt || osExp<Date.now()){ osJwt=null; return; }
+  const slugs=[...new Set((D.mints||[]).filter(m=>(m.status==='now'||m.status==='soon')&&m.slug).map(m=>m.slug))];
+  if(!slugs.length) return;
+  if(!quiet) osMsg(L==='es'?'Comprobando fases…':'Checking phases…');
+  try{
+    const r=await fetch('/api/os?op=elig',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jwt:osJwt,slugs})}).then(x=>x.json());
+    if(r.error) throw new Error(r.error);
+    const label=osAddr.slice(0,6)+'…'+osAddr.slice(-4);
+    let hits=0;
+    for(const m of (D.mints||[])){
+      const d=r.drops&&r.drops[m.slug];
+      if(d&&d.stages){ m.wlElig={wallet:label,stages:d.stages}; if(d.stages.some(s=>s.eligible===true&&s.k!=='PUBLIC')) hits++; }
+    }
+    render();
+    osMsg('✓ '+label+' — '+(L==='es'?'calificas en ':'you qualify in ')+hits+(L==='es'?' mint(s) del radar':' radar mint(s)')+(r.authError?(L==='es'?' · token caducado, reconecta':' · token expired, reconnect'):''));
+  }catch(e){ osMsg((L==='es'?'Error: ':'Error: ')+e.message,1); }
+}
+async function osConnect(){
+  if(!window.ethereum){ osMsg(L==='es'?'Necesitas una wallet en el navegador (MetaMask…).':'You need a browser wallet (MetaMask…).',1); return; }
+  try{
+    osMsg(L==='es'?'Conectando…':'Connecting…');
+    const accs=await window.ethereum.request({method:'eth_requestAccounts'});
+    const addr=(accs&&accs[0]||'').toLowerCase();
+    if(!addr) return;
+    const nr=await fetch('/api/os?op=nonce',{method:'POST'}).then(x=>x.json());
+    if(!nr.nonce) throw new Error(nr.error||'nonce');
+    const msg=siweMessage(addr,nr.nonce);
+    osMsg(L==='es'?'Firma el mensaje en tu wallet (no es una transacción)…':'Sign the message in your wallet (not a transaction)…');
+    const sig=await window.ethereum.request({method:'personal_sign',params:[msg,addr]});
+    osMsg(L==='es'?'Verificando con OpenSea…':'Verifying with OpenSea…');
+    const a=await fetch('/api/os?op=auth',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:msg,signature:sig})}).then(x=>x.json());
+    if(a.error) throw new Error(a.error+(a.detail?' — '+a.detail:''));
+    osJwt=a.jwt; osAddr=a.address||addr; osExp=Date.now()+(a.expiresIn||3600)*1000;
+    try{ sessionStorage.setItem('mints_os',JSON.stringify({jwt:osJwt,addr:osAddr,exp:osExp})); }catch(e){}
+    await osCheckElig();
+  }catch(e){ osMsg((L==='es'?'Error: ':'Error: ')+(e.message||e),1); }
+}
+document.getElementById('wOsConnect')?.addEventListener('click',osConnect);
+
 render();
 try{ if(!localStorage.getItem('mints_help_seen')) openHelp(); }catch(e){}
 renderWalletList();
+if(osJwt){ osMsg(L==='es'?'Sesión de OpenSea activa.':'OpenSea session active.'); osCheckElig(true); }
 renderAlertBanner();            // re-muestra avisos pendientes tras recargar
 if(SERVED){ fetchWlStatus(); setInterval(fetchWlStatus, 5*60000); }
 setInterval(render, 60000); // los contadores bajan solos
