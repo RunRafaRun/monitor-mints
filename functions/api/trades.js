@@ -18,7 +18,7 @@ const STABLE = /USD|DOLLAR|^DAI$|^GHO$|^PYUSD$/i;
 const ETHLIKE = /^(W?ETH|WETH\.E)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
-const CACHE_V = "6";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
+const CACHE_V = "7";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
 const MAX_PAGES = 16;      // ~800 movimientos por lista
 const MAX_FLOOR = 18;
 
@@ -67,17 +67,18 @@ async function handle({ request, env }) {
     try {
       const u = new URL(base + path);
       for (const [k, v] of Object.entries({ ...params, apikey: BS })) if (v != null) u.searchParams.set(k, v);
-      for (let t = 0; t < 5; t++) {
+      for (let t = 0; t < 3; t++) {
         if (subreq >= BUDGET) { truncated = true; return null; }
         subreq++;
+        const backoff = Math.min(500 * 2 ** t, 2500);
         let r;
         try { r = await fetch(u, { headers: { accept: "application/json" } }); }
-        catch { await sleep(800); continue; }
-        if (r.status === 429 || r.status === 402 || r.status >= 500) { await sleep(700 * 2 ** t); continue; }
+        catch { await sleep(backoff); continue; }
+        if (r.status === 429 || r.status === 402 || r.status >= 500) { await sleep(backoff); continue; }
         if (!r.ok) { apiErr++; return null; }
         const jr = await r.json().catch(() => null);
         // Blockscout PRO a veces responde 200 con {"error":...,"source":"upstream"}
-        if (jr && jr.error && jr.source === "upstream") { await sleep(700 * 2 ** t); continue; }
+        if (jr && jr.error && jr.source === "upstream") { await sleep(backoff); continue; }
         return jr;
       }
       apiErr++; return null;
@@ -102,23 +103,27 @@ async function handle({ request, env }) {
     const ck2 = new Request(`https://x/tcontracts?v=${CACHE_V}&a=${addr}&c=${chain}`, { method: "GET" });
     const h2 = await cache.match(ck2);
     if (h2) return h2;
-    const map = (it) => ({
-      contract: (it.token?.address_hash || it.token?.address || "").toLowerCase(),
-      name: it.token?.name || null,
-    });
-    const rows = [
-      ...await bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721" }, map, 20),
-      ...await bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-1155" }, map, 12),
-    ];
     const seen = new Map();
-    for (const it of rows) {
-      if (!it.contract) continue;
-      const e = seen.get(it.contract) || { contract: it.contract, name: null, count: 0 };
-      e.count++; if (!e.name && it.name) e.name = it.name;
-      seen.set(it.contract, e);
-    }
-    const contracts = [...seen.values()].sort((a, b) => b.count - a.count);
-    const r2 = j({ chain, contracts, truncated, rows: rows.length, subreq }, 200,
+    const add = (ct, name, n, held) => {
+      if (!ct) return;
+      const e = seen.get(ct) || { contract: ct, name: null, count: 0, held: false };
+      e.count += n || 0; if (!e.name && name) e.name = name; if (held) e.held = true;
+      seen.set(ct, e);
+    };
+    // 1) colecciones que la wallet tiene AHORA (1 fila por colección -> barato)
+    const [collA, collB] = await Promise.all([
+      bsList(`/addresses/${addr}/nft/collections`, { type: "ERC-721" },
+        (it) => ({ ct: (it.token?.address_hash || it.token?.address || "").toLowerCase(), name: it.token?.name || null, n: Number(it.amount) || (it.token_instances || []).length || 1 }), 8),
+      bsList(`/addresses/${addr}/nft/collections`, { type: "ERC-1155" },
+        (it) => ({ ct: (it.token?.address_hash || it.token?.address || "").toLowerCase(), name: it.token?.name || null, n: Number(it.amount) || 1 }), 4),
+    ]);
+    for (const x of [...collA, ...collB]) add(x.ct, x.name, x.n, true);
+    // 2) barrido corto de transferencias recientes -> colecciones ya vendidas/salidas
+    const tmap = (it) => ({ ct: (it.token?.address_hash || it.token?.address || "").toLowerCase(), name: it.token?.name || null });
+    const recent = await bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155" }, tmap, 6);
+    for (const x of recent) if (!seen.has(x.ct)) add(x.ct, x.name, 1, false);
+    const contracts = [...seen.values()].sort((a, b) => (b.held - a.held) || (b.count - a.count));
+    const r2 = j({ chain, contracts, truncated, subreq }, 200,
       { "cache-control": `public, max-age=${truncated || !contracts.length ? 120 : 3600}` });
     if (!truncated && contracts.length) await cache.put(ck2, r2.clone());
     return r2;
