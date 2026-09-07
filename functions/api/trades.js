@@ -18,14 +18,24 @@ const STABLE = /USD|DOLLAR|^DAI$|^GHO$|^PYUSD$/i;
 const ETHLIKE = /^(W?ETH|WETH\.E)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
-const CACHE_V = "3";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
+const CACHE_V = "4";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
 const MAX_PAGES = 16;      // ~800 movimientos por lista
 const MAX_FLOOR = 18;
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(ctx) {
+  try {
+    return await handle(ctx);
+  } catch (e) {
+    return j({ error: "server_error", detail: String((e && e.message) || e).slice(0, 200) }, 500);
+  }
+}
+
+async function handle({ request, env }) {
   const BS = env.BLOCKSCOUT_API_KEY;
   if (!BS) return j({ error: "not_configured" }, 503);
   const OS = env.OPENSEA_API_KEY || "";
+  const BUDGET = Number(env.TRADES_SUBREQ_BUDGET) || 40;   // tope de fetches por petición (Cloudflare free = 50; súbelo con env var si tienes plan de pago)
+  let subreq = 0;
 
   const { address, chain, collections, ethUsd: rateIn } = await request.json().catch(() => ({}));
   const addr = String(address || "").trim().toLowerCase();
@@ -52,11 +62,14 @@ export async function onRequestPost({ request, env }) {
   const acquire = () => new Promise((r) => { if (inFlight < 3) { inFlight++; r(); } else queue.push(r); });
   const release = () => { inFlight--; const n = queue.shift(); if (n) { inFlight++; setTimeout(n, 110); } };
   async function bs(path, params = {}) {
+    if (subreq >= BUDGET) { truncated = true; return null; }
     await acquire();
     try {
       const u = new URL(base + path);
       for (const [k, v] of Object.entries({ ...params, apikey: BS })) if (v != null) u.searchParams.set(k, v);
       for (let t = 0; t < 5; t++) {
+        if (subreq >= BUDGET) { truncated = true; return null; }
+        subreq++;
         let r;
         try { r = await fetch(u, { headers: { accept: "application/json" } }); }
         catch { await sleep(800); continue; }
@@ -224,9 +237,12 @@ export async function onRequestPost({ request, env }) {
     const OH = { accept: "application/json", "x-api-key": OS };
     const floors = {};
     for (const contract of top) {
+      if (subreq >= BUDGET - 1) { truncated = true; break; }
+      subreq++;
       const c = await fetch(`https://api.opensea.io/api/v2/chain/${OS_CHAIN[chain]}/contract/${contract}`, { headers: OH }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
       const slug = c?.collection;
       if (!slug) continue;
+      subreq++;
       const st = await fetch(`https://api.opensea.io/api/v2/collections/${slug}/stats`, { headers: OH }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
       const fp = st?.total?.floor_price;
       if (fp != null) floors[contract] = { floorEth: +fp, floorUsd: +(fp * rate).toFixed(2) };
