@@ -1,7 +1,18 @@
 name: build-dashboard
 
 # Regenera data/dashboard.html (modo público, sin datos personales) y lo publica
-# en GitHub Pages. Las claves van como "Secrets" del repo, nunca en el HTML.
+# en Cloudflare Pages. Las claves van como "Secrets" del repo, nunca en el HTML.
+#
+# Secrets necesarios (Settings -> Secrets and variables -> Actions):
+#   OPENSEA_API_KEY        clave de OpenSea (ya la tenías)
+#   WLMT_URL / WLMT_KEY    fuente WLMT opcional (ya las tenías)
+#   CLOUDFLARE_API_TOKEN   panel CF -> My Profile -> API Tokens ->
+#                          plantilla "Edit Cloudflare Workers" (o permiso
+#                          Account · Cloudflare Pages · Edit)
+#   CLOUDFLARE_ACCOUNT_ID  panel CF -> Workers & Pages -> Account ID (barra derecha)
+#
+# El proyecto de Pages ("monitor-mints") se crea una vez en el panel de Cloudflare
+# (o con `wrangler pages project create monitor-mints --production-branch=master`).
 
 on:
   push:
@@ -19,15 +30,13 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: deploy-monitor-mints
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,19 +56,12 @@ jobs:
 
       - name: Preparar carpeta de publicación
         run: |
-          mkdir -p public
-          cp data/dashboard.html public/index.html
+          mkdir -p site
+          cp data/dashboard.html site/index.html
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Desplegar en Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
         with:
-          path: public
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - id: deploy
-        uses: actions/deploy-pages@v4
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site --project-name=monitor-mints --branch=master --commit-dirty=true

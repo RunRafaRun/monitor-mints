@@ -14,3 +14,5 @@ data/portfolios/
 data/contract-slugs.json
 data/drops-meta.json
 data/floor-cache.json
+_site/
+site/
