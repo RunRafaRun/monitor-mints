@@ -1278,6 +1278,7 @@ const STR = {
   sched_os:'agenda oficial de OpenSea (SeaDrop) — sustituye a la del feed',
   all_chains:'Todas',
   note_elig:'El feed no trae los nombres de las colecciones elegibles para GTD/FCFS/WL: investígalos en X / web / OpenSea y regístralos con  node log-mint.mjs.',
+  note_elig_pub:'Las colecciones que dan GTD/FCFS/WL se añaden a mano y algunas pueden faltar. Usa «Conectar OpenSea» en la pestaña Access para comprobar tu propia wallet contra cada drop.',
   h_keys:'Ranking de accesos — utilidad WL/GTD/FCFS frente al precio',
   note_keys:'wl_value = criterio editorial 0–10 (relación acceso/precio). util = 1·GTD + 0.6·FCFS + 0.4·WL sobre mints registrados. ce = util/floor (alto = infravalorada).',
   pnl_title:'Rentabilidad de tu wallet',pnl_read:'Leer wallet',pnl_analyze:'Analizar seleccionadas',
@@ -1286,7 +1287,7 @@ const STR = {
   pnl_note:'Reconstruye compras/ventas/gas leyendo la cadena (Blockscout PRO), FIFO por NFT. P&L en ETH y $ al cambio de HOY (no histórico). Floor de las que aún tienes vía OpenSea. Las vendidas o traspasadas siguen apareciendo con su P&L realizado. No mira rarezas. Resultado en caché 6 h. Dirección solo en este navegador.',
   w_note_pub:'Reconstruido de la blockchain (Blockscout PRO): precio real de cada mint/compra/venta + gas, FIFO por NFT. P&L al cambio de HOY. Floor de OpenSea (muchas de Ink no cotizan → sin floor). Ventas fuera de un marketplace on-chain estándar salen como «movido».',
   wc_title:'¿En qué fases calificas?',wc_connect:'Conectar',wc_check:'Comprobar',
-  wc_os_connect:'⚡ Conectar OpenSea',
+  wc_os_connect:'⚡ Conectar OpenSea',wc_os_recheck:'⚡ Volver a comprobar fases',
   wc_note:'Firmas un mensaje en tu wallet (personal_sign — NO es una transacción, no se toca la clave privada). Con eso OpenSea nos dice, fase por fase (GTD / FCFS / WL…) de cada mint del radar, si tu wallet está en la lista. El resultado sale en la columna Access del radar. El token dura ~1 h y no se guarda en ningún servidor.',
   wc_adv:'Otra opción: solo ver qué colecciones tengo',
   wc_adv_note:'Sin firmar: lee de OpenSea qué colecciones tiene la dirección y marca las que dan acceso. No dice si estás en la lista firmada de un drop concreto.',
@@ -1414,6 +1415,7 @@ const STR = {
   sched_os:'official OpenSea drop schedule (SeaDrop) — overrides the feed',
   all_chains:'All',
   note_elig:'The feed does not include the eligible collection names for GTD/FCFS/WL: research them on X / site / OpenSea and log them with  node log-mint.mjs.',
+  note_elig_pub:'Collections that grant GTD/FCFS/WL access are added by hand and some may be missing. Use “Connect OpenSea” in the Access tab to check your own wallet against each drop.',
   h_keys:'Access ranking — WL/GTD/FCFS utility vs. price',
   note_keys:'wl_value = editorial score 0–10 (access value per price). util = 1·GTD + 0.6·FCFS + 0.4·WL over logged mints. ce = util/floor (high = underpriced).',
   pnl_title:'Your wallet P&L',pnl_read:'Read wallet',pnl_analyze:'Analyze selected',
@@ -1422,7 +1424,7 @@ const STR = {
   pnl_note:'Reconstructs buys/sells/gas by reading the chain (Blockscout PRO), FIFO per NFT. P&L in ETH and $ at TODAY\\'s rate (not historical). Floor for what you still hold via OpenSea. Sold or transferred-out NFTs still show with their realized P&L. No rarity. Result cached 6 h. Address stays in this browser only.',
   w_note_pub:'Reconstructed from the blockchain (Blockscout PRO): real price of every mint/buy/sell + gas, FIFO per NFT. P&L at TODAY\\'s rate. Floor from OpenSea (many Ink collections do not trade there → no floor). Sales outside a standard on-chain marketplace show as “moved”.',
   wc_title:'Which phases do you qualify for?',wc_connect:'Connect',wc_check:'Check',
-  wc_os_connect:'⚡ Connect OpenSea',
+  wc_os_connect:'⚡ Connect OpenSea',wc_os_recheck:'⚡ Re-check phases',
   wc_note:'You sign a message in your wallet (personal_sign — NOT a transaction, no private key involved). OpenSea then tells us, phase by phase (GTD / FCFS / WL…) for every mint in the radar, whether your wallet is on the list. Results show in the radar Access column. The token lasts ~1 h and is not stored on any server.',
   wc_adv:'Or: just check which collections I hold',
   wc_adv_note:'No signature: reads from OpenSea which collections the address holds and flags the access-granting ones. Does not tell you if you are on a specific drop signed list.',
@@ -2001,6 +2003,7 @@ function render(){
   document.querySelectorAll('[data-k]').forEach(el=>el.textContent = t(el.dataset.k));
   document.getElementById('q').placeholder = t('search_ph');
   { const le=document.getElementById('legend'); if(le) le.innerHTML = t('legend'); }
+  if(D.public){ const ne=document.querySelector('[data-k="note_elig"]'); if(ne) ne.textContent = t('note_elig_pub'); }
   document.querySelectorAll('#lang button').forEach(b=>b.classList.toggle('on',b.dataset.l===L));
 
   // selector de red (solo si hay más de una) — vive en el panel de filtros
@@ -2307,22 +2310,41 @@ function siweMessage(addr,nonce){
     '\\n\\nClick to sign in and accept the OpenSea Terms of Service (https://opensea.io/tos) and Privacy Policy (https://opensea.io/privacy).\\n\\n'+
     'URI: https://opensea.io\\nVersion: 1\\nChain ID: 1\\nNonce: '+nonce+'\\nIssued At: '+new Date().toISOString();
 }
+function osSyncBtn(){
+  const b=document.getElementById('wOsConnect'); if(!b) return;
+  const on = osJwt && osExp>Date.now();
+  b.dataset.k = on ? 'wc_os_recheck' : 'wc_os_connect';
+  b.textContent = t(b.dataset.k);
+}
 async function osCheckElig(quiet){
-  if(!osJwt || osExp<Date.now()){ osJwt=null; return; }
+  if(!osJwt || osExp<Date.now()){ osJwt=null; osSyncBtn(); return; }
   const slugs=[...new Set((D.mints||[]).filter(m=>(m.status==='now'||m.status==='soon')&&m.slug).map(m=>m.slug))];
-  if(!slugs.length) return;
+  if(!slugs.length){ osMsg(L==='es'?'No hay mints con drop en OpenSea ahora mismo.':'No mints with an OpenSea drop right now.'); return; }
   if(!quiet) osMsg(L==='es'?'Comprobando fases…':'Checking phases…');
   try{
     const r=await fetch('/api/os?op=elig',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jwt:osJwt,slugs})}).then(x=>x.json());
     if(r.error) throw new Error(r.error);
     const label=osAddr.slice(0,6)+'…'+osAddr.slice(-4);
-    let hits=0;
+    const hitList=[];
     for(const m of (D.mints||[])){
       const d=r.drops&&r.drops[m.slug];
-      if(d&&d.stages){ m.wlElig={wallet:label,stages:d.stages}; if(d.stages.some(s=>s.eligible===true&&s.k!=='PUBLIC')) hits++; }
+      if(!d||!d.stages) continue;
+      m.wlElig={wallet:label,stages:d.stages};
+      const yes=[...new Set(d.stages.filter(s=>s.eligible===true&&s.k!=='PUBLIC').map(s=>s.k))];
+      if(yes.length) hitList.push({name:m.name,chain:m.chain||'robinhood',phases:yes});
     }
-    render();
-    osMsg('✓ '+label+' — '+(L==='es'?'calificas en ':'you qualify in ')+hits+(L==='es'?' mint(s) del radar':' radar mint(s)')+(r.authError?(L==='es'?' · token caducado, reconecta':' · token expired, reconnect'):''));
+    // si alguna calificación cae fuera de la red seleccionada, pasa a "todas" para que se vea
+    if(chainSel!=='all' && hitList.some(h=>h.chain!==chainSel)){
+      chainSel='all'; try{ localStorage.setItem('mints_chain','all'); }catch(e){}
+    }
+    render(); osSyncBtn();
+    const authNote = r.authError ? (L==='es'?' · token caducado, reconecta':' · token expired, reconnect') : '';
+    if(hitList.length){
+      const parts=hitList.map(h=>h.name+' ('+(chainLabel(h.chain)||h.chain)+' · '+h.phases.join('/')+')');
+      osMsg('✓ '+label+' — '+(L==='es'?'calificas en: ':'you qualify in: ')+parts.join(', ')+authNote);
+    } else {
+      osMsg('✓ '+label+' — '+(L==='es'?'ninguna lista activa ahora mismo':'not on any active list right now')+authNote);
+    }
   }catch(e){ osMsg((L==='es'?'Error: ':'Error: ')+e.message,1); }
 }
 async function osConnect(){
@@ -2345,7 +2367,10 @@ async function osConnect(){
     await osCheckElig();
   }catch(e){ osMsg((L==='es'?'Error: ':'Error: ')+(e.message||e),1); }
 }
-document.getElementById('wOsConnect')?.addEventListener('click',osConnect);
+document.getElementById('wOsConnect')?.addEventListener('click',()=>{
+  (osJwt && osExp>Date.now()) ? osCheckElig() : osConnect();
+});
+osSyncBtn();
 
 // ---- Cartera / P&L online: lee la wallet -> eliges colecciones -> /api/trades ----
 const PNL_CHAINS = ['robinhood','ethereum','ink'];
