@@ -13,8 +13,9 @@
 const CHAIN_ID = { robinhood: 4663, ethereum: 1, ink: 57073, base: 8453 };
 const OS_CHAIN = { robinhood: "robinhood", ethereum: "ethereum", ink: "ink", base: "base" };
 const ZERO = "0x0000000000000000000000000000000000000000";
-const STABLE = /^(USDG|USDC|USDC\.E|USDT|USD.0|DAI|USDB|USDB\.E)$/i;
-const ETHLIKE = /^(W?ETH)$/i;
+// cualquier símbolo con "USD"/"DOLLAR" (USDG, USDC, USDC.E, USDT, USDB, USD.0, USDe…) o DAI/GHO/PYUSD -> lo tratamos como ~1 $
+const STABLE = /USD|DOLLAR|^DAI$|^GHO$|^PYUSD$/i;
+const ETHLIKE = /^(W?ETH|WETH\.E)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
 const MAX_PAGES = 16;      // ~800 movimientos por lista
@@ -68,21 +69,21 @@ export async function onRequestPost({ request, env }) {
       apiErr++; return null;
     } finally { release(); }
   }
-  async function bsList(path, baseParams, map) {
+  async function bsList(path, baseParams, map, maxPages = MAX_PAGES) {
     const out = [];
     let params = { ...baseParams };
-    for (let p = 0; p < MAX_PAGES; p++) {
+    for (let p = 0; p < maxPages; p++) {
       const jr = await bs(path, params);
       if (!jr) break;
       for (const it of jr.items || []) { const v = map(it); if (v) out.push(v); }
       if (!jr.next_page_params) break;
       params = jr.next_page_params;
-      if (p === MAX_PAGES - 1) truncated = true;
+      if (p === maxPages - 1) truncated = true;
     }
     return out;
   }
 
-  const [nft, erc20, sent, rateFetched] = await Promise.all([
+  const [nft, erc20, sent, nativeIn, rateFetched] = await Promise.all([
     bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155" }, (it) => ({
       contract: (it.token?.address_hash || it.token?.address || "").toLowerCase(),
       tokenId: it.total?.token_id ?? it.total?.id ?? null,
@@ -106,6 +107,14 @@ export async function onRequestPost({ request, env }) {
     bsList(`/addresses/${addr}/transactions`, { filter: "from" }, (it) => ({
       tx: it.hash, gasEth: (Number(it.fee?.value) || 0) / 1e18, nativeEth: (Number(it.value) || 0) / 1e18,
     })),
+    // valor nativo RECIBIDO por la wallet (los pagos de venta de un marketplace
+    // llegan como transacción interna, no como tx propia ni como ERC-20)
+    bsList(`/addresses/${addr}/internal-transactions`, { filter: "to" }, (it) => {
+      const to = (it.to?.hash || it.to || "").toLowerCase();
+      if (to !== addr) return null;
+      const v = (Number(it.value) || 0) / 1e18;
+      return v > 0 ? { tx: it.transaction_hash || it.tx_hash, eth: v } : null;
+    }, 6),
     rateIn > 100 ? Promise.resolve(rateIn) : ethUsd(),
   ]);
   const rate = rateFetched;
@@ -115,6 +124,8 @@ export async function onRequestPost({ request, env }) {
   const payByTx = new Map();
   for (const p of erc20) { if (!payByTx.has(p.tx)) payByTx.set(p.tx, []); payByTx.get(p.tx).push(p); }
   const sentByTx = new Map(sent.map((s) => [s.tx, s]));
+  const nativeInByTx = new Map();
+  for (const n of nativeIn) nativeInByTx.set(n.tx, (nativeInByTx.get(n.tx) || 0) + n.eth);
   const own = new Set([addr]);
 
   const seen = new Set();
@@ -174,9 +185,11 @@ export async function onRequestPost({ request, env }) {
           flags: isMint && !paid ? ["free_mint"] : isGift ? ["gift"] : (!isMint && !paid) ? ["cost_unknown"] : [] });
       } else if (dis) {
         const inc = payTotals(P, e.from, "in");
-        const isSale = (inc.eth + inc.usd) > 0;
+        const natIn = nativeInByTx.get(e.tx) || 0;               // ETH nativo recibido (pago del marketplace)
+        const incEth = inc.eth + natIn;
+        const isSale = (incEth + inc.usd) > 0;
         const gasEth = S ? S.gasEth : 0;
-        const grossEth = isSale ? inc.eth + (inc.usd ? inc.usd / rate : 0) : null;   // ingreso bruto
+        const grossEth = isSale ? incEth + (inc.usd ? inc.usd / rate : 0) : null;   // ingreso bruto
         const procEth = grossEth != null ? grossEth - gasEth : null;                 // neto de gas -> realized
         const lot = lots.shift() || { ts: null, kind: "unknown", priceEth: null, costEth: null, gasEth: 0, flags: ["no_acq"] };
         positions.push({
