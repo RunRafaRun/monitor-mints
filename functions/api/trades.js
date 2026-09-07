@@ -18,7 +18,7 @@ const STABLE = /USD|DOLLAR|^DAI$|^GHO$|^PYUSD$/i;
 const ETHLIKE = /^(W?ETH|WETH\.E)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
-const CACHE_V = "9";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
+const CACHE_V = "10";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
 const MAX_PAGES = 16;      // ~800 movimientos por lista
 const MAX_FLOOR = 18;
 
@@ -89,7 +89,7 @@ async function handle({ request, env }) {
     let params = { ...baseParams };
     for (let p = 0; p < maxPages; p++) {
       const jr = await bs(path, params);
-      if (!jr) { if (p > 0) truncated = true; break; }   // corte a media paginación -> resultado incompleto
+      if (!jr) { truncated = true; break; }   // corte (error/tope) -> resultado incompleto
       for (const it of jr.items || []) { const v = map(it); if (v) out.push(v); }
       if (!jr.next_page_params) break;
       params = jr.next_page_params;
