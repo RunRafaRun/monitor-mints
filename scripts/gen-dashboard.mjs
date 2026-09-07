@@ -799,11 +799,15 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
   .gloss{grid-template-columns:20px 1fr;gap:8px 10px}
 }
 
-/* ---- móvil: cada fila pasa a ficha ---- */
+/* ---- pantallas pequeñas (ambas orientaciones) ---- */
 @media (max-width:860px){
   h2{margin:16px 10px 6px}
   .note{margin:8px 10px}
   .wrap{padding-bottom:40px}
+  .hm-box{padding:18px 16px}
+}
+/* ---- móvil vertical: cada fila pasa a ficha ---- */
+@media (max-width:860px) and (orientation:portrait){
   .scroll{overflow:visible}
   table{width:auto;margin:0 10px;font-size:13px}
   thead{display:none}
@@ -826,7 +830,12 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
   .phwhen{display:inline}
   tr.row-have{outline:2px solid color-mix(in srgb,var(--now) 45%,transparent)}
   tr.row-spot{outline:2px solid color-mix(in srgb,var(--gold) 60%,transparent)}
-  .hm-box{padding:18px 16px}
+}
+/* ---- móvil horizontal: tabla real con scroll lateral ---- */
+@media (max-width:1024px) and (orientation:landscape){
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{font-size:12px}
+  th,td{padding:6px 8px}
 }
 </style></head><body>
 <div class="wrap">
@@ -939,6 +948,7 @@ ${data.public ? "" : `<section data-p="spots" hidden>
   <div class="filtrow" id="wFilters" style="margin:6px 14px 0">
     <label class="chk"><input type="checkbox" id="wRealOnly"> <span data-k="w_real_only"></span></label>
     <label class="chk"><input type="checkbox" id="wHeldHide"> <span data-k="w_hide_held"></span></label>
+    <button id="wExport" class="chk" style="border-radius:5px"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span data-k="w_export"></span></button>
   </div>
   <div class="scroll"><table id="tWallet"></table></div>
   <p class="note" id="wNote"></p>
@@ -1256,6 +1266,7 @@ const STR = {
   w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',w_gas:'Gas total',w_net_sell:'neto si vendes',w_mkt:'~mercado',w_mkt_tip:'Sin floor de OpenSea: mínimo de las últimas ventas on-chain de la colección',w_exit_gas:'floor menos el gas estimado para vender (mediana del gas que pagaste al entrar en esa red)',
   w_none:'Sin datos de cartera. Ejecuta  node scripts/fetch-trades.mjs  (necesita wallets.json + OPENSEA_API_KEY).',
   w_none_pub:'Conecta o pega una dirección arriba y pulsa «Leer wallet».',
+  w_export:'Exportar CSV',
   w_truncated:'⚠️ wallet muy grande: puede faltar lo más antiguo.',w_more:'…y {n} más (filtra por wallet o usa "ocultar lo que sigo teniendo").',
   c_bought:'Comprado',c_soldfloor:'Vendido / Floor',c_pnl:'P&L',c_state:'Estado',
   st_held:'en cartera',st_sold:'vendido',st_moved:'movido fuera',
@@ -1390,6 +1401,7 @@ const STR = {
   w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',w_gas:'Total gas',w_net_sell:'net if you sell',w_mkt:'~market',w_mkt_tip:'No OpenSea floor: lowest of the collection last on-chain sales',w_exit_gas:'floor minus estimated gas to sell (median of the gas you paid to enter on that chain)',
   w_none:'No portfolio data. Run  node scripts/fetch-trades.mjs  (needs wallets.json + OPENSEA_API_KEY).',
   w_none_pub:'Connect or paste an address above and hit “Read wallet”.',
+  w_export:'Export CSV',
   w_truncated:'⚠️ very large wallet: the oldest items may be missing.',w_more:'…and {n} more (filter by wallet or use "hide what I still hold").',
   c_bought:'Bought',c_soldfloor:'Sold / Floor',c_pnl:'P&L',c_state:'Status',
   st_held:'held',st_sold:'sold',st_moved:'moved out',
@@ -2405,6 +2417,37 @@ async function pnlAnalyze(){
   render();
   pnlMsg('✓ '+all.length+(L==='es'?' NFT analizados':' NFTs analyzed')+(trunc?(L==='es'?' · wallet grande, puede faltar lo más antiguo':' · large wallet, oldest may be missing'):'')+(err?(L==='es'?' · alguna red falló':' · a chain failed'):''));
 }
+function exportPnlCsv(){
+  const T=D.trades; if(!T||!T.positions||!T.positions.length) return;
+  const rate=T.ethUsd||ETHUSD||2500;
+  const cols=['name','chain','token_id','status','acquired_date','acquired_type','cost_eth','cost_usd','gas_in_eth','disposed_date','disposed_type','proceeds_eth','realized_eth','unrealized_eth','floor_eth','floor_usd','flags','acquired_tx','disposed_tx'];
+  const iso=ms=>ms?new Date(ms<1e12?ms*1000:ms).toISOString().slice(0,10):'';
+  const q=v=>{ v=(v==null?'':String(v)); return /[",\\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const rows=T.positions.map(p=>{
+    const a=p.acquired||{}, d=p.disposed||{};
+    const costEth=a.priceEth!=null?a.priceEth:'';
+    return [
+      p.name, p.chain, p.tokenId, p.status,
+      iso(a.ts), a.type||'',
+      costEth, costEth!==''?+(costEth*rate).toFixed(2):'',
+      a.gasEth||'',
+      iso(d.ts), d.type||'', d.priceEth!=null?d.priceEth:'',
+      p.realizedEth!=null?p.realizedEth:'',
+      p.unrealizedEth!=null?p.unrealizedEth:'',
+      p.floorEth!=null?p.floorEth:'', p.floorUsd!=null?p.floorUsd:'',
+      (p.flags||[]).join(' '),
+      a.tx||'', d.tx||'',
+    ].map(q).join(',');
+  });
+  const csv='\\ufeff'+cols.join(',')+'\\n'+rows.join('\\n')+'\\n';
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const el=document.createElement('a');
+  el.href=url; el.download='mintscope-portfolio-'+(pnlAddr?pnlAddr.slice(0,10):'wallet')+'-'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(el); el.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); el.remove(); }, 4000);
+}
+document.getElementById('wExport')?.addEventListener('click',exportPnlCsv);
 document.getElementById('pnlRead')?.addEventListener('click',pnlRead);
 document.getElementById('pnlAddr')?.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); pnlRead(); } });
 document.getElementById('pnlConnect')?.addEventListener('click',async()=>{
