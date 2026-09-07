@@ -110,8 +110,7 @@ async function handle({ request, env }) {
       e.count += n || 0; if (!e.name && name) e.name = name; if (held) e.held = true;
       seen.set(ct, e);
     };
-    // 1) colecciones que la wallet tiene AHORA (1 fila por colección -> barato).
-    //    /tokens es más ligero que /nft/collections en wallets enormes; se usan los dos.
+    // 1) colecciones que la wallet tiene AHORA (1 fila por colección -> barato)
     const cmap = (it) => ({ ct: (it.token?.address_hash || it.token?.address || "").toLowerCase(), name: it.token?.name || null, n: Number(it.amount || it.value) || (it.token_instances || []).length || 1 });
     const [collA, collB] = await Promise.all([
       bsList(`/addresses/${addr}/nft/collections`, { type: "ERC-721" }, cmap, 5),
