@@ -476,6 +476,7 @@ export async function buildData({ pub = false } = {}) {
       util: demonstratedUtility(c), ce: costEfficiency(c), owned: !!c.owned,
       wallets: walletsByColl.get(norm(c.name)) || [],
       notes: c.notes || "",
+      notesEn: c.notes_en || "",
       opensea: slug ? `https://opensea.io/collection/${slug}` : null,
     };
     })
@@ -637,10 +638,11 @@ padding:6px 13px;cursor:pointer;font-size:13px}
 .wallet-row .wl-nick{width:96px;flex:none;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:3px 6px;font-size:12px}
 .wallet-row .wl-addr{font-family:ui-monospace,Menlo,monospace;color:var(--mut)}
 .wallet-row .wl-n{margin-left:auto;color:var(--accent);white-space:nowrap;font-variant-numeric:tabular-nums}
-.wallet-row .wl-ph{display:inline-flex;align-items:center;gap:3px;font-size:10px;white-space:nowrap;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--mut)}
+.wallet-row .wl-ph{display:inline-flex;align-items:center;gap:3px;font-size:10px;white-space:nowrap;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--mut);cursor:pointer}
+.wallet-row .wl-ph:hover{border-color:var(--accent);color:var(--accent)}
 .wallet-row .wl-ph .ico{width:1em;height:1em}
 .wallet-row .wl-ph.ok{color:var(--now);border-color:color-mix(in srgb,var(--now) 45%,var(--line))}
-.wallet-row .wl-ph.dim{opacity:.6;border-style:dashed}
+.wallet-row .wl-ph.dim{opacity:.7;border-style:dashed}
 .wallet-row .wl-x{background:transparent;border:0;color:var(--mut);cursor:pointer;padding:0 2px;display:inline-flex;flex:none}
 .wallet-row .wl-x:hover{color:var(--warn)}
 .pnl-cols:not(:empty){margin-top:12px;display:flex;flex-direction:column;gap:10px}
@@ -1375,7 +1377,7 @@ const STR = {
   wl_mine:'Mis wallets',wl_add:'Añadir',wl_empty:'Aún no has añadido ninguna. Pega una o varias direcciones (separadas por comas o espacios).',
   wl_nick_ph:'apodo',
   wl_ph_in:'en fases',wl_ph_no:'sin fases',wl_ph_todo:'fases sin comprobar',wl_ph_old:'viejo',
-  wl_ph_tip:'Fases firmadas (GTD/FCFS/WL) en las que está esta wallet. Conéctala con «Conectar OpenSea» para comprobarlo (una firma por wallet).',
+  wl_ph_tip:'Fases firmadas (GTD/FCFS/WL) en las que está esta wallet. Pulsa aquí para comprobarla: pon esta wallet como activa en tu extensión y firma (no es una tx).',
   h_buy:'Prioridad de compra',
   h_floors:'Alertas de floor (±15 % / 7 días)',
   note_floors:'Se llena según  node fetch-floors.mjs  va acumulando histórico.',
@@ -1599,6 +1601,7 @@ const t = k => (STR[L][k] ?? k);
 let chainSel = localStorage.getItem('mints_chain') || 'robinhood';
 const chainLabel = id => { const c=(D.chains||[]).find(x=>x.id===(id||'robinhood')); return c?c.label:null; };
 const chainPill = id => { if((D.chains||[]).length<2) return ''; const g=chainIco(id); const l=esc(chainLabel(id)||''); return g?'<span class="chpill" title="'+l+'">'+g+'<b class="chpill-t">'+l+'</b></span> ':''; };
+const noteOf = c => (L==='en' && c && c.notesEn) ? c.notesEn : (c && c.notes) || '';   // nota bilingüe
 
 // --- X-style icons (line style, similar to x.com) ---
 const IC = {
@@ -2217,7 +2220,7 @@ function render(){
     cell(t('c_ev'), c.gtd+'/'+c.fcfs+'/'+c.wl, 'num')+
     cell('util', c.util.toFixed(1), 'num')+
     cell('ce', (c.ce==null?'—':Math.round(c.ce)), 'num')+
-    cell(t('c_note'), esc(c.notes), 'muted')+
+    cell(t('c_note'), esc(noteOf(c)), 'muted')+
    '</tr>';}).join('')+'</tbody>';
 
   const order=['🥇','🥈','💎','👑'];
@@ -2230,7 +2233,7 @@ function render(){
     cell(t('c_prio'), prioCell(c.priority))+
     cell(t('c_coll'), '<div class="pjhead">'+chainPill(c.chain)+'<span class="pjn">'+(own?'<span class="owned">'+ico('check')+' </span>':'')+'<b'+(own?' style="opacity:.55"':'')+'>'+esc(c.name)+'</b>'+(own?' <span class="v2">'+t('have_key')+'</span>':'')+osA(c.opensea)+'</span></div>')+
     cell(t('c_floor'), money(c.floorEth), 'num')+
-    cell(t('c_wl'), (c.wlValue??'—'), 'num')+cell(t('c_note'), esc(c.notes), 'muted')+'</tr>';}).join('')+'</tbody>';
+    cell(t('c_wl'), (c.wlValue??'—'), 'num')+cell(t('c_note'), esc(noteOf(c)), 'muted')+'</tr>';}).join('')+'</tbody>';
 
   document.getElementById('tFloors').innerHTML =
    '<thead><tr><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_before')+'</th><th>'+t('c_after')+'</th><th>Δ</th></tr></thead><tbody>'+
@@ -2532,7 +2535,11 @@ document.getElementById('wConnect')?.addEventListener('click',async()=>{
   if(!window.ethereum){ wMsg(L==='es'?'No hay wallet en el navegador — pega la dirección.':'No browser wallet — paste the address.',1); return; }
   try{ const acc = await window.ethereum.request({method:'eth_requestAccounts'}); if(acc&&acc[0]) addWallets(acc[0]); }catch(e){}
 });
-document.getElementById('wList')?.addEventListener('click',e=>{ const b=e.target.closest('[data-wrm]'); if(b) removeWallet(b.dataset.wrm); });
+document.getElementById('wList')?.addEventListener('click',e=>{
+  const b=e.target.closest('[data-wrm]'); if(b){ removeWallet(b.dataset.wrm); return; }
+  const ph=e.target.closest('.wl-ph');
+  if(ph){ const a=ph.closest('.wallet-row')?.dataset.a; if(a) osConnect(a); }   // comprobar fases de ESA wallet
+});
 document.getElementById('wList')?.addEventListener('input',e=>{
   const inp=e.target.closest('.wl-nick'); if(!inp) return;
   const a=inp.closest('.wallet-row')?.dataset.a; if(!a) return;
@@ -2594,13 +2601,19 @@ async function osCheckElig(quiet){
     }
   }catch(e){ osMsg((L==='es'?'Error: ':'Error: ')+e.message,1); }
 }
-async function osConnect(){
+async function osConnect(want){
   if(!window.ethereum){ osMsg(L==='es'?'Necesitas una wallet en el navegador (MetaMask…).':'You need a browser wallet (MetaMask…).',1); return; }
+  want=(want||'').toLowerCase();
   try{
     osMsg(L==='es'?'Conectando…':'Connecting…');
     const accs=await window.ethereum.request({method:'eth_requestAccounts'});
     const addr=(accs&&accs[0]||'').toLowerCase();
     if(!addr) return;
+    if(want && addr!==want){
+      const wn=walletLabels[want]||shortAddr(want);
+      osMsg((L==='es'?'Tu extensión está en '+shortAddr(addr)+'. Cambia a '+wn+' y vuelve a pulsar.':'Your extension is on '+shortAddr(addr)+'. Switch to '+wn+' and click again.'),1);
+      return;
+    }
     const nr=await fetch('/api/os?op=nonce',{method:'POST'}).then(x=>x.json());
     if(!nr.nonce) throw new Error(nr.error||'nonce');
     const msg=siweMessage(addr,nr.nonce);

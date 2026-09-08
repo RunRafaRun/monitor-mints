@@ -35,7 +35,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Probablemente la llave mas potente del ecosistema. Terrible relacion WL/$."
+      "notes": "Probablemente la llave mas potente del ecosistema. Terrible relacion WL/$.",
+      "notes_en": "Probably the ecosystem's most powerful key. Terrible WL/$ ratio."
     },
     {
       "name": "QUOTRONS",
@@ -50,7 +51,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "⚠️ Verificar contrato/version correcta antes de valorar o comprar."
+      "notes": "⚠️ Verificar contrato/version correcta antes de valorar o comprar.",
+      "notes_en": "⚠️ Verify the correct contract/version before valuing or buying."
     },
     {
       "name": "Chain Mancers",
@@ -67,7 +69,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Top absoluto como llave, pobre valor si solo se quiere para WL."
+      "notes": "Top absoluto como llave, pobre valor si solo se quiere para WL.",
+      "notes_en": "Absolute top as a key, poor value if you only want it for WL."
     },
     {
       "name": "Cash Cats",
@@ -82,7 +85,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Una de las mejores llaves del ecosistema. Mercado muy activo, floor variable."
+      "notes": "Una de las mejores llaves del ecosistema. Mercado muy activo, floor variable.",
+      "notes_en": "One of the ecosystem's best keys. Very active market, variable floor."
     },
     {
       "name": "Nakamigos",
@@ -97,7 +101,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Coleccion de Ethereum, cara. Muy potente como WL cross-chain."
+      "notes": "Coleccion de Ethereum, cara. Muy potente como WL cross-chain.",
+      "notes_en": "Ethereum collection, pricey. Very strong as a cross-chain WL."
     },
     {
       "name": "Good Vibes Club",
@@ -114,7 +119,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Llave fuerte cross-ecosistema."
+      "notes": "Llave fuerte cross-ecosistema.",
+      "notes_en": "Strong cross-ecosystem key."
     },
     {
       "name": "OnChainHoodies",
@@ -131,7 +137,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "De los nombres que mas se repite en requisitos de WL."
+      "notes": "De los nombres que mas se repite en requisitos de WL.",
+      "notes_en": "One of the names that shows up most in WL requirements."
     },
     {
       "name": "pyopyopyopyo",
@@ -148,7 +155,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Muy aceptada como llave, ya algo cara."
+      "notes": "Muy aceptada como llave, ya algo cara.",
+      "notes_en": "Widely accepted as a key, already a bit pricey."
     },
     {
       "name": "Stackers",
@@ -163,7 +171,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Excelente llave, el precio ya pesa."
+      "notes": "Excelente llave, el precio ya pesa.",
+      "notes_en": "Excellent key, the price is now a factor."
     },
     {
       "name": "H00dle",
@@ -183,7 +192,8 @@
       "notes": "Relacion utilidad/coste excepcional. Compra prioritaria.",
       "owned_wallets": [
         "Principal"
-      ]
+      ],
+      "notes_en": "Exceptional utility/cost ratio. Priority buy."
     },
     {
       "name": "Gremlin Cartel",
@@ -200,7 +210,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Relacion coste/WL excepcional. Compra prioritaria."
+      "notes": "Relacion coste/WL excepcional. Compra prioritaria.",
+      "notes_en": "Exceptional cost/WL ratio. Priority buy."
     },
     {
       "name": "Robinhood Kitties",
@@ -218,7 +229,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Nucleo habitual de WLs. Compra prioritaria."
+      "notes": "Nucleo habitual de WLs. Compra prioritaria.",
+      "notes_en": "Regular core of WLs. Priority buy."
     },
     {
       "name": "Broker Punks",
@@ -235,7 +247,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Aparece en WLs importantes. Excelente valor."
+      "notes": "Aparece en WLs importantes. Excelente valor.",
+      "notes_en": "Shows up in important WLs. Excellent value."
     },
     {
       "name": "MonkeyHood",
@@ -250,7 +263,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Se repite bastante en requisitos."
+      "notes": "Se repite bastante en requisitos.",
+      "notes_en": "Comes up fairly often in requirements."
     },
     {
       "name": "PitBoys",
@@ -267,7 +281,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Muy reconocido, aparece repetidamente."
+      "notes": "Muy reconocido, aparece repetidamente.",
+      "notes_en": "Well recognized, appears repeatedly."
     },
     {
       "name": "Script Kiddies",
@@ -282,7 +297,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Ecosistema StonkBrokers + WL. Gran valor."
+      "notes": "Ecosistema StonkBrokers + WL. Gran valor.",
+      "notes_en": "StonkBrokers ecosystem + WL. Great value."
     },
     {
       "name": "Bulls Runners Genesis",
@@ -300,7 +316,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Buena aceptacion como partner collection."
+      "notes": "Buena aceptacion como partner collection.",
+      "notes_en": "Good traction as a partner collection."
     },
     {
       "name": "Zaibatsu Wagies",
@@ -315,7 +332,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Aparece en varias listas."
+      "notes": "Aparece en varias listas.",
+      "notes_en": "Appears in several lists."
     },
     {
       "name": "Yardkeepers",
@@ -330,7 +348,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Aparece en listas de partner holders. Falta floor."
+      "notes": "Aparece en listas de partner holders. Falta floor.",
+      "notes_en": "Appears in partner-holder lists. Floor missing."
     },
     {
       "name": "RH MACHINES",
@@ -347,7 +366,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "⚠️ Resultado OpenSea dudoso/duplicado. Verificar."
+      "notes": "⚠️ Resultado OpenSea dudoso/duplicado. Verificar.",
+      "notes_en": "⚠️ Dubious/duplicate OpenSea result. Verify."
     },
     {
       "name": "Non Playable Character",
@@ -364,7 +384,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Falta floor."
+      "notes": "Falta floor.",
+      "notes_en": "Floor missing."
     },
     {
       "name": "NORMIES",
@@ -379,7 +400,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Falta floor."
+      "notes": "Falta floor.",
+      "notes_en": "Floor missing."
     },
     {
       "name": "The Florentines",
@@ -394,7 +416,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Buena llave a precio contenido."
+      "notes": "Buena llave a precio contenido.",
+      "notes_en": "Good key at a contained price."
     },
     {
       "name": "Robinhood Punks",
@@ -411,7 +434,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Muy barato y aparece en WLs. Candidato infravalorado a subir a 🥇."
+      "notes": "Muy barato y aparece en WLs. Candidato infravalorado a subir a 🥇.",
+      "notes_en": "Very cheap and shows up in WLs. Undervalued candidate to move up to 🥇."
     },
     {
       "name": "Goat Street",
@@ -441,7 +465,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "A- solo por precio: llave floja pero regalada. Cross-check pendiente."
+      "notes": "A- solo por precio: llave floja pero regalada. Cross-check pendiente.",
+      "notes_en": "A- on price alone: weak key but dirt cheap. Cross-check pending."
     },
     {
       "name": "Clay StonKz",
@@ -531,7 +556,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "2.048 pixel-art alien agents."
+      "notes": "2.048 pixel-art alien agents.",
+      "notes_en": "2,048 pixel-art alien agents."
     },
     {
       "name": "pons",
@@ -713,7 +739,8 @@
       "fcfs": 0,
       "wl": 0,
       "owned": false,
-      "notes": "Frens Pass en Mintera."
+      "notes": "Frens Pass en Mintera.",
+      "notes_en": "Frens Pass on Mintera."
     },
     {
       "name": "BLNK",
