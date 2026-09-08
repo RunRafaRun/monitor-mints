@@ -636,16 +636,36 @@ padding:6px 13px;cursor:pointer;font-size:13px}
 .wcheck-adv[open] summary::before{content:"▾ "}
 .wcheck-adv .wcheck-note{margin-top:8px}
 .pnl-cols:not(:empty){margin-top:12px;display:flex;flex-direction:column;gap:10px}
-.pnl-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.pnl-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;position:sticky;top:0;z-index:4;background:var(--card);padding:6px 0}
 .pnl-bar .muted{font-size:12px}
+.pnl-bar #pnlFilter{flex:1 1 130px;min-width:110px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:6px 9px;font-size:12.5px}
+#pnlGoN:not(:empty){margin-left:2px;opacity:.85}
 .pnl-mode{display:flex;flex-wrap:wrap;gap:6px 16px;margin:8px 0 2px}
 .pnl-mode label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--fg);cursor:pointer}
 .pnl-mode input{flex:none}
 .pnl-prog{margin-top:8px;font-size:12.5px;font-family:ui-monospace,Menlo,monospace;color:var(--accent);letter-spacing:.02em}
 .pnl-chain{border:1px solid var(--line);border-radius:8px;padding:9px 11px}
-.pnl-ch-hd{font-size:11px;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin-bottom:7px;display:flex;align-items:center;gap:5px}
-.pnl-col{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:2px 0;cursor:pointer}
+.pnl-ch-hd{font-size:11px;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);display:flex;align-items:center;gap:6px;cursor:pointer}
+.pnl-ch-tog{background:transparent;border:0;color:var(--accent);cursor:pointer;padding:0;display:inline-flex;flex:none}
+.pnl-ch-caret{display:inline-block;transition:transform .12s;font-size:10px}
+.pnl-chain.open .pnl-ch-caret{transform:rotate(90deg)}
+.pnl-ch-alll{display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--fg)}
+.pnl-ch-alll input{flex:none}
+.pnl-ch-cnt{margin-left:auto;font-size:11px;white-space:nowrap}
+.pnl-ch-body{max-height:44vh;overflow:auto;margin-top:7px;display:flex;flex-direction:column;gap:1px}
+.pnl-chain:not(.open) .pnl-ch-body{display:none}
+.pnl-col{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:3px 0;cursor:pointer}
 .pnl-col input{flex:none}
+.pnl-col.hide{display:none}
+#toTop{position:fixed;right:14px;bottom:16px;z-index:55;width:42px;height:42px;border-radius:50%;background:var(--accent);color:var(--accent-ink);border:1px solid var(--accent);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+#toTop[hidden]{display:none!important}
+tr.wgrp td{background:var(--accent-dim);border-bottom:1px solid color-mix(in srgb,var(--accent) 28%,var(--line));cursor:pointer;font-weight:500}
+tr.wgrp:hover td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.wgrp-caret{display:inline-block;transition:transform .12s;color:var(--accent);margin-right:6px;font-size:10px}
+tr.wgrp.open .wgrp-caret{transform:rotate(90deg)}
+tr.wg-row{display:none}
+tr.wg-row.show{display:table-row}
+@media (max-width:640px){#toTop{right:12px;bottom:12px}}
 .iconbtn{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:6px 9px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
 .iconbtn:hover{border-color:var(--accent);color:var(--accent)}
 .lang{display:flex;gap:0;border:1px solid var(--line);border-radius:5px;overflow:hidden}
@@ -834,6 +854,12 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
   .phwhen{display:inline}
   tr.row-have{outline:2px solid color-mix(in srgb,var(--now) 45%,transparent)}
   tr.row-spot{outline:2px solid color-mix(in srgb,var(--gold) 60%,transparent)}
+  tr.wgrp{background:var(--accent-dim);border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line));border-radius:9px;margin:0 0 8px;padding:9px 12px;display:block}
+  tr.wgrp td{display:inline;border:0;padding:0}
+  tr.wgrp td::before{display:none}
+  tr.wgrp td+td{margin-left:9px}
+  tr.wgrp td:first-child{font-size:13px;font-weight:600;border:0;padding:0;display:block;margin-bottom:3px}
+  tr.wg-row.show{display:block}
 }
 /* ---- móvil horizontal: tabla real con scroll lateral ---- */
 @media (max-width:1024px) and (orientation:landscape){
@@ -959,8 +985,13 @@ ${data.public ? "" : `<section data-p="spots" hidden>
   <div class="chains" id="wWallets" hidden></div>
   <div id="wStats" class="wstats"></div>
   <div class="filtrow" id="wFilters" style="margin:6px 14px 0">
+    <div class="chains" id="wStatusF">
+      <button data-s="all" class="on" data-k="w_f_all"></button>
+      <button data-s="held" data-k="w_f_held"></button>
+      <button data-s="sold" data-k="w_f_sold"></button>
+    </div>
     <label class="chk"><input type="checkbox" id="wRealOnly"> <span data-k="w_real_only"></span></label>
-    <label class="chk"><input type="checkbox" id="wHeldHide"> <span data-k="w_hide_held"></span></label>
+    <button id="wGroupAll" class="chk" style="border-radius:5px"><span data-k="w_toggle_groups"></span></button>
     <button id="wExport" class="chk" style="border-radius:5px"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span data-k="w_export"></span></button>
   </div>
   <div class="scroll"><table id="tWallet"></table></div>
@@ -969,6 +1000,7 @@ ${data.public ? "" : `<section data-p="spots" hidden>
 </div>
 
 <div id="alertBanner" hidden></div>
+<button id="toTop" hidden aria-label="Top"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
 
 <div id="helpModal" hidden>
   <div class="hm-box">
@@ -1277,6 +1309,9 @@ const STR = {
   h_wallet:'Cartera / P&L — compras y ventas de tus wallets',
   w_real_only:'solo con P&L real (oculta coste desconocido)',
   w_hide_held:'ocultar lo que sigo teniendo',
+  w_f_all:'Todo',w_f_held:'En cartera',w_f_sold:'Vendido',
+  w_toggle_groups:'Expandir / plegar',
+  w_export_tip:'Exporta TODAS las posiciones analizadas, ignorando los filtros de arriba.',
   w_note:'Reconstruido de la BLOCKCHAIN (Blockscout): precio real de cada mint y de cada compra/venta, y el gas. P&L en ETH y $ al cambio de HOY (no histórico). El floor sale de OpenSea (muchas colecciones de Ink no cotizan ahí → sin floor). Ventas fuera de un marketplace on-chain estándar salen como «movido». data/trades.json es personal (fuera de git y del modo público). Actualízalo con  node scripts/fetch-trades.mjs  (o update.mjs).',
   w_realized:'Realizado',w_unrealized:'No realizado',w_sold:'Vendidos',w_held:'En cartera',w_moved:'Movidos fuera',
   w_free:'gratis (mint)',w_value:'vale',w_held_value:'Valor cartera',w_gas:'Gas total',w_net_sell:'neto si vendes',w_mkt:'~mercado',w_mkt_tip:'Sin floor de OpenSea: mínimo de las últimas ventas on-chain de la colección',w_exit_gas:'floor menos el gas estimado para vender (mediana del gas que pagaste al entrar en esa red)',
@@ -1299,7 +1334,7 @@ const STR = {
   pnl_analyze_full:'Analizar wallet entera',pnl_clear:'Limpiar',
   pnl_changed:'Dirección cambiada — vuelve a analizar',
   pnl_mode_pick:'Solo las colecciones que elija',pnl_mode_full:'Todo el historial (incluye lo vendido)',
-  pnl_all:'todas',pnl_access:'solo accesos',pnl_pick:'Marca las colecciones a analizar',
+  pnl_all:'todas',pnl_access:'solo accesos',pnl_none:'ninguna',pnl_filter:'filtrar…',pnl_pick:'Marca las colecciones a analizar',
   pnl_note:'Reconstruye compras/ventas/gas leyendo la cadena (Blockscout PRO), FIFO por NFT. P&L en ETH y $ al cambio de HOY (no histórico). Floor de las que aún tienes vía OpenSea. Las vendidas o traspasadas siguen apareciendo con su P&L realizado. No mira rarezas. Resultado en caché 6 h. Dirección solo en este navegador.',
   w_note_pub:'Reconstruido de la blockchain (Blockscout PRO): precio real de cada mint/compra/venta + gas, FIFO por NFT. P&L al cambio de HOY. Floor de OpenSea (muchas de Ink no cotizan → sin floor). Ventas fuera de un marketplace on-chain estándar salen como «movido».',
   wc_title:'¿En qué fases calificas?',wc_connect:'Conectar',wc_check:'Comprobar',
@@ -1416,6 +1451,9 @@ const STR = {
   h_wallet:'Portfolio / P&L — your wallets’ buys and sells',
   w_real_only:'only with real P&L (hide unknown cost)',
   w_hide_held:'hide what I still hold',
+  w_f_all:'All',w_f_held:'Held',w_f_sold:'Sold',
+  w_toggle_groups:'Expand / collapse',
+  w_export_tip:'Exports EVERY analyzed position, ignoring the filters above.',
   w_note:'Reconstructed from the BLOCKCHAIN (Blockscout): real price of every mint and every buy/sell, plus gas. P&L in ETH and $ at TODAY’s rate (not historical). Floor comes from OpenSea (many Ink collections do not trade there → no floor). Sales outside a standard on-chain marketplace show as “moved”. data/trades.json is personal (out of git and of public mode). Refresh with  node scripts/fetch-trades.mjs  (or update.mjs).',
   w_realized:'Realized',w_unrealized:'Unrealized',w_sold:'Sold',w_held:'Held',w_moved:'Moved out',
   w_free:'free (mint)',w_value:'worth',w_held_value:'Held value',w_gas:'Total gas',w_net_sell:'net if you sell',w_mkt:'~market',w_mkt_tip:'No OpenSea floor: lowest of the collection last on-chain sales',w_exit_gas:'floor minus estimated gas to sell (median of the gas you paid to enter on that chain)',
@@ -1438,7 +1476,7 @@ const STR = {
   pnl_analyze_full:'Analyze whole wallet',pnl_clear:'Clear',
   pnl_changed:'Address changed — analyze again',
   pnl_mode_pick:'Only collections I pick',pnl_mode_full:'Full history (includes sold)',
-  pnl_all:'all',pnl_access:'access only',pnl_pick:'Tick the collections to analyze',
+  pnl_all:'all',pnl_access:'access only',pnl_none:'none',pnl_filter:'filter…',pnl_pick:'Tick the collections to analyze',
   pnl_note:'Reconstructs buys/sells/gas by reading the chain (Blockscout PRO), FIFO per NFT. P&L in ETH and $ at TODAY\\'s rate (not historical). Floor for what you still hold via OpenSea. Sold or transferred-out NFTs still show with their realized P&L. No rarity. Result cached 6 h. Address stays in this browser only.',
   w_note_pub:'Reconstructed from the blockchain (Blockscout PRO): real price of every mint/buy/sell + gas, FIFO per NFT. P&L at TODAY\\'s rate. Floor from OpenSea (many Ink collections do not trade there → no floor). Sales outside a standard on-chain marketplace show as “moved”.',
   wc_title:'Which phases do you qualify for?',wc_connect:'Connect',wc_check:'Check',
@@ -1907,6 +1945,7 @@ function wPnl(eth, usd, pct){
 const BS_TX={robinhood:'https://robinhoodchain.blockscout.com/tx/',ethereum:'https://eth.blockscout.com/tx/',ink:'https://explorer.inkonchain.com/tx/'};
 const txLink=(chain,tx)=>tx?' <a class="oslink" href="'+esc((BS_TX[chain]||BS_TX.ethereum)+tx)+'" target="_blank" rel="noopener">tx ↗</a>':'';
 let wSel='all';   // filtro de wallet en la pestaña Cartera
+let wStatus='all';   // filtro vendido / en cartera / todo
 function renderWallet(){
   const box=document.getElementById('wStats'), tbl=document.getElementById('tWallet');
   if(!box||!tbl) return;
@@ -1958,12 +1997,13 @@ function renderWallet(){
     tile(t('w_held'), s.held)+
     tile(t('w_moved'), s.movedOut);
 
-  const realOnly=document.getElementById('wRealOnly').checked;
-  const hideHeld=document.getElementById('wHeldHide').checked;
+  const realOnly=document.getElementById('wRealOnly')?.checked;
   let rows=P.slice();
-  if(hideHeld) rows=rows.filter(p=>p.status!=='held');
+  if(wStatus==='held') rows=rows.filter(p=>p.status==='held');
+  else if(wStatus==='sold') rows=rows.filter(p=>p.status==='sold'||p.status==='moved_out');
   if(realOnly) rows=rows.filter(p=>
     !(p.flags||[]).some(f=>f==='cost_unknown'||f==='no_acq'));  // solo oculta coste DESCONOCIDO (regalo/mint gratis = coste 0 real, se quedan)
+  document.querySelectorAll('#wStatusF button').forEach(b=>b.classList.toggle('on',b.dataset.s===wStatus));
 
   // tope de filas para no petar el navegador con wallets enormes
   const CAP=400; const nRows=rows.length;
@@ -1980,8 +2020,7 @@ function renderWallet(){
     for(const c in by){ by[c].sort((a,b)=>a-b); egMap[c]=by[c][Math.floor(by[c].length/2)]; } }
   const exitGas=c=>egMap[c]??egDef[c]??0.0002;
 
-  tbl.innerHTML='<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_bought')+'</th><th>'+t('c_soldfloor')+'</th><th>'+t('c_pnl')+'</th><th>'+t('c_state')+'</th></tr></thead><tbody>'+
-   (rows.map(p=>{
+  const memberRow=(p,gkey,open)=>{
      const a=p.acquired, dp=p.disposed;
      const mintCost0 = a && (a.type==='mint'||a.type==='gift') && !(a.priceEth>1e-9) && !(a.priceUsd>1e-9);   // mint gratis o regalo -> coste 0 real
      const pnl = p.realizedEth!=null ? p.realizedEth : (p.status==='held' ? p.unrealizedEth : null);
@@ -1989,7 +2028,7 @@ function renderWallet(){
      const pct = (a&&a.priceEth>0&&pnl!=null) ? Math.round(pnl/a.priceEth*100) : null;
      const stTxt = p.status==='held'?t('st_held'):p.status==='sold'?t('st_sold'):t('st_moved');
      const gasTxt=g=>g>1e-9?' <small class="muted" title="'+t('w_gas')+'">+gas '+wPrice(g,null)+'</small>':'';
-     return '<tr>'+
+     return '<tr class="wg-row'+(open?' show':'')+'" data-g="'+esc(gkey)+'">'+
        cell(t('c_project'), chainPill(p.chain)+'<b>'+esc(p.name)+'</b>'+(p.url?' '+osA(p.url):'')+(p.wallet&&(T.wallets||[]).length>1&&wSel==='all'?' <span class="wchip">'+esc(p.wallet)+'</span>':'')+(flags(p.flags)?'<br>'+flags(p.flags):''), null, esc(p.name).toLowerCase())+
        cell(t('c_bought'), a?dt(a.ts)+' · '+tyf(a.type)+txLink(p.chain,a.tx)+'<br>'+(mintCost0?'<span class="muted">'+t('w_free')+'</span>':wPrice(a.priceEth,a.priceUsd))+gasTxt(a.gasEth):'—', 'num', a?a.ts:0)+
        cell(t('c_soldfloor'), dp?dt(dp.ts)+' · '+tyf(dp.type)+txLink(p.chain,dp.tx)+'<br>'+wPrice(dp.priceEth,dp.priceUsd)+gasTxt(dp.gasEth):(p.floorEth!=null?'<span class="muted" title="'+(p.floorSrc&&p.floorSrc[0]==='s'?t('w_mkt_tip'):'')+'">'+(p.floorSrc&&p.floorSrc[0]==='s'?t('w_mkt'):'floor')+'</span> '+wPrice(p.floorEth,p.floorUsd):'—'), 'num', dp?dp.ts:9e14)+
@@ -2008,11 +2047,42 @@ function renderWallet(){
         })(), 'num', pnl==null?-9e9:pnl)+
        cell(t('c_state'), stTxt)+
      '</tr>';
-   }).join('') || '<tr><td colspan=5 class="muted">—</td></tr>')
+  };
+
+  // ---- agrupar por colección: cabecera plegable con P&L propio ----
+  const stripNum=s=>String(s||'').replace(/\\s*#\\s*\\S+$/,'').trim();
+  const gm=new Map();
+  for(const p of rows){
+    const key=p.chain+':'+(p.contract||stripNum(p.name)||p.name);
+    let g=gm.get(key);
+    if(!g){ g={key,chain:p.chain,name:stripNum(p.name)||p.name||'—',rows:[],realized:0,unreal:0,floor:0,n:0}; gm.set(key,g); }
+    g.rows.push(p); g.n++;
+    if(p.status==='sold') g.realized+=p.realizedEth||0;
+    if(p.status==='held'){ g.unreal+=p.unrealizedEth||0; g.floor+=p.floorEth||0; }
+  }
+  const groups=[...gm.values()].sort((a,b)=>(Math.abs(b.realized+b.unreal)-Math.abs(a.realized+a.unreal))||b.n-a.n);
+  window.__wOpenG=window.__wOpenG||new Set();
+  const openG=window.__wOpenG;
+  if(!window.__wGroupTouched && (nRows<=15 || groups.length<=2)) groups.forEach(g=>openG.add(g.key));
+
+  let body='';
+  for(const g of groups){
+    const open=openG.has(g.key), comb=+(g.realized+g.unreal).toFixed(5);
+    body+='<tr class="wgrp'+(open?' open':'')+'" data-g="'+esc(g.key)+'">'+
+      '<td colspan="2" data-label=""><span class="wgrp-caret">▸</span>'+chainPill(g.chain)+'<b>'+esc(g.name)+'</b> <span class="muted">×'+g.n+'</span></td>'+
+      '<td class="num" data-label="'+t('c_pnl')+'">'+wPnl(comb,null)+'</td>'+
+      '<td class="num" colspan="2" data-label="'+t('w_held_value')+'">'+(g.floor?wPrice(+g.floor.toFixed(5),null):'<span class="muted">—</span>')+'</td>'+
+    '</tr>';
+    for(const p of g.rows) body+=memberRow(p,g.key,open);
+  }
+
+  tbl.innerHTML='<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_bought')+'</th><th>'+t('c_soldfloor')+'</th><th>'+t('c_pnl')+'</th><th>'+t('c_state')+'</th></tr></thead><tbody>'+
+   (body || '<tr><td colspan=5 class="muted">—</td></tr>')
    +(nRows>CAP?'<tr><td colspan=5 class="muted">'+t('w_more').replace('{n}',nRows-CAP)+'</td></tr>':'')+'</tbody>';
 
   const note=document.getElementById('wNote');
   if(note) note.textContent = (T.truncated?t('w_truncated')+' ':'')+t(D.public?'w_note_pub':'w_note');
+  const exp=document.getElementById('wExport'); if(exp) exp.title=t('w_export_tip');
 }
 
 function render(){
@@ -2149,7 +2219,28 @@ document.getElementById('hideLow').addEventListener('change',render);
 document.getElementById('q').addEventListener('input',applyFilter);
 document.getElementById('onlyKeys').addEventListener('change',applyFilter);
 document.getElementById('wRealOnly')?.addEventListener('change',renderWallet);
-document.getElementById('wHeldHide')?.addEventListener('change',renderWallet);
+document.getElementById('wStatusF')?.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  wStatus=b.dataset.s; renderWallet();
+});
+document.getElementById('wGroupAll')?.addEventListener('click',()=>{
+  const grps=[...document.querySelectorAll('#tWallet tr.wgrp')];
+  const anyClosed=grps.some(g=>!g.classList.contains('open'));
+  window.__wGroupTouched=true;
+  window.__wOpenG=window.__wOpenG||new Set();
+  grps.forEach(g=>{ g.classList.toggle('open',anyClosed);
+    anyClosed?window.__wOpenG.add(g.dataset.g):window.__wOpenG.delete(g.dataset.g); });
+  document.querySelectorAll('#tWallet tr.wg-row').forEach(r=>r.classList.toggle('show',anyClosed));
+});
+document.getElementById('tWallet')?.addEventListener('click',e=>{
+  const g=e.target.closest('tr.wgrp'); if(!g) return;
+  const key=g.dataset.g;
+  window.__wGroupTouched=true;
+  window.__wOpenG=window.__wOpenG||new Set();
+  const open=g.classList.toggle('open');
+  open?window.__wOpenG.add(key):window.__wOpenG.delete(key);
+  document.querySelectorAll('#tWallet tr.wg-row').forEach(r=>{ if(r.dataset.g===key) r.classList.toggle('show',open); });
+});
 document.getElementById('wWallets')?.addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
   wSel=b.dataset.w; renderWallet();
@@ -2249,7 +2340,8 @@ document.getElementById('tabs').addEventListener('click',e=>{
 });
 document.addEventListener('click',e=>{
   const th=e.target.closest('th'); if(!th) return;
-  const tb=th.closest('table'), i=[...th.parentNode.children].indexOf(th);
+  const tb=th.closest('table'); if(tb && tb.id==='tWallet') return;   // la cartera va agrupada por colección
+  const i=[...th.parentNode.children].indexOf(th);
   const body=tb.tBodies[0]||tb;
   const rows=body===tb ? [...tb.querySelectorAll('tr')].slice(1) : [...body.rows];
   const asc=th.dataset.asc==='1'; th.dataset.asc=asc?'0':'1';
@@ -2399,7 +2491,7 @@ function pnlProg(txt){ const p=document.getElementById('pnlProg'); if(p){ p.hidd
 function pnlSyncClear(){ const b=document.getElementById('pnlClear'); if(b) b.hidden = !(pnlAddr || (D.trades&&D.trades.positions&&D.trades.positions.length) || Object.keys(pnlHeld).length); }
 function pnlWipe(alsoAddr){
   pnlHeld={}; D.trades=null;
-  try{ localStorage.removeItem('mints_pnl'); }catch(e){}
+  try{ localStorage.removeItem('mints_pnl'); localStorage.removeItem('mints_pnl_prog'); }catch(e){}
   const c=document.getElementById('pnlCols'); if(c) c.innerHTML='';
   if(alsoAddr){ pnlAddr=''; const el=document.getElementById('pnlAddr'); if(el) el.value=''; }
   pnlMsg(''); pnlProg('');
@@ -2411,20 +2503,32 @@ function renderPnlCols(){
   const chains=PNL_CHAINS.filter(c=>(pnlHeld[c]||[]).length);
   if(!chains.length){ el.innerHTML=''; return; }
   const acc=accessSlugs();
-  let h='<div class="pnl-bar"><span class="muted">'+t('pnl_pick')+'</span>'+
+  const total=chains.reduce((a,c)=>a+pnlHeld[c].length,0);
+  const many=total>8;
+  let h='<div class="pnl-bar">'+
+    '<input id="pnlFilter" type="search" autocomplete="off" spellcheck="false" placeholder="'+esc(t('pnl_filter'))+'">'+
     '<button class="chk" data-pnl="all">'+t('pnl_all')+'</button>'+
     '<button class="chk" data-pnl="access">'+t('pnl_access')+'</button>'+
-    '<button class="chk wc-go" id="pnlGo">'+t('pnl_analyze')+'</button></div>';
+    '<button class="chk" data-pnl="none">'+t('pnl_none')+'</button>'+
+    '<button class="chk wc-go" id="pnlGo">'+t('pnl_analyze')+' <span id="pnlGoN"></span></button></div>';
   for(const c of chains){
-    h+='<div class="pnl-chain" data-cc="'+esc(c)+'"><label class="pnl-ch-hd"><input type="checkbox" class="pnl-ch-all" data-c="'+esc(c)+'">'+chainIco(c)+' '+esc(chainLabel(c)||c)+' <span class="muted">('+pnlHeld[c].length+')</span></label>';
+    h+='<div class="pnl-chain'+(many?'':' open')+'" data-cc="'+esc(c)+'">'+
+      '<div class="pnl-ch-hd"><button type="button" class="pnl-ch-tog" aria-label="toggle"><span class="pnl-ch-caret">▸</span></button>'+
+      '<label class="pnl-ch-alll"><input type="checkbox" class="pnl-ch-all" data-c="'+esc(c)+'">'+chainIco(c)+' '+esc(chainLabel(c)||c)+'</label>'+
+      '<span class="pnl-ch-cnt" data-c="'+esc(c)+'"></span></div>'+
+      '<div class="pnl-ch-body">';
     for(const col of pnlHeld[c]){
       const on = col._sel!==false && (col._sel===true || acc.has((col.slug||'').toLowerCase()));
       h+='<label class="pnl-col"><input type="checkbox" data-c="'+esc(c)+'" data-ct="'+esc(col.contract)+'"'+(on?' checked':'')+'> '+esc(col.name||col.slug||col.contract.slice(0,10))+'</label>';
     }
-    h+='</div>';
+    h+='</div></div>';
   }
   el.innerHTML=h;
   syncPnlChAll();
+}
+function updatePnlGoN(){
+  const n=document.querySelectorAll('#pnlCols .pnl-col input:checked').length;
+  const s=document.getElementById('pnlGoN'); if(s) s.textContent = n?'('+n+')':'';
 }
 function syncPnlChAll(){
   document.querySelectorAll('#pnlCols .pnl-chain').forEach(box=>{
@@ -2432,6 +2536,21 @@ function syncPnlChAll(){
     const on=cbs.filter(x=>x.checked).length;
     const head=box.querySelector('.pnl-ch-all');
     if(head){ head.checked = on>0 && on===cbs.length; head.indeterminate = on>0 && on<cbs.length; }
+    const cnt=box.querySelector('.pnl-ch-cnt');
+    if(cnt) cnt.textContent = on ? on+' / '+cbs.length : cbs.length;
+  });
+  updatePnlGoN();
+}
+function pnlFilterCols(){
+  const q=(document.getElementById('pnlFilter')?.value||'').trim().toLowerCase();
+  document.querySelectorAll('#pnlCols .pnl-chain').forEach(box=>{
+    let hits=0;
+    box.querySelectorAll('.pnl-col').forEach(lb=>{
+      const m=!q || lb.textContent.toLowerCase().includes(q);
+      lb.classList.toggle('hide',!m); if(m) hits++;
+    });
+    if(q) box.classList.toggle('open', hits>0);
+    else box.classList.toggle('open', box.querySelectorAll('.pnl-col').length<=8);
   });
 }
 async function pnlRead(){
@@ -2452,6 +2571,22 @@ async function pnlRead(){
   }catch(e){ pnlMsg((L==='es'?'Error: ':'Error: ')+e.message,1); }
 }
 const PNL_BATCH=5, PNL_MAXB=20;   // colecciones por petición · tope de lotes por red
+const PNL_PROG_TTL=5*3600*1000;   // reanudable mientras la caché del servidor (6 h) siga viva
+// Progreso persistido para poder REANUDAR un escaneo sin re-procesar lo ya hecho.
+// { addr, ts, ethUsd, contractsByChain:{chain:[ct…]}, done:[ "chain:ct" … ], truncated }
+// Las posiciones ya calculadas se recuperan de mints_pnl (no se duplican aquí).
+function pnlProgGet(){
+  try{ const p=JSON.parse(localStorage.getItem('mints_pnl_prog')||'null');
+    if(p && p.addr===pnlAddr && (Date.now()-(p.ts||0))<PNL_PROG_TTL) return p;
+  }catch(e){}
+  return null;
+}
+function pnlPrevPositions(){
+  try{ const st=JSON.parse(localStorage.getItem('mints_pnl')||'null');
+    if(st && st.addr===pnlAddr && st.trades && Array.isArray(st.trades.positions)) return st.trades.positions;
+  }catch(e){}
+  return [];
+}
 async function pnlAnalyze(full){
   full=!!full;
   const boxes=[...document.querySelectorAll('#pnlCols .pnl-col input:checked')];
@@ -2464,44 +2599,77 @@ async function pnlAnalyze(full){
   if(!Object.keys(byChain).length){ pnlMsg(L==='es'?'No has marcado ninguna colección.':'No collections selected.',1); return; }
   if(!/^0x[a-f0-9]{40}$/.test(pnlAddr||'')){ pnlMsg(L==='es'?'Pon una dirección válida.':'Enter a valid address.',1); return; }
   const label=pnlAddr.slice(0,6)+'…'+pnlAddr.slice(-4);
-  const all=[]; let rate=ETHUSD, trunc=false; const failed=[];
+
+  // ---- reanudar: lo ya analizado para esta misma wallet (mientras la caché siga viva) ----
+  let prog=pnlProgGet();
+  if(!prog) prog={addr:pnlAddr, ts:Date.now(), ethUsd:ETHUSD, contractsByChain:{}, done:[], truncated:false};
+  if(!Array.isArray(prog.done)) prog.done=[];
+  if(!prog.contractsByChain) prog.contractsByChain={};
+  const doneKeys=new Set(prog.done);
+  const all=[]; const seen=new Set();
+  for(const p of pnlPrevPositions()){                       // recupera posiciones ya calculadas
+    const gk=(p.chain||'robinhood')+':'+(p.contract||'').toLowerCase();
+    if(!doneKeys.has(gk)) continue;
+    const id=gk+':'+p.tokenId+':'+(p.acquired&&p.acquired.tx||'')+':'+(p.disposed&&p.disposed.tx||'');
+    if(seen.has(id)) continue; seen.add(id);
+    p.wallet=label; all.push(p);
+  }
+  const resumed=all.length;
+  let rate=prog.ethUsd||ETHUSD, trunc=!!prog.truncated; const failed=[];
   const t0=Date.now(); let lastP='';
   const P=x=>{ lastP=x; pnlProg('⏳ '+x+' · '+Math.round((Date.now()-t0)/1000)+'s'); };
   const tick=setInterval(()=>{ if(lastP) pnlProg('⏳ '+lastP+' · '+Math.round((Date.now()-t0)/1000)+'s'); },1000);
-  const flush=()=>{ D.trades={ethUsd:rate,wallets:[{label}],positions:all.slice(),truncated:trunc}; render(); };
+  const persist=()=>{
+    prog.ts=Date.now(); prog.ethUsd=rate; prog.truncated=trunc; prog.done=[...doneKeys];
+    D.trades={ ethUsd:rate, wallets:[{label}], positions:all.slice(), truncated:trunc };
+    try{ localStorage.setItem('mints_pnl_prog',JSON.stringify(prog)); }catch(e){}
+    try{ localStorage.setItem('mints_pnl',JSON.stringify({addr:pnlAddr,trades:D.trades})); }catch(e){}
+  };
+  const flush=()=>{ persist(); render(); };
   pnlMsg(''); pnlSyncClear();
+  if(resumed) P((L==='es'?'reanudando — ':'resuming — ')+resumed+(L==='es'?' NFT ya en caché':' NFTs already cached'));
   try{
     for(const [chain,picked] of Object.entries(byChain)){
       const cn=chainLabel(chain)||chain;
       let contracts=picked.slice();
-      if(!contracts.length){                       // full: pedir qué colecciones ha tocado la wallet
-        P(cn+' — '+(L==='es'?'listando colecciones…':'listing collections…'));
-        try{
-          const lr=await fetch('/api/trades',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address:pnlAddr,chain,contractsOnly:true})}).then(x=>x.json());
-          if(lr.error){ failed.push(cn+(lr.detail?' ('+lr.detail+')':'')); continue; }
-          contracts=(lr.contracts||[]).map(c=>c.contract); if(lr.truncated) trunc=true;
-        }catch(e){ failed.push(cn); continue; }
+      if(!contracts.length){                       // full: qué colecciones ha tocado la wallet
+        if((prog.contractsByChain[chain]||[]).length){
+          contracts=prog.contractsByChain[chain].slice();   // ya enumeradas antes -> nos ahorramos la llamada
+        } else {
+          P(cn+' — '+(L==='es'?'listando colecciones…':'listing collections…'));
+          try{
+            const lr=await fetch('/api/trades',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address:pnlAddr,chain,contractsOnly:true})}).then(x=>x.json());
+            if(lr.error){ failed.push(cn+(lr.detail?' ('+lr.detail+')':'')); continue; }
+            contracts=(lr.contracts||[]).map(c=>c.contract); if(lr.truncated) trunc=true;
+            prog.contractsByChain[chain]=contracts.slice(); persist();
+          }catch(e){ failed.push(cn); continue; }
+        }
       }
       if(!contracts.length){ failed.push(cn+(L==='es'?' (demasiada actividad — usa "colecciones que elija")':' (too busy — use "collections I pick")')); continue; }
-      let nb=Math.ceil(contracts.length/PNL_BATCH);
-      if(nb>PNL_MAXB){ nb=PNL_MAXB; trunc=true; contracts=contracts.slice(0,PNL_MAXB*PNL_BATCH); }
+      let capped=contracts.map(c=>String(c).toLowerCase());
+      if(Math.ceil(capped.length/PNL_BATCH)>PNL_MAXB){ trunc=true; capped=capped.slice(0,PNL_MAXB*PNL_BATCH); }
+      const todo=capped.filter(ct=>!doneKeys.has(chain+':'+ct));
+      const already=capped.length-todo.length;
+      const nb=Math.ceil(todo.length/PNL_BATCH);
       for(let bi=0;bi<nb;bi++){
-        const batch=contracts.slice(bi*PNL_BATCH,bi*PNL_BATCH+PNL_BATCH);
-        P(cn+' — '+(L==='es'?'lote ':'batch ')+(bi+1)+'/'+nb+(all.length?' · '+all.length+(L==='es'?' NFT':' NFTs'):''));
+        const batch=todo.slice(bi*PNL_BATCH,bi*PNL_BATCH+PNL_BATCH);
+        P(cn+' — '+(L==='es'?'lote ':'batch ')+(bi+1)+'/'+nb+(already?' (+'+already+(L==='es'?' en caché)':' cached)'):'')+(all.length?' · '+all.length+(L==='es'?' NFT':' NFTs'):''));
         try{
           const r=await fetch('/api/trades',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address:pnlAddr,chain,collections:batch,ethUsd:ETHUSD})}).then(x=>x.json());
           if(r.error){ failed.push(cn+' '+(bi+1)+'/'+nb+(r.detail?' ('+r.detail+')':'')); continue; }
-          rate=r.ethUsd||rate; trunc=trunc||r.truncated;
+          rate=r.ethUsd||rate;
           for(const p of (r.positions||[])){ p.wallet=label; all.push(p); }
-          if(bi%2===1) flush();                      // pintado incremental
+          if(r.truncated){ trunc=true; }
+          else { for(const ct of batch) doneKeys.add(chain+':'+ct); }   // lote completo -> reanudable
+          persist();
+          if(bi%2===1) render();                     // pintado incremental
         }catch(e){ failed.push(cn+' '+(bi+1)+'/'+nb); }
       }
     }
   } finally { clearInterval(tick); pnlProg(''); }
-  D.trades={ ethUsd:rate, wallets:[{label}], positions:all, truncated:trunc };
-  try{ localStorage.setItem('mints_pnl',JSON.stringify({addr:pnlAddr,trades:D.trades})); }catch(e){}
+  persist();
   render(); pnlSyncClear();
-  pnlMsg('✓ '+all.length+(L==='es'?' NFT analizados':' NFTs analyzed')+(trunc?(L==='es'?' · wallet grande, puede faltar lo más antiguo':' · large wallet, oldest may be missing'):'')+(failed.length?(L==='es'?' · falló: ':' · failed: ')+failed.slice(0,4).join(', ')+(failed.length>4?'…':''):''), failed.length&&!all.length?1:0);
+  pnlMsg('✓ '+all.length+(L==='es'?' NFT analizados':' NFTs analyzed')+(resumed?(L==='es'?' ('+resumed+' reanudados)':' ('+resumed+' resumed)'):'')+(trunc?(L==='es'?' · wallet grande, puede faltar lo más antiguo':' · large wallet, oldest may be missing'):'')+(failed.length?(L==='es'?' · falló: ':' · failed: ')+failed.slice(0,4).join(', ')+(failed.length>4?'…':''):''), failed.length&&!all.length?1:0);
 }
 function exportPnlCsv(){
   const T=D.trades; if(!T||!T.positions||!T.positions.length) return;
@@ -2568,15 +2736,24 @@ document.getElementById('pnlConnect')?.addEventListener('click',async()=>{
 { const known = (typeof osAddr!=='undefined'&&osAddr) || pnlAddr || walletList[0] || '';
   const el=document.getElementById('pnlAddr'); if(el && known && !el.value) el.value=known; }
 document.getElementById('pnlCols')?.addEventListener('click',e=>{
+  const tog=e.target.closest('.pnl-ch-hd');
+  if(tog && !e.target.closest('.pnl-ch-alll')){
+    tog.closest('.pnl-chain')?.classList.toggle('open');
+    return;
+  }
   const b=e.target.closest('[data-pnl]');
   if(b){ const mode=b.dataset.pnl, acc=accessSlugs();
     document.querySelectorAll('#pnlCols .pnl-col input').forEach(cb=>{
-      cb.checked = mode==='all' ? true : acc.has((pnlHeld[cb.dataset.c]||[]).find(x=>x.contract===cb.dataset.ct)?.slug?.toLowerCase()||'');
+      cb.checked = mode==='all' ? true : mode==='none' ? false
+        : acc.has((pnlHeld[cb.dataset.c]||[]).find(x=>x.contract===cb.dataset.ct)?.slug?.toLowerCase()||'');
     });
     syncPnlChAll();
     return;
   }
-  if(e.target.id==='pnlGo'){ pnlAnalyze(false); return; }
+  if(e.target.closest('#pnlGo')){ pnlAnalyze(false); return; }
+});
+document.getElementById('pnlCols')?.addEventListener('input',e=>{
+  if(e.target.id==='pnlFilter') pnlFilterCols();
 });
 document.getElementById('pnlCols')?.addEventListener('change',e=>{
   const all=e.target.closest('.pnl-ch-all');
@@ -2588,6 +2765,16 @@ document.getElementById('pnlCols')?.addEventListener('change',e=>{
 });
 if(pnlAddr){ const el=document.getElementById('pnlAddr'); if(el) el.value=pnlAddr; }
 pnlSyncClear();
+
+// botón "volver arriba"
+{ const tt=document.getElementById('toTop');
+  if(tt){
+    let raf=0;
+    const upd=()=>{ raf=0; tt.hidden = (window.scrollY||document.documentElement.scrollTop||0) < 640; };
+    addEventListener('scroll',()=>{ if(!raf) raf=requestAnimationFrame(upd); },{passive:true});
+    tt.addEventListener('click',()=>{ try{ window.scrollTo({top:0,behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); } });
+    upd();
+  } }
 
 render();
 try{ window.scrollTo(0,0); }catch(e){}
