@@ -619,12 +619,6 @@ padding:6px 13px;cursor:pointer;font-size:13px}
 .wcheck-in{display:flex;gap:8px;flex-wrap:wrap}
 .wcheck-in #wAddr{flex:1;min-width:200px;max-width:400px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:8px 11px;font-size:13px;font-family:ui-monospace,Menlo,monospace}
 .wc-go{background:var(--accent)!important;color:var(--accent-ink)!important;border-color:var(--accent)!important;font-weight:600}
-.wcheck-list{display:flex;flex-wrap:wrap;gap:7px}
-.wcheck-list:not(:empty){margin-top:11px}
-.wchip-w{display:inline-flex;align-items:center;gap:7px;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:5px 6px 5px 10px;font-size:12px;font-family:ui-monospace,Menlo,monospace}
-.wchip-w b{color:var(--accent);font-weight:700}
-.wchip-w button{background:transparent;border:0;color:var(--mut);cursor:pointer;padding:0;display:inline-flex}
-.wchip-w button:hover{color:var(--warn)}
 .wcheck-msg{margin-top:10px;font-size:12px;color:var(--mut)}
 .wcheck-msg.err{color:var(--warn)}
 .wcheck-note{margin-top:10px;font-size:11px;line-height:1.5;color:var(--dim,var(--mut))}
@@ -635,6 +629,16 @@ padding:6px 13px;cursor:pointer;font-size:13px}
 .wcheck-adv summary::before{content:"▸ ";color:var(--accent)}
 .wcheck-adv[open] summary::before{content:"▾ "}
 .wcheck-adv .wcheck-note{margin-top:8px}
+.wallets-box{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.wl-hd{font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:9px}
+.wallet-rows{display:flex;flex-direction:column;gap:6px}
+.wallet-rows:empty::after{content:attr(data-empty);color:var(--mut);font-size:12px}
+.wallet-row{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px;flex-wrap:wrap}
+.wallet-row .wl-nick{width:96px;flex:none;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:3px 6px;font-size:12px}
+.wallet-row .wl-addr{font-family:ui-monospace,Menlo,monospace;color:var(--mut)}
+.wallet-row .wl-n{margin-left:auto;color:var(--accent);white-space:nowrap;font-variant-numeric:tabular-nums}
+.wallet-row .wl-x{background:transparent;border:0;color:var(--mut);cursor:pointer;padding:0 2px;display:inline-flex;flex:none}
+.wallet-row .wl-x:hover{color:var(--warn)}
 .pnl-cols:not(:empty){margin-top:12px;display:flex;flex-direction:column;gap:10px}
 .pnl-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;position:sticky;top:0;z-index:4;background:var(--card);padding:6px 0}
 .pnl-bar .muted{font-size:12px}
@@ -918,17 +922,17 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
       <span id="wOsMsg" class="wcheck-msg"></span>
     </div>
     <div class="wcheck-note" data-k="wc_note"></div>
-    <details class="wcheck-adv">
-      <summary data-k="wc_adv"></summary>
+    <div class="wallets-box">
+      <div class="wl-hd" data-k="wl_mine"></div>
+      <div id="wList" class="wallet-rows"></div>
       <div class="wcheck-in" style="margin-top:9px">
-        <input id="wAddr" type="text" autocomplete="off" spellcheck="false" placeholder="0x…">
+        <input id="wAddr" type="text" autocomplete="off" spellcheck="false" placeholder="0x… , 0x… , 0x…">
         <button id="wConnect" class="chk" data-k="wc_connect"></button>
-        <button id="wCheck" class="chk" data-k="wc_check"></button>
+        <button id="wCheck" class="chk wc-go" data-k="wl_add"></button>
       </div>
-      <div id="wList" class="wcheck-list"></div>
       <div id="wMsg" class="wcheck-msg" hidden></div>
       <div class="wcheck-note" data-k="wc_adv_note"></div>
-    </details>
+    </div>
   </div>` : ""}
   <p class="note" data-k="note_keys"></p>
   <div class="scroll"><table id="tKeys"></table></div>
@@ -1022,9 +1026,10 @@ const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
 let ownLocal = {};
 try { ownLocal = JSON.parse(localStorage.getItem('mints_owned')||'{}'); } catch(e){}
 let walletOwned = new Set();   // norm(nombre) de colecciones de acceso que tienen tus wallets (vía /api/wallet)
-let walletList = [], walletData = {};
+let walletList = [], walletData = {}, walletLabels = {};
 try{ walletList = JSON.parse(localStorage.getItem('mints_wallets')||'[]'); }catch(e){}
 try{ walletData = JSON.parse(localStorage.getItem('mints_wallet_data')||'{}'); }catch(e){}
+try{ walletLabels = JSON.parse(localStorage.getItem('mints_wallet_labels')||'{}'); }catch(e){}
 function isOwned(name){
   const n = norm(name);
   if(n in ownLocal) return ownLocal[n];
@@ -1341,7 +1346,9 @@ const STR = {
   wc_os_connect:'⚡ Conectar OpenSea',wc_os_recheck:'⚡ Volver a comprobar fases',
   wc_note:'Firmas un mensaje en tu wallet (personal_sign — NO es una transacción, no se toca la clave privada). Con eso OpenSea nos dice, fase por fase (GTD / FCFS / WL…) de cada mint del radar, si tu wallet está en la lista. El resultado sale en la columna Access del radar. El token dura ~1 h y no se guarda en ningún servidor.',
   wc_adv:'Otra opción: solo ver qué colecciones tengo',
-  wc_adv_note:'Sin firmar: lee de OpenSea qué colecciones tiene la dirección y marca las que dan acceso. No dice si estás en la lista firmada de un drop concreto.',
+  wc_adv_note:'Sin firmar: lee de OpenSea qué colecciones tiene cada dirección y marca las que dan acceso. No dice si estás en la lista firmada de un drop concreto (para eso, Conectar OpenSea con esa wallet).',
+  wl_mine:'Mis wallets',wl_add:'Añadir',wl_empty:'Aún no has añadido ninguna. Pega una o varias direcciones (separadas por comas o espacios).',
+  wl_nick_ph:'apodo',
   h_buy:'Prioridad de compra',
   h_floors:'Alertas de floor (±15 % / 7 días)',
   note_floors:'Se llena según  node fetch-floors.mjs  va acumulando histórico.',
@@ -1483,7 +1490,9 @@ const STR = {
   wc_os_connect:'⚡ Connect OpenSea',wc_os_recheck:'⚡ Re-check phases',
   wc_note:'You sign a message in your wallet (personal_sign — NOT a transaction, no private key involved). OpenSea then tells us, phase by phase (GTD / FCFS / WL…) for every mint in the radar, whether your wallet is on the list. Results show in the radar Access column. The token lasts ~1 h and is not stored on any server.',
   wc_adv:'Or: just check which collections I hold',
-  wc_adv_note:'No signature: reads from OpenSea which collections the address holds and flags the access-granting ones. Does not tell you if you are on a specific drop signed list.',
+  wc_adv_note:'No signature: reads from OpenSea which collections each address holds and flags the access-granting ones. Does not tell you if you are on a specific drop signed list (for that, Connect OpenSea with that wallet).',
+  wl_mine:'My wallets',wl_add:'Add',wl_empty:'None added yet. Paste one or more addresses (comma- or space-separated).',
+  wl_nick_ph:'nickname',
   h_buy:'Buy priority',
   h_floors:'Floor alerts (±15% / 7 days)',
   note_floors:'Fills up as  node fetch-floors.mjs  accumulates history.',
@@ -2378,38 +2387,67 @@ function recomputeWalletOwned(){
     if(c) walletOwned.add(norm(c.name));
   }
 }
-function saveWallets(){ try{ localStorage.setItem('mints_wallets',JSON.stringify(walletList)); localStorage.setItem('mints_wallet_data',JSON.stringify(walletData)); }catch(e){} }
+function saveWallets(){ try{
+  localStorage.setItem('mints_wallets',JSON.stringify(walletList));
+  localStorage.setItem('mints_wallet_data',JSON.stringify(walletData));
+  localStorage.setItem('mints_wallet_labels',JSON.stringify(walletLabels));
+}catch(e){} }
 const shortAddr = a => a.slice(0,6)+'…'+a.slice(-4);
+const walletNick = a => walletLabels[a] || shortAddr(a);   // apodo si lo hay, si no la dirección corta
 function heldAccess(a){ const bs=rankBySlug(); return (walletData[a]||[]).filter(s=>bs.has(String(s).toLowerCase())).length; }
 function renderWalletList(){
   const el = document.getElementById('wList'); if(!el) return;
-  el.innerHTML = walletList.map(a=>'<span class="wchip-w"><b>'+esc(shortAddr(a))+'</b> '+heldAccess(a)+' '+(L==='es'?'accesos':'access')+'<button data-wrm="'+esc(a)+'" title="'+(L==='es'?'quitar':'remove')+'">'+ico('x')+'</button></span>').join('');
+  const ae=document.activeElement;
+  if(ae && ae.classList && ae.classList.contains('wl-nick') && el.contains(ae)) return;  // no romper mientras se edita un apodo
+  el.dataset.empty = t('wl_empty');
+  el.innerHTML = walletList.map(a=>
+    '<div class="wallet-row" data-a="'+esc(a)+'">'+
+      '<input class="wl-nick" value="'+esc(walletLabels[a]||'')+'" placeholder="'+esc(t('wl_nick_ph'))+'" spellcheck="false" autocomplete="off">'+
+      '<span class="wl-addr">'+esc(shortAddr(a))+'</span>'+
+      '<span class="wl-n">'+heldAccess(a)+' '+(L==='es'?'accesos':'access')+'</span>'+
+      '<button class="wl-x" data-wrm="'+esc(a)+'" title="'+(L==='es'?'quitar':'remove')+'">'+ico('x')+'</button>'+
+    '</div>').join('');
 }
 function wMsg(txt,err){ const m=document.getElementById('wMsg'); if(!m) return; m.hidden=!txt; m.className='wcheck-msg'+(err?' err':''); m.textContent=txt||''; }
-async function checkWallet(addr){
-  addr = String(addr||'').trim().toLowerCase();
-  if(!/^0x[a-f0-9]{40}$/.test(addr)){ wMsg(L==='es'?'Dirección no válida (0x + 40 hex).':'Invalid address (0x + 40 hex).',1); return; }
-  wMsg(L==='es'?'Consultando OpenSea…':'Querying OpenSea…');
-  try{
-    const r = await fetch('/api/wallet?address='+addr);
-    const j = await r.json().catch(()=>({}));
-    if(!r.ok || j.error) throw new Error(j.error || ('HTTP '+r.status));
-    walletData[addr] = [...new Set([].concat(...Object.values(j.chains||{})))];
-    if(!walletList.includes(addr)) walletList.push(addr);
-    saveWallets(); recomputeWalletOwned(); renderWalletList(); render();
-    const n = heldAccess(addr);
-    wMsg('✓ '+shortAddr(addr)+' — '+n+' '+(L==='es'?'colecciones de acceso':'access collections')+(j.partial?(L==='es'?' (parcial: OpenSea limitó la consulta)':' (partial: OpenSea rate-limited)'):''));
-  }catch(e){ wMsg((L==='es'?'Error: ':'Error: ')+e.message,1); }
+async function addWallets(raw){
+  const cand = [...new Set((String(raw||'').toLowerCase().match(/0x[a-f0-9]{40}/g)||[]))];
+  if(!cand.length){ wMsg(L==='es'?'No hay ninguna dirección válida (0x + 40 hex).':'No valid address (0x + 40 hex).',1); return; }
+  const fresh = cand.filter(a=>!walletData[a]);
+  const list = fresh.length ? fresh : cand;            // si ya estaban todas -> refresca
+  let ok=0, part=0;
+  for(let i=0;i<list.length;i++){
+    const a=list[i];
+    wMsg((L==='es'?'Consultando ':'Querying ')+(i+1)+'/'+list.length+' — '+shortAddr(a)+'…');
+    try{
+      const r = await fetch('/api/wallet?address='+a);
+      const j = await r.json().catch(()=>({}));
+      if(!r.ok || j.error) throw 0;
+      walletData[a] = [...new Set([].concat(...Object.values(j.chains||{})))];
+      if(!walletList.includes(a)) walletList.push(a);
+      if(j.partial) part++;
+      ok++;
+      saveWallets(); recomputeWalletOwned(); renderWalletList(); render();
+    }catch(e){}
+  }
+  const el=document.getElementById('wAddr'); if(el) el.value='';
+  wMsg('✓ '+ok+'/'+list.length+' '+(L==='es'?'wallets añadidas/actualizadas':'wallets added/updated')+(part?(L==='es'?' · '+part+' parcial(es), OpenSea limitó':' · '+part+' partial, OpenSea rate-limited'):''), ok?0:1);
 }
-function removeWallet(a){ walletList=walletList.filter(x=>x!==a); delete walletData[a]; saveWallets(); recomputeWalletOwned(); renderWalletList(); render(); wMsg(''); }
+function removeWallet(a){ walletList=walletList.filter(x=>x!==a); delete walletData[a]; delete walletLabels[a]; saveWallets(); recomputeWalletOwned(); renderWalletList(); render(); wMsg(''); }
 recomputeWalletOwned();
-document.getElementById('wCheck')?.addEventListener('click',()=>checkWallet(document.getElementById('wAddr').value));
-document.getElementById('wAddr')?.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); checkWallet(e.target.value); } });
+document.getElementById('wCheck')?.addEventListener('click',()=>addWallets(document.getElementById('wAddr').value));
+document.getElementById('wAddr')?.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); addWallets(e.target.value); } });
 document.getElementById('wConnect')?.addEventListener('click',async()=>{
   if(!window.ethereum){ wMsg(L==='es'?'No hay wallet en el navegador — pega la dirección.':'No browser wallet — paste the address.',1); return; }
-  try{ const acc = await window.ethereum.request({method:'eth_requestAccounts'}); if(acc&&acc[0]){ document.getElementById('wAddr').value=acc[0]; checkWallet(acc[0]); } }catch(e){}
+  try{ const acc = await window.ethereum.request({method:'eth_requestAccounts'}); if(acc&&acc[0]) addWallets(acc[0]); }catch(e){}
 });
 document.getElementById('wList')?.addEventListener('click',e=>{ const b=e.target.closest('[data-wrm]'); if(b) removeWallet(b.dataset.wrm); });
+document.getElementById('wList')?.addEventListener('input',e=>{
+  const inp=e.target.closest('.wl-nick'); if(!inp) return;
+  const a=inp.closest('.wallet-row')?.dataset.a; if(!a) return;
+  const v=inp.value.trim();
+  if(v) walletLabels[a]=v; else delete walletLabels[a];
+  saveWallets();
+});
 
 // ---- elegibilidad REAL contra OpenSea (SIWE: firmas un mensaje, no una tx) ----
 let osJwt=null, osAddr=null, osExp=0;
