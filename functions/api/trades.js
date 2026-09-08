@@ -18,7 +18,7 @@ const STABLE = /USD|DOLLAR|^DAI$|^GHO$|^PYUSD$/i;
 const ETHLIKE = /^(W?ETH|WETH\.E)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
-const CACHE_V = "10";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
+const CACHE_V = "11";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
 const MAX_PAGES = 16;      // ~800 movimientos por lista
 const MAX_FLOOR = 18;
 
@@ -286,7 +286,14 @@ async function handle({ request, env }) {
       subreq++;
       const st = await fetch(`https://api.opensea.io/api/v2/collections/${slug}/stats`, { headers: OH }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
       const fp = st?.total?.floor_price;
-      if (fp != null) floors[contract] = { floorEth: +fp, floorUsd: +(fp * rate).toFixed(2) };
+      // En Robinhood Chain el floor suele venir en USDG (≈ 1 $), no en ETH:
+      // mirar el símbolo y normalizar, si no un floor de "0.2 USDG" salía como 0.2 ETH (~500 $).
+      const fsym = st?.total?.floor_price_symbol || "ETH";
+      if (fp != null) {
+        floors[contract] = STABLE.test(fsym)
+          ? { floorEth: round(+fp / rate), floorUsd: +(+fp).toFixed(2) }
+          : { floorEth: +fp, floorUsd: +(+fp * rate).toFixed(2) };
+      }
     }
     for (const p of positions) {
       const f = floors[p.contract];
