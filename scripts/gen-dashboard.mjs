@@ -998,6 +998,7 @@ ${data.public ? "" : `<section data-p="spots" hidden>
   <div class="chains" id="wWallets" hidden></div>
   <div id="wStats" class="wstats"></div>
   <div class="filtrow" id="wFilters" style="margin:6px 14px 0">
+    <div class="chains" id="wChainF" hidden></div>
     <div class="chains" id="wStatusF">
       <button data-s="all" class="on" data-k="w_f_all"></button>
       <button data-s="held" data-k="w_f_held"></button>
@@ -1998,6 +1999,7 @@ const BS_TX={robinhood:'https://robinhoodchain.blockscout.com/tx/',ethereum:'htt
 const txLink=(chain,tx)=>tx?' <a class="oslink" href="'+esc((BS_TX[chain]||BS_TX.ethereum)+tx)+'" target="_blank" rel="noopener">tx ↗</a>':'';
 let wSel='all';   // filtro de wallet en la pestaña Cartera
 let wStatus='all';   // filtro vendido / en cartera / todo
+let wChain='all';    // filtro de red en la pestaña Cartera (independiente del radar)
 function renderWallet(){
   const box=document.getElementById('wStats'), tbl=document.getElementById('tWallet');
   if(!box||!tbl) return;
@@ -2026,8 +2028,21 @@ function renderWallet(){
     } else wbar.hidden=true;
   }
 
+  // selector de red propio de la Cartera (no lo manda el radar)
+  { const CL={robinhood:'RH',ethereum:'ETH',ink:'Ink',base:'Base'};
+    const chs=[...new Set((T.positions||[]).map(p=>p.chain||'robinhood'))];
+    const cf=document.getElementById('wChainF');
+    if(cf){
+      if(chs.length>1){
+        if(wChain!=='all' && !chs.includes(wChain)) wChain='all';
+        cf.hidden=false;
+        cf.innerHTML='<button data-c="all"'+(wChain==='all'?' class="on"':'')+'>'+t('all_chains')+'</button>'+
+          chs.map(c=>'<button data-c="'+esc(c)+'"'+(wChain===c?' class="on"':'')+'>'+chainIco(c)+' '+esc(chainLabel(c)||CL[c]||c)+'</button>').join('');
+      } else { cf.hidden=true; wChain='all'; }
+    }
+  }
   // el resumen respeta el filtro de red y de wallet
-  const inCh=p=>(D.public || chainSel==='all' || p.chain===chainSel) && (wSel==='all'||p.wallet===wSel);
+  const inCh=p=>(wChain==='all' || (p.chain||'robinhood')===wChain) && (wSel==='all'||p.wallet===wSel);
   const P=T.positions.filter(inCh);
   const sold=P.filter(p=>p.status==='sold'), held=P.filter(p=>p.status==='held');
   const sm=(arr,f)=>arr.reduce((a,x)=>a+(f(x)||0),0);
@@ -2275,6 +2290,10 @@ document.getElementById('wRealOnly')?.addEventListener('change',renderWallet);
 document.getElementById('wStatusF')?.addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
   wStatus=b.dataset.s; renderWallet();
+});
+document.getElementById('wChainF')?.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  wChain=b.dataset.c; renderWallet();
 });
 document.getElementById('wGroupAll')?.addEventListener('click',()=>{
   const grps=[...document.querySelectorAll('#tWallet tr.wgrp')];
@@ -2721,6 +2740,21 @@ async function pnlAnalyze(full){
     try{ localStorage.setItem('mints_pnl',JSON.stringify({addr:pnlAddr,trades:D.trades})); }catch(e){}
   };
   const flush=()=>{ persist(); render(); };
+  // holdings vía OpenSea (fiable) — 1 llamada, todas las redes; base para el modo "todo"
+  let wlByChain=null;
+  const getWL=async()=>{
+    if(wlByChain) return wlByChain;
+    wlByChain={};
+    try{
+      const wr=await fetch('/api/wallet?address='+pnlAddr).then(x=>x.json());
+      for(const col of (wr.collections||[])) for(const ch of (col.chains||[])){
+        if(col.contract) (wlByChain[ch]||(wlByChain[ch]=[])).push(String(col.contract).toLowerCase());
+      }
+      if(wr.partial) trunc=true;
+    }catch(e){}
+    return wlByChain;
+  };
+  const soldPartial=[];
   pnlMsg(''); pnlSyncClear();
   if(resumed) P((L==='es'?'reanudando — ':'resuming — ')+resumed+(L==='es'?' NFT ya en caché':' NFTs already cached'));
   try{
@@ -2732,15 +2766,23 @@ async function pnlAnalyze(full){
           contracts=prog.contractsByChain[chain].slice();   // ya enumeradas antes -> nos ahorramos la llamada
         } else {
           P(cn+' — '+(L==='es'?'listando colecciones…':'listing collections…'));
-          try{
-            const lr=await fetch('/api/trades',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address:pnlAddr,chain,contractsOnly:true})}).then(x=>x.json());
-            if(lr.error){ failed.push(cn+(lr.detail?' ('+lr.detail+')':'')); continue; }
-            contracts=(lr.contracts||[]).map(c=>c.contract); if(lr.truncated) trunc=true;
-            prog.contractsByChain[chain]=contracts.slice(); persist();
-          }catch(e){ failed.push(cn); continue; }
+          const set=new Set();
+          // 1) las que tienes AHORA (OpenSea, no revienta con wallets enormes)
+          const wl=await getWL(); for(const c of (wl[chain]||[])) set.add(c);
+          // 2) las ya vendidas / salidas (barrido on-chain corto) — best effort, corta a los 25 s
+          { const ac=new AbortController(), to=setTimeout(()=>ac.abort(),25000);
+            try{
+              const lr=await fetch('/api/trades',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address:pnlAddr,chain,contractsOnly:true}),signal:ac.signal}).then(x=>x.json());
+              for(const c of (lr.contracts||[])) if(c && c.contract) set.add(String(c.contract).toLowerCase());
+              if(lr.error || lr.truncated){ trunc=true; if(!(lr.contracts||[]).length) soldPartial.push(cn); }
+            }catch(e){ trunc=true; soldPartial.push(cn); }
+            finally{ clearTimeout(to); } }
+          contracts=[...set];
+          if(!contracts.length){ continue; }   // nada en esa red (o no se pudo listar) -> se salta; el resume la reintenta
+          prog.contractsByChain[chain]=contracts.slice(); persist();
         }
       }
-      if(!contracts.length){ failed.push(cn+(L==='es'?' (demasiada actividad — usa "colecciones que elija")':' (too busy — use "collections I pick")')); continue; }
+      if(!contracts.length){ continue; }
       let capped=contracts.map(c=>String(c).toLowerCase());
       if(Math.ceil(capped.length/PNL_BATCH)>PNL_MAXB){ trunc=true; capped=capped.slice(0,PNL_MAXB*PNL_BATCH); }
       const todo=capped.filter(ct=>!doneKeys.has(chain+':'+ct));
@@ -2764,7 +2806,14 @@ async function pnlAnalyze(full){
   } finally { clearInterval(tick); pnlProg(''); }
   persist();
   render(); pnlSyncClear();
-  pnlMsg('✓ '+all.length+(L==='es'?' NFT analizados':' NFTs analyzed')+(resumed?(L==='es'?' ('+resumed+' reanudados)':' ('+resumed+' resumed)'):'')+(trunc?(L==='es'?' · wallet grande, puede faltar lo más antiguo':' · large wallet, oldest may be missing'):'')+(failed.length?(L==='es'?' · falló: ':' · failed: ')+failed.slice(0,4).join(', ')+(failed.length>4?'…':''):''), failed.length&&!all.length?1:0);
+  const chData=new Set(all.map(p=>chainLabel(p.chain)||p.chain));
+  const sp=[...new Set(soldPartial)].filter(c=>chData.has(c));
+  pnlMsg('✓ '+all.length+(L==='es'?' NFT analizados':' NFTs analyzed')
+    +(resumed?(L==='es'?' ('+resumed+' reanudados)':' ('+resumed+' resumed)'):'')
+    +(sp.length?(L==='es'?' · en '+sp.join('/')+' puede faltar lo ya vendido (cadena lenta — reintenta)':' · on '+sp.join('/')+' sold items may be missing (slow chain — retry)'):'')
+    +(trunc&&!sp.length?(L==='es'?' · wallet grande, puede faltar lo más antiguo':' · large wallet, oldest may be missing'):'')
+    +(failed.length?(L==='es'?' · falló: ':' · failed: ')+failed.slice(0,4).join(', ')+(failed.length>4?'…':''):''),
+    failed.length&&!all.length?1:0);
 }
 function exportPnlCsv(){
   const T=D.trades; if(!T||!T.positions||!T.positions.length) return;

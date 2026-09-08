@@ -18,7 +18,7 @@ const STABLE = /USD|DOLLAR|^DAI$|^GHO$|^PYUSD$/i;
 const ETHLIKE = /^(W?ETH|WETH\.E)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
-const CACHE_V = "11";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
+const CACHE_V = "12";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
 const MAX_PAGES = 16;      // ~800 movimientos por lista
 const MAX_FLOOR = 18;
 
@@ -140,39 +140,62 @@ async function handle({ request, env }) {
     logIndex: it.log_index,
     toContract: !!(it.to?.is_contract),
   });
-  // si el filtro de colecciones es corto -> pide los NFT colección a colección
-  // (acotado y completo); si no, la lista entera de la wallet (puede truncarse)
-  const nftFetch = want && want.size <= 10
-    ? Promise.all([...want].map((ct) =>
-        bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155", token: ct }, nftMap, 8),
-      )).then((a) => a.flat())
-    : bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155" }, nftMap, MAX_PAGES);
+  // LOTE ACOTADO (want pequeño): no se barre la wallet entera — eso revienta el
+  // presupuesto de subrequests en wallets muy activas y el lote nunca terminaba.
+  // Se piden los NFT colección a colección y el pago/gas SOLO de esas txs.
+  const scoped = want && want.size <= 12;
+  let nft, erc20 = [], sent = [], nativeIn = [], rate;
 
-  const [nft, erc20, sent, nativeIn, rateFetched] = await Promise.all([
-    nftFetch,
-    bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-20" }, (it) => {
-      const sym = it.token?.symbol || "";
-      const kind = ETHLIKE.test(sym) ? "eth" : STABLE.test(sym) ? "usd" : null;
-      if (!kind) return null;
-      const dec = Number(it.token?.decimals) || 18;
-      const amt = Number(it.total?.value) / 10 ** dec;
-      if (!amt) return null;
-      return { tx: it.transaction_hash, kind, amt, from: (it.from?.hash || "").toLowerCase(), to: (it.to?.hash || "").toLowerCase() };
-    }),
-    bsList(`/addresses/${addr}/transactions`, { filter: "from" }, (it) => ({
-      tx: it.hash, gasEth: (Number(it.fee?.value) || 0) / 1e18, nativeEth: (Number(it.value) || 0) / 1e18,
-    })),
-    // valor nativo RECIBIDO por la wallet (los pagos de venta de un marketplace
-    // llegan como transacción interna, no como tx propia ni como ERC-20)
-    bsList(`/addresses/${addr}/internal-transactions`, { filter: "to" }, (it) => {
-      const to = (it.to?.hash || it.to || "").toLowerCase();
-      if (to !== addr) return null;
-      const v = (Number(it.value) || 0) / 1e18;
-      return v > 0 ? { tx: it.transaction_hash || it.tx_hash, eth: v } : null;
-    }, 6),
-    rateIn > 100 ? Promise.resolve(rateIn) : ethUsd(),
-  ]);
-  const rate = rateFetched;
+  if (scoped) {
+    nft = (await Promise.all([...want].map((ct) =>
+      bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155", token: ct }, nftMap, 8),
+    ))).flat();
+    rate = rateIn > 100 ? rateIn : await ethUsd();
+    const txs = [...new Set(nft.map((e) => e.tx).filter(Boolean))];
+    const maxTx = Math.max(0, Math.floor((BUDGET - subreq - 2) / 2));   // 2 llamadas por tx
+    if (txs.length > maxTx) truncated = true;
+    for (const h of txs.slice(0, maxTx)) {
+      const [txd, ttl] = await Promise.all([
+        bs(`/transactions/${h}`),
+        bs(`/transactions/${h}/token-transfers`, { type: "ERC-20" }),
+      ]);
+      if (txd) {
+        const fromMe = ((txd.from?.hash || txd.from) || "").toLowerCase() === addr;
+        if (fromMe) sent.push({ tx: h, gasEth: (Number(txd.fee?.value) || 0) / 1e18, nativeEth: (Number(txd.value) || 0) / 1e18 });
+      }
+      for (const it of (ttl?.items || [])) {
+        const sym = it.token?.symbol || "";
+        const kind = ETHLIKE.test(sym) ? "eth" : STABLE.test(sym) ? "usd" : null;
+        if (!kind) continue;
+        const dec = Number(it.token?.decimals) || 18;
+        const amt = Number(it.total?.value ?? it.value) / 10 ** dec;
+        if (amt) erc20.push({ tx: h, kind, amt, from: (it.from?.hash || "").toLowerCase(), to: (it.to?.hash || "").toLowerCase() });
+      }
+    }
+  } else {
+    [nft, erc20, sent, nativeIn, rate] = await Promise.all([
+      bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-721,ERC-1155" }, nftMap, MAX_PAGES),
+      bsList(`/addresses/${addr}/token-transfers`, { type: "ERC-20" }, (it) => {
+        const sym = it.token?.symbol || "";
+        const kind = ETHLIKE.test(sym) ? "eth" : STABLE.test(sym) ? "usd" : null;
+        if (!kind) return null;
+        const dec = Number(it.token?.decimals) || 18;
+        const amt = Number(it.total?.value) / 10 ** dec;
+        if (!amt) return null;
+        return { tx: it.transaction_hash, kind, amt, from: (it.from?.hash || "").toLowerCase(), to: (it.to?.hash || "").toLowerCase() };
+      }),
+      bsList(`/addresses/${addr}/transactions`, { filter: "from" }, (it) => ({
+        tx: it.hash, gasEth: (Number(it.fee?.value) || 0) / 1e18, nativeEth: (Number(it.value) || 0) / 1e18,
+      })),
+      bsList(`/addresses/${addr}/internal-transactions`, { filter: "to" }, (it) => {
+        const to = (it.to?.hash || it.to || "").toLowerCase();
+        if (to !== addr) return null;
+        const v = (Number(it.value) || 0) / 1e18;
+        return v > 0 ? { tx: it.transaction_hash || it.tx_hash, eth: v } : null;
+      }, 6),
+      rateIn > 100 ? Promise.resolve(rateIn) : ethUsd(),
+    ]);
+  }
 
   if (!nft.length && apiErr) return j({ error: "blockscout_down" }, 502);
 
