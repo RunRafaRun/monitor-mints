@@ -732,6 +732,15 @@ tr.row-have.row-spot td{background:color-mix(in srgb,var(--gold) 13%,transparent
 .wl-hdr b{color:var(--now)}
 .wl-hdr.warn b{color:var(--warn)}
 .wl-btn{margin-left:6px}
+.wq{margin:2px 0 4px}
+.wq-btn{background:color-mix(in srgb,var(--now) 14%,transparent);border:1px solid color-mix(in srgb,var(--now) 45%,var(--line));color:var(--fg);border-radius:5px;padding:2px 7px;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;line-height:1.5}
+.wq-btn .ico{color:var(--now)}
+.wq-car{transition:transform .12s;font-size:9px;color:var(--mut)}
+.wq.open .wq-car{transform:rotate(90deg)}
+.wq-detail{margin-top:4px;font-size:11px;display:flex;flex-direction:column;gap:3px}
+.wq-row{display:flex;gap:5px;align-items:baseline;flex-wrap:wrap}
+.wq-k{font-family:ui-monospace,Menlo,monospace;color:var(--now);font-weight:700;min-width:42px}
+.wq-w{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-weight:400}
 .wstats{display:flex;flex-wrap:wrap;gap:10px;margin:8px 14px 4px}
 .wstat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 14px;min-width:120px}
 .wstat .k{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
@@ -1026,10 +1035,21 @@ const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
 let ownLocal = {};
 try { ownLocal = JSON.parse(localStorage.getItem('mints_owned')||'{}'); } catch(e){}
 let walletOwned = new Set();   // norm(nombre) de colecciones de acceso que tienen tus wallets (vía /api/wallet)
-let walletList = [], walletData = {}, walletLabels = {};
+let walletList = [], walletData = {}, walletLabels = {}, walletElig = {};
 try{ walletList = JSON.parse(localStorage.getItem('mints_wallets')||'[]'); }catch(e){}
 try{ walletData = JSON.parse(localStorage.getItem('mints_wallet_data')||'{}'); }catch(e){}
 try{ walletLabels = JSON.parse(localStorage.getItem('mints_wallet_labels')||'{}'); }catch(e){}
+try{ walletElig = JSON.parse(localStorage.getItem('mints_wallet_elig')||'{}'); }catch(e){}  // {addr:{ts,drops:{slug:{stages}}}} SIWE por wallet
+// serve.mjs local: la elegibilidad viene horneada en D.mints[].wlElig -> pásala al mapa multi-wallet
+if(D.wlElig && D.wlElig.wallet && D.wlElig.wallet.address){
+  const a=String(D.wlElig.wallet.address).toLowerCase(), drops={};
+  for(const m of (D.mints||[])) if(m.wlElig && m.wlElig.stages && m.slug) drops[m.slug]={stages:m.wlElig.stages};
+  if(Object.keys(drops).length){
+    walletElig[a]={ ts:Date.parse(D.wlElig.updated)||Date.now(), drops };
+    if(!walletLabels[a] && D.wlElig.wallet.label) walletLabels[a]=D.wlElig.wallet.label;
+    if(!walletList.includes(a)) walletList.push(a);
+  }
+}
 function isOwned(name){
   const n = norm(name);
   if(n in ownLocal) return ownLocal[n];
@@ -1294,7 +1314,7 @@ const STR = {
   sp_now_live:'¡Ya hay fecha! {p} está en el radar y tienes plaza.',
   sp_pending_count:'{n} plaza(s) pendientes (proyecto sin fecha de mint todavía).',
   sp_del_project:'borrar el proyecto y todas sus plazas',
-  wl_os:'OpenSea:',
+  wl_os:'OpenSea:',wl_wallet:'wallet califica',wl_wallets:'wallets califican',
   wl_none_lists:'no estás en ninguna lista (comprobado)',
   wl_os_tip:'Elegibilidad real de tu wallet en OpenSea (firmada por su servidor). ✅ = estás en la lista de esa fase.',
   wl_count:'wallets en esta lista de OpenSea',
@@ -1438,7 +1458,7 @@ const STR = {
   sp_now_live:'It has a date now! {p} is in the radar and you hold a spot.',
   sp_pending_count:'{n} pending spot(s) (project has no mint date yet).',
   sp_del_project:'delete the project and all its spots',
-  wl_os:'OpenSea:',
+  wl_os:'OpenSea:',wl_wallet:'wallet qualifies',wl_wallets:'wallets qualify',
   wl_none_lists:'not on any list (checked)',
   wl_os_tip:'Your wallet’s real eligibility on OpenSea (signed by their server). ✅ = you are on that stage’s list.',
   wl_count:'wallets on this OpenSea list',
@@ -1646,29 +1666,52 @@ function xCell(m){
 }
 const publicPrice = m => { const g=m.phases.find(p=>/PUBLIC/i.test(p.k)); return g?priceOf(g.p):(m.priceEth??null); };
 
-// elegibilidad real de tu wallet (OpenSea): ✅ estás en la lista de esa fase
-function wlEligCell(m){
-  const w = m.wlElig; if(!w || !w.stages || !w.stages.length) return '';
-  // por tipo de fase (WL/GTD/FCFS/HOLDER/TEAM), el mejor estado
-  const byK = {};
-  for(const s of w.stages){
-    if(s.k==='PUBLIC') continue;
-    const rank = s.eligible===true?2:s.eligible===false?1:0;
-    if(!byK[s.k] || rank>byK[s.k].rank) byK[s.k]={rank, eligible:s.eligible};
+// ---- qué wallets tuyas califican en cada fase de un mint (SIWE + holdings) ----
+let _rbsCache=null, _wqCache=new Map();
+function rankBySlugCached(){ return _rbsCache || (_rbsCache=rankBySlug()); }
+const PH_ORDER=['GTD','FCFS','WL','HOLDER','TEAM','OG'];
+function mintWalletQualify(m){
+  if(_wqCache.has(m)) return _wqCache.get(m);
+  const ph={};                                    // { GTD:Set<addr>, FCFS:.., WL:.., HOLDER:.. }
+  const put=(k,a)=>{ (ph[k]||(ph[k]=new Set())).add(a); };
+  // 1) listas firmadas (SIWE) por wallet
+  for(const a of walletList){
+    const e=walletElig[a], d=e&&e.drops&&m.slug&&e.drops[m.slug];
+    const stages=d&&d.stages;
+    if(stages) for(const s of stages){ if(s.k && s.k!=='PUBLIC' && s.eligible===true) put(s.k,a); }
   }
-  const yes = Object.keys(byK).filter(k=>byK[k].eligible===true);
-  if(!yes.length) return '';   // solo interesa cuando SÍ estás en alguna lista
-  return '<div class="wl-elig wl-elig-yes" title="'+t('wl_os_tip')+'">'+ico('scope')+' '+t('wl_os')+' '+
-    yes.map(k=>'<span class="pill wl-in">'+ico('check')+' '+esc(k)+'</span>').join(' ')+'</div>';
+  // 2) holdings -> cuenta como fase HOLDER (tienes una colección que da acceso)
+  const need=(m.need||[]);
+  if(need.length){
+    const RBS=rankBySlugCached();
+    const needN=new Set(need.map(n=>norm(n.name)));
+    for(const a of walletList){
+      const hit=(walletData[a]||[]).some(sl=>{ const c=RBS.get(String(sl).toLowerCase()); return c && needN.has(norm(c.name)); });
+      if(hit) put('HOLDER',a);
+    }
+  }
+  _wqCache.set(m,ph);
+  return ph;
 }
-const wlEligYes = m => !!(m.wlElig && m.wlElig.stages.some(s=>s.eligible===true && s.k!=='PUBLIC'));
+const wlEligYes = m => { const ph=mintWalletQualify(m); return Object.keys(ph).some(k=>ph[k].size>0); };
+function walletsBtn(m){
+  const ph=mintWalletQualify(m);
+  const ks=Object.keys(ph).filter(k=>ph[k].size).sort((a,b)=>(PH_ORDER.indexOf(a)+9)%9-(PH_ORDER.indexOf(b)+9)%9);
+  if(!ks.length) return '';
+  const all=new Set(); ks.forEach(k=>ph[k].forEach(a=>all.add(a)));
+  const rows=ks.map(k=>'<div class="wq-row"><span class="wq-k">'+esc(k)+'</span>'+
+      [...ph[k]].map(a=>'<span class="wq-w">'+esc(walletNick(a))+'</span>').join('')+'</div>').join('');
+  return '<div class="wq"><button type="button" class="wq-btn" title="'+t('wl_os_tip')+'">'+ico('key')+' '+
+      all.size+' '+t(all.size===1?'wl_wallet':'wl_wallets')+' <span class="wq-car">▸</span></button>'+
+      '<div class="wq-detail" hidden>'+rows+'</div></div>';
+}
 function needCell(m){
   const spot = spotBadge(m);
-  const wl = wlEligCell(m);
+  const wq = walletsBtn(m);
   const need = (m.need||[]).map(n=>({name:n.name, owned: isOwned(n.name), wallets: n.wallets||[]}));
-  if(!need.length) return wl + spot + (wl||spot?'':'<span class="muted" style="font-size:11px">'+t('need_unknown')+'</span>');
+  if(!need.length) return wq + spot + (wq||spot?'':'<span class="muted" style="font-size:11px">'+t('need_unknown')+'</span>');
   const have = need.some(n=>n.owned);
-  return wl + spot + (have?'<div class="have-key">'+ico('key')+' '+t('have_key')+'</div>':'')
+  return wq + spot + (have?'<div class="have-key">'+ico('key')+' '+t('have_key')+'</div>':'')
     + need.map(n=>{
         const w = n.wallets.length ? '<span class="wchip" title="'+t('in_wallet')+'">'+n.wallets.map(esc).join('/')+'</span>' : '';
         return '<span class="pill '+(n.owned?'k-own':'')+'">'+(n.owned?ico('check')+' ':'')+esc(n.name)+w+'</span>';
@@ -2096,6 +2139,7 @@ function renderWallet(){
 
 function render(){
   pruneArmed();
+  _rbsCache=null; _wqCache=new Map();   // caches por-render (elegibilidad multi-wallet)
   document.documentElement.lang = L;
   document.querySelectorAll('[data-k]').forEach(el=>el.textContent = t(el.dataset.k));
   document.getElementById('q').placeholder = t('search_ph');
@@ -2348,6 +2392,11 @@ document.getElementById('tabs').addEventListener('click',e=>{
   document.querySelectorAll('section[data-p]').forEach(s=>s.hidden = s.dataset.p!==b.dataset.t);
 });
 document.addEventListener('click',e=>{
+  const wb=e.target.closest('.wq-btn');
+  if(wb){ const wq=wb.closest('.wq'); const on=wq.classList.toggle('open');
+    const d=wq.querySelector('.wq-detail'); if(d) d.hidden=!on; return; }
+});
+document.addEventListener('click',e=>{
   const th=e.target.closest('th'); if(!th) return;
   const tb=th.closest('table'); if(tb && tb.id==='tWallet') return;   // la cartera va agrupada por colección
   const i=[...th.parentNode.children].indexOf(th);
@@ -2391,6 +2440,7 @@ function saveWallets(){ try{
   localStorage.setItem('mints_wallets',JSON.stringify(walletList));
   localStorage.setItem('mints_wallet_data',JSON.stringify(walletData));
   localStorage.setItem('mints_wallet_labels',JSON.stringify(walletLabels));
+  localStorage.setItem('mints_wallet_elig',JSON.stringify(walletElig));
 }catch(e){} }
 const shortAddr = a => a.slice(0,6)+'…'+a.slice(-4);
 const walletNick = a => walletLabels[a] || shortAddr(a);   // apodo si lo hay, si no la dirección corta
@@ -2432,7 +2482,7 @@ async function addWallets(raw){
   const el=document.getElementById('wAddr'); if(el) el.value='';
   wMsg('✓ '+ok+'/'+list.length+' '+(L==='es'?'wallets añadidas/actualizadas':'wallets added/updated')+(part?(L==='es'?' · '+part+' parcial(es), OpenSea limitó':' · '+part+' partial, OpenSea rate-limited'):''), ok?0:1);
 }
-function removeWallet(a){ walletList=walletList.filter(x=>x!==a); delete walletData[a]; delete walletLabels[a]; saveWallets(); recomputeWalletOwned(); renderWalletList(); render(); wMsg(''); }
+function removeWallet(a){ walletList=walletList.filter(x=>x!==a); delete walletData[a]; delete walletLabels[a]; delete walletElig[a]; saveWallets(); recomputeWalletOwned(); renderWalletList(); render(); wMsg(''); }
 recomputeWalletOwned();
 document.getElementById('wCheck')?.addEventListener('click',()=>addWallets(document.getElementById('wAddr').value));
 document.getElementById('wAddr')?.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); addWallets(e.target.value); } });
@@ -2472,12 +2522,19 @@ async function osCheckElig(quiet){
   try{
     const r=await fetch('/api/os?op=elig',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jwt:osJwt,slugs})}).then(x=>x.json());
     if(r.error) throw new Error(r.error);
+    const addrLc=(osAddr||'').toLowerCase();
     const label=osAddr.slice(0,6)+'…'+osAddr.slice(-4);
+    // guarda la elegibilidad de ESTA wallet (persistida, por dirección) -> se acumula al conectar varias
+    if(r.drops && addrLc){
+      walletElig[addrLc]={ ts:Date.now(), drops:r.drops };
+      if(!walletList.includes(addrLc)) walletList.push(addrLc);
+      saveWallets(); renderWalletList();
+      if(!walletData[addrLc]) addWallets(addrLc);   // de paso, sus holdings
+    }
     const hitList=[];
     for(const m of (D.mints||[])){
       const d=r.drops&&r.drops[m.slug];
       if(!d||!d.stages) continue;
-      m.wlElig={wallet:label,stages:d.stages};
       const yes=[...new Set(d.stages.filter(s=>s.eligible===true&&s.k!=='PUBLIC').map(s=>s.k))];
       if(yes.length) hitList.push({name:m.name,chain:m.chain||'robinhood',phases:yes});
     }
