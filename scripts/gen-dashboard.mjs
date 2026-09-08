@@ -637,6 +637,10 @@ padding:6px 13px;cursor:pointer;font-size:13px}
 .wallet-row .wl-nick{width:96px;flex:none;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:3px 6px;font-size:12px}
 .wallet-row .wl-addr{font-family:ui-monospace,Menlo,monospace;color:var(--mut)}
 .wallet-row .wl-n{margin-left:auto;color:var(--accent);white-space:nowrap;font-variant-numeric:tabular-nums}
+.wallet-row .wl-ph{display:inline-flex;align-items:center;gap:3px;font-size:10px;white-space:nowrap;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--mut)}
+.wallet-row .wl-ph .ico{width:1em;height:1em}
+.wallet-row .wl-ph.ok{color:var(--now);border-color:color-mix(in srgb,var(--now) 45%,var(--line))}
+.wallet-row .wl-ph.dim{opacity:.6;border-style:dashed}
 .wallet-row .wl-x{background:transparent;border:0;color:var(--mut);cursor:pointer;padding:0 2px;display:inline-flex;flex:none}
 .wallet-row .wl-x:hover{color:var(--warn)}
 .pnl-cols:not(:empty){margin-top:12px;display:flex;flex-direction:column;gap:10px}
@@ -1365,11 +1369,13 @@ const STR = {
   w_note_pub:'Reconstruido de la blockchain (Blockscout PRO): precio real de cada mint/compra/venta + gas, FIFO por NFT. P&L al cambio de HOY. Floor de OpenSea (muchas de Ink no cotizan → sin floor). Ventas fuera de un marketplace on-chain estándar salen como «movido».',
   wc_title:'¿En qué fases calificas?',wc_connect:'Conectar',wc_check:'Comprobar',
   wc_os_connect:'⚡ Conectar OpenSea',wc_os_recheck:'⚡ Volver a comprobar fases',
-  wc_note:'Firmas un mensaje en tu wallet (personal_sign — NO es una transacción, no se toca la clave privada). Con eso OpenSea nos dice, fase por fase (GTD / FCFS / WL…) de cada mint del radar, si tu wallet está en la lista. El resultado sale en la columna Access del radar. El token dura ~1 h y no se guarda en ningún servidor.',
+  wc_note:'Firmas un mensaje en tu wallet (personal_sign — NO es una transacción, no se toca la clave privada). Con eso OpenSea nos dice, fase por fase (GTD / FCFS / WL…) de cada mint del radar, si tu wallet está en la lista. El resultado sale en la columna Access del radar y en «Mis wallets». Conecta cada wallet una vez (una firma por wallet): el resultado se guarda por dirección en tu navegador. El token de OpenSea dura ~1 h y no se guarda en ningún servidor.',
   wc_adv:'Otra opción: solo ver qué colecciones tengo',
   wc_adv_note:'Sin firmar: lee de OpenSea qué colecciones tiene cada dirección y marca las que dan acceso. No dice si estás en la lista firmada de un drop concreto (para eso, Conectar OpenSea con esa wallet).',
   wl_mine:'Mis wallets',wl_add:'Añadir',wl_empty:'Aún no has añadido ninguna. Pega una o varias direcciones (separadas por comas o espacios).',
   wl_nick_ph:'apodo',
+  wl_ph_in:'en fases',wl_ph_no:'sin fases',wl_ph_todo:'fases sin comprobar',wl_ph_old:'viejo',
+  wl_ph_tip:'Fases firmadas (GTD/FCFS/WL) en las que está esta wallet. Conéctala con «Conectar OpenSea» para comprobarlo (una firma por wallet).',
   h_buy:'Prioridad de compra',
   h_floors:'Alertas de floor (±15 % / 7 días)',
   note_floors:'Se llena según  node fetch-floors.mjs  va acumulando histórico.',
@@ -1509,11 +1515,13 @@ const STR = {
   w_note_pub:'Reconstructed from the blockchain (Blockscout PRO): real price of every mint/buy/sell + gas, FIFO per NFT. P&L at TODAY\\'s rate. Floor from OpenSea (many Ink collections do not trade there → no floor). Sales outside a standard on-chain marketplace show as “moved”.',
   wc_title:'Which phases do you qualify for?',wc_connect:'Connect',wc_check:'Check',
   wc_os_connect:'⚡ Connect OpenSea',wc_os_recheck:'⚡ Re-check phases',
-  wc_note:'You sign a message in your wallet (personal_sign — NOT a transaction, no private key involved). OpenSea then tells us, phase by phase (GTD / FCFS / WL…) for every mint in the radar, whether your wallet is on the list. Results show in the radar Access column. The token lasts ~1 h and is not stored on any server.',
+  wc_note:'You sign a message in your wallet (personal_sign — NOT a transaction, no private key involved). OpenSea then tells us, phase by phase (GTD / FCFS / WL…) for every mint in the radar, whether your wallet is on the list. Results show in the radar Access column and in “My wallets”. Connect each wallet once (one signature per wallet): the result is saved per address in your browser. The OpenSea token lasts ~1 h and is not stored on any server.',
   wc_adv:'Or: just check which collections I hold',
   wc_adv_note:'No signature: reads from OpenSea which collections each address holds and flags the access-granting ones. Does not tell you if you are on a specific drop signed list (for that, Connect OpenSea with that wallet).',
   wl_mine:'My wallets',wl_add:'Add',wl_empty:'None added yet. Paste one or more addresses (comma- or space-separated).',
   wl_nick_ph:'nickname',
+  wl_ph_in:'in phases',wl_ph_no:'no phases',wl_ph_todo:'phases unchecked',wl_ph_old:'stale',
+  wl_ph_tip:'Signed phases (GTD/FCFS/WL) this wallet is on. Connect it with “Connect OpenSea” to check (one signature per wallet).',
   h_buy:'Buy priority',
   h_floors:'Floor alerts (±15% / 7 days)',
   note_floors:'Fills up as  node fetch-floors.mjs  accumulates history.',
@@ -2464,18 +2472,31 @@ function saveWallets(){ try{
 const shortAddr = a => a.slice(0,6)+'…'+a.slice(-4);
 const walletNick = a => walletLabels[a] || shortAddr(a);   // apodo si lo hay, si no la dirección corta
 function heldAccess(a){ const bs=rankBySlug(); return (walletData[a]||[]).filter(s=>bs.has(String(s).toLowerCase())).length; }
+function eligStats(a){
+  const e=walletElig[a]; if(!e || !e.drops) return null;
+  let n=0;
+  for(const sl in e.drops){ const st=e.drops[sl]&&e.drops[sl].stages;
+    if(st && st.some(s=>s.k!=='PUBLIC'&&s.eligible===true)) n++; }
+  return { n, old: (Date.now()-(e.ts||0))>864e5 };   // >24 h = viejo
+}
 function renderWalletList(){
   const el = document.getElementById('wList'); if(!el) return;
   const ae=document.activeElement;
   if(ae && ae.classList && ae.classList.contains('wl-nick') && el.contains(ae)) return;  // no romper mientras se edita un apodo
   el.dataset.empty = t('wl_empty');
-  el.innerHTML = walletList.map(a=>
-    '<div class="wallet-row" data-a="'+esc(a)+'">'+
+  el.innerHTML = walletList.map(a=>{
+    const es=eligStats(a);
+    const ph = es
+      ? '<span class="wl-ph'+(es.n?' ok':'')+'" title="'+t('wl_ph_tip')+'">'+ico('key')+' '+(es.n?es.n+' '+t('wl_ph_in'):t('wl_ph_no'))+(es.old?' · '+t('wl_ph_old'):'')+'</span>'
+      : '<span class="wl-ph dim" title="'+t('wl_ph_tip')+'">'+ico('key')+' '+t('wl_ph_todo')+'</span>';
+    return '<div class="wallet-row" data-a="'+esc(a)+'">'+
       '<input class="wl-nick" value="'+esc(walletLabels[a]||'')+'" placeholder="'+esc(t('wl_nick_ph'))+'" spellcheck="false" autocomplete="off">'+
       '<span class="wl-addr">'+esc(shortAddr(a))+'</span>'+
       '<span class="wl-n">'+heldAccess(a)+' '+(L==='es'?'accesos':'access')+'</span>'+
+      ph+
       '<button class="wl-x" data-wrm="'+esc(a)+'" title="'+(L==='es'?'quitar':'remove')+'">'+ico('x')+'</button>'+
-    '</div>').join('');
+    '</div>';
+  }).join('');
 }
 function wMsg(txt,err){ const m=document.getElementById('wMsg'); if(!m) return; m.hidden=!txt; m.className='wcheck-msg'+(err?' err':''); m.textContent=txt||''; }
 async function addWallets(raw){
