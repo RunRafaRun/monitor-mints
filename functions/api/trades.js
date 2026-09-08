@@ -18,7 +18,7 @@ const STABLE = /USD|DOLLAR|^DAI$|^GHO$|^PYUSD$/i;
 const ETHLIKE = /^(W?ETH|WETH\.E)$/i;
 const SALE_METHODS = /order|fulfill|match|swap|trade|buy|accept|purchase|takeAsk|takeBid|sweep/i;
 const TTL = 6 * 3600;
-const CACHE_V = "12";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
+const CACHE_V = "13";      // súbelo al cambiar la lógica de cálculo -> invalida la caché
 const MAX_PAGES = 16;      // ~800 movimientos por lista
 const MAX_FLOOR = 18;
 
@@ -231,6 +231,15 @@ async function handle({ request, env }) {
     byNft.get(k).push(e);
   }
 
+  // una misma tx puede mover VARIOS NFT tuyos (mint en lote, sweep, envío múltiple).
+  // El gas / pago nativo / pago ERC-20 son de la TX -> se reparten entre esos NFT,
+  // si no cada NFT se lleva el total y el gas sale multiplicado por N.
+  const acqN = new Map(), disN = new Map();
+  for (const e of events) {
+    if (own.has(e.to) && !own.has(e.from)) acqN.set(e.tx, (acqN.get(e.tx) || 0) + 1);
+    else if (own.has(e.from) && !own.has(e.to)) disN.set(e.tx, (disN.get(e.tx) || 0) + 1);
+  }
+
   const positions = [];
   for (const [, list] of byNft) {
     list.sort((a, b) => (a.ts || 0) - (b.ts || 0));
@@ -243,13 +252,14 @@ async function handle({ request, env }) {
       const P = payByTx.get(e.tx) || [];
       const S = sentByTx.get(e.tx) || null;
       if (acq) {
+        const nAcq = acqN.get(e.tx) || 1;
         const isMint = e.from === ZERO;
         // pago = tokens ERC-20 que la wallet manda en la tx + valor nativo de la tx.
         // También para mints: hay colecciones que cobran el mint en USDG/USDC o en nativo.
         const o = payTotals(P, e.to, "out");
-        let priceEth = o.eth, priceUsd = o.usd;
-        if (S?.nativeEth) priceEth += S.nativeEth;
-        const gasEth = S ? S.gasEth : 0;
+        let priceEth = o.eth / nAcq, priceUsd = o.usd / nAcq;
+        if (S?.nativeEth) priceEth += S.nativeEth / nAcq;
+        const gasEth = S ? S.gasEth / nAcq : 0;
         const priceTotalEth = priceEth + (priceUsd ? priceUsd / rate : 0);  // precio real, SIN gas
         const costEth = priceTotalEth + gasEth;                             // coste con gas -> P&L FIFO
         const paid = priceEth > 0 || priceUsd > 0;
@@ -262,12 +272,14 @@ async function handle({ request, env }) {
         lots.push({ ts: e.ts, kind, priceEth: round(priceTotalEth), priceUsd: round(priceUsd), costEth, gasEth, tx: e.tx,
           flags: isMint && !paid ? ["free_mint"] : isGift ? ["gift"] : (!isMint && !paid) ? ["cost_unknown"] : [] });
       } else if (dis) {
-        const inc = payTotals(P, e.from, "in");
-        const natIn = nativeInByTx.get(e.tx) || 0;               // ETH nativo recibido (pago del marketplace)
-        const incEth = inc.eth + natIn;
-        const isSale = (incEth + inc.usd) > 0;
-        const gasEth = S ? S.gasEth : 0;
-        const grossEth = isSale ? incEth + (inc.usd ? inc.usd / rate : 0) : null;   // ingreso bruto
+        const nDis = disN.get(e.tx) || 1;
+        const inc0 = payTotals(P, e.from, "in");
+        const incEthRaw = inc0.eth / nDis, incUsd = inc0.usd / nDis;
+        const natIn = (nativeInByTx.get(e.tx) || 0) / nDis;      // ETH nativo recibido (pago del marketplace)
+        const incEth = incEthRaw + natIn;
+        const isSale = (incEth + incUsd) > 0;
+        const gasEth = S ? S.gasEth / nDis : 0;
+        const grossEth = isSale ? incEth + (incUsd ? incUsd / rate : 0) : null;   // ingreso bruto
         const procEth = grossEth != null ? grossEth - gasEth : null;                 // neto de gas -> realized
         const lot = lots.shift() || { ts: null, kind: "unknown", priceEth: null, costEth: null, gasEth: 0, flags: ["no_acq"] };
         positions.push({
