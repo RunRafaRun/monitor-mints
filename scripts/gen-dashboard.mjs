@@ -2500,8 +2500,10 @@ function renderWalletList(){
 }
 function wMsg(txt,err){ const m=document.getElementById('wMsg'); if(!m) return; m.hidden=!txt; m.className='wcheck-msg'+(err?' err':''); m.textContent=txt||''; }
 async function addWallets(raw){
-  const cand = [...new Set((String(raw||'').toLowerCase().match(/0x[a-f0-9]{40}/g)||[]))];
-  if(!cand.length){ wMsg(L==='es'?'No hay ninguna dirección válida (0x + 40 hex).':'No valid address (0x + 40 hex).',1); return; }
+  const txt = String(raw||'').trim();
+  if(!txt){ wMsg(''); return; }   // campo vacío -> sin ruido
+  const cand = [...new Set((txt.toLowerCase().match(/0x[a-f0-9]{40}/g)||[]))];
+  if(!cand.length){ wMsg(L==='es'?'Eso no parece una dirección (0x + 40 hex).':"That doesn't look like an address (0x + 40 hex).",1); return; }
   const fresh = cand.filter(a=>!walletData[a]);
   const list = fresh.length ? fresh : cand;            // si ya estaban todas -> refresca
   let ok=0, part=0;
