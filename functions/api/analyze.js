@@ -68,7 +68,7 @@ export async function onRequestPost({ request, env }) {
     }
     const text = typeof raw === "string" ? raw : (raw.response || raw.description || raw.result || "");
     if (!text) return j({ error: "empty_response" }, 502);
-    return j({ text, model, hadImage: !!imageBytes, hadSite: !!site, hadBio: !!bio });
+    return j({ text, model, hadImage: !!imageBytes, hadSite: !!site, hadBio: !!bio, _bioDebug: globalThis.__bioDebug || null });
   } catch (e) {
     return j({ error: "server_error", detail: String((e && e.message) || e).slice(0, 300) }, 500);
   }
@@ -170,10 +170,11 @@ async function fetchXBio(xUrl) {
   const to = setTimeout(() => ctrl.abort(), 6000);
   try {
     const r = await fetch(`https://api.fxtwitter.com/${encodeURIComponent(handle)}`, { signal: ctrl.signal, headers: { accept: "application/json" } });
-    if (!r.ok) return null;
+    if (!r.ok) { globalThis.__bioDebug = "http_" + r.status; return null; }
     const j2 = await r.json();
     return (j2?.user?.description || "").slice(0, 300) || null;
-  } catch {
+  } catch (e) {
+    globalThis.__bioDebug = "err_" + String((e && e.message) || e).slice(0, 120);
     return null;
   } finally {
     clearTimeout(to);
