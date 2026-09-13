@@ -2069,6 +2069,28 @@ function verdictCell(m){
   return pill+' <button class="aibtn" data-ai="'+esc(m.name)+'" title="'+esc(t('ai_tip'))+'">'+ico('sparkle')+'</button>';
 }
 // ---- "Analizar a fondo" (IA, bajo demanda) ----
+function normProjName(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+function levenshtein(a,b){
+  const m=a.length, n=b.length, d=Array.from({length:m+1},(_,i)=>[i,...Array(n).fill(0)]);
+  for(let j=0;j<=n;j++) d[0][j]=j;
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++)
+    d[i][j] = a[i-1]===b[j-1] ? d[i-1][j-1] : 1+Math.min(d[i-1][j],d[i][j-1],d[i-1][j-1]);
+  return d[m][n];
+}
+// Nombres de otros proyectos ya vistos que se parecen mucho (misma red) — posible copycat.
+function similarProjectNames(m){
+  const n = normProjName(m.name);
+  if(n.length<4) return [];
+  const out=[];
+  for(const o of D.mints){
+    if(o.name===m.name || o.chain!==m.chain) continue;
+    const on = normProjName(o.name);
+    if(on.length<4) continue;
+    const close = levenshtein(n,on)<=2 || on.includes(n) || n.includes(on);
+    if(close) out.push(o.name);
+  }
+  return [...new Set(out)].slice(0,5);
+}
 async function runAnalysis(btn){
   if(btn.disabled) return;
   const name = btn.dataset.ai;
@@ -2078,12 +2100,12 @@ async function runAnalysis(btn){
   openAiPanel(name, r.left, r.bottom+4, '<div class="ai-loading">'+ico('sparkle')+' '+t('ai_loading')+'</div>');
   try{
     const body = {
-      name: m.name, slug: m.slug||null, image: m.xAvatar||null, chain: m.chain,
+      name: m.name, slug: m.slug||null, image: m.xAvatar||null, x: m.x||null, site: m.site||null, chain: m.chain,
       minted: m.minted, supply: m.supply, priceEth: publicPrice(m), free: !!m.free,
       floorEth: m.floorEth, floorUsd: m.floorUsd, ethUsd: ETHUSD,
       phases: (m.phases||[]).map(p=>({k:p.k, label:p.n, p:p.p, state:p.s})),
       team: m.team, xFollowers: m.xFollowers, xAgeDays: m.xAgeDays, xRenames: m.xRenames, xLastRename: m.xLastRename,
-      hype: m.hype, pop: m.pop, haveKey: m.haveKey,
+      hype: m.hype, pop: m.pop, haveKey: m.haveKey, similarNames: similarProjectNames(m),
     };
     const res = await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
     if(res.error){
