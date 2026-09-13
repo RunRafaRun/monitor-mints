@@ -123,6 +123,11 @@ Fíjate especialmente en:
 - Señales de la cuenta de X: cuenta muy nueva, pocos seguidores, o que ha cambiado de nombre varias veces
   (cuenta reciclada — comprada ya con seguidores y renombrada para simular legitimidad).
 - Equipo anónimo sin trayectoria verificable.
+- Si te doy un "Veredicto automático (reglas fijas)": es un cálculo determinista ya hecho (floor/precio,
+  popularidad, cuenta de X, acceso), no una opinión — tenlo en cuenta. Puedes coincidir o no, pero si tu
+  VEREDICTO final es distinto al automático, dilo explícitamente en una razón y explica por qué discrepas
+  (ej. "el automático marca EVITAR por el floor, pero la web y la bio compensan esa duda"). No lo repitas
+  sin más ni lo ignores en silencio.
 
 Responde SIEMPRE en este formato exacto, sin nada antes ni después:
 
@@ -171,7 +176,8 @@ function buildPrompt(b, extra) {
     .join("\n  ");
   const mult = b.floorUsd != null && b.priceEth != null && b.priceEth > 0 ? (b.floorUsd / (b.priceEth * (b.ethUsd || 1))).toFixed(2) : null;
   const similar = (b.similarNames || []).filter((n) => n && n !== b.name);
-  return `Proyecto: ${b.name} (cadena: ${b.chain || "?"})
+  return `Veredicto automático (reglas fijas): ${b.ruleVerdict || "no disponible"}${(b.ruleReasons || []).length ? " — razones: " + b.ruleReasons.join("; ") : ""}
+Proyecto: ${b.name} (cadena: ${b.chain || "?"})
 Supply: ${b.minted ?? "?"} / ${b.supply ?? "?"} minteados
 Precio público: ${b.priceEth === 0 ? "GRATIS (solo gas)" : b.priceEth != null ? b.priceEth + " ETH" : b.free ? "desconocido (aunque hay alguna fase WL/GTD gratis, la pública no tiene precio confirmado)" : "desconocido"}
 Floor actual: ${b.floorEth != null ? b.floorEth + " ETH ($" + (b.floorUsd ?? "?") + ")" : "sin mercado / desconocido"}${mult ? ` (floor/precio ≈ ${mult}×)` : ""}${b.floorThin ? " — ⚠️ MERCADO MÍNIMO, floor poco fiable" : ""}

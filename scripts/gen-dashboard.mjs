@@ -2059,8 +2059,8 @@ function mintVerdict(m){
   else if(keyEnded && !keyOpen){ score -= 10; add('v_only_public'); }
 
   score = Math.max(0, Math.min(100, score));
-  const [label, cls] = score>=65 ? [t('v_go'),'pop-hi'] : score>=40 ? [t('v_maybe'),'pop-mid'] : [t('v_avoid'),'pop-lo'];
-  return { score, label, cls, reasons };
+  const [label, cls, code] = score>=65 ? [t('v_go'),'pop-hi','VALE_LA_PENA'] : score>=40 ? [t('v_maybe'),'pop-mid','DUDOSO'] : [t('v_avoid'),'pop-lo','EVITAR'];
+  return { score, label, cls, code, reasons };
 }
 function verdictCell(m){
   const pill = (!m.x && m.floorUsd==null) ? '<span class="muted">—</span>' : (()=>{
@@ -2101,6 +2101,7 @@ async function runAnalysis(btn){
   btn.disabled = true;
   openAiPanel(name, r.left, r.bottom+4, '<div class="ai-loading">'+ico('sparkle')+' '+t('ai_loading')+'</div>');
   try{
+    const rv = (!m.x && m.floorUsd==null) ? null : mintVerdict(m);
     const body = {
       name: m.name, slug: m.slug||null, image: m.xAvatar||null, x: m.x||null, site: m.site||null, chain: m.chain,
       minted: m.minted, supply: m.supply, priceEth: publicPrice(m), priceUsd: publicPrice(m)!=null?publicPrice(m)*ETHUSD:null, free: !!m.free,
@@ -2110,6 +2111,7 @@ async function runAnalysis(btn){
       hype: m.hype, pop: m.pop, haveKey: m.haveKey, similarNames: similarProjectNames(m),
       sales: m.sales, owners: m.owners, ownersPct: m.ownersPct, floorThin: !!m.floorThin, when: m.when,
       whaleHint: m.whaleHint, vol24: m.vol24, volTotal: m.volTotal, lang: L,
+      ruleVerdict: rv?.code || null, ruleReasons: rv?.reasons || [],
     };
     const res = await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
     if(res.error){
