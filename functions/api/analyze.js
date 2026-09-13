@@ -127,7 +127,8 @@ async function runGemini(env, promptText, image) {
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 20000);
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`, {
+    const key = encodeURIComponent(String(env.GEMINI_API_KEY || "").trim());
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
       method: "POST",
       signal: ctrl.signal,
       headers: { "content-type": "application/json" },
