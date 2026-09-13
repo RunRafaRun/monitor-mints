@@ -26,7 +26,13 @@
 // (texto). Ambos son modelos abiertos servidos por Cloudflare, no hay llamada a terceros.
 //
 // Nota: no hay forma gratuita de leer el "tweet fijado" de una cuenta (la API
-// oficial de X para eso es de pago); sí usamos la bio de X (fxtwitter, gratis).
+// oficial de X para eso es de pago); sí usamos la bio de X (vxtwitter, gratis).
+//
+// Si además hay un binding KV llamado "PREDICTIONS" (Workers & Pages → KV →
+// Create namespace, luego Bindings → Add → KV → variable name "PREDICTIONS"),
+// cada veredicto se guarda para revisarlo después del mint — ver
+// review-predictions.js. Sin ese binding, el análisis funciona igual, solo que
+// no queda constancia para aprender de aciertos/fallos.
 //
 // NO hay límite de peticiones aquí — si el botón queda público, protégelo con una
 // regla de Rate Limiting de Cloudflare sobre /api/analyze (esta función por sí
@@ -36,18 +42,19 @@
 const VISION_MODEL = "@cf/llava-hf/llava-1.5-7b-hf";
 const TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, waitUntil }) {
   if (!env.AI) return j({ error: "not_configured" }, 503);
 
   const body = await request.json().catch(() => null);
   if (!body || !body.name) return j({ error: "bad_request" }, 400);
 
-  const [imageUrl, bio, site] = await Promise.all([
+  const [imageUrl, bio, site, sales] = await Promise.all([
     resolveImage(body, env).catch(() => null),
     body.x ? fetchXBio(body.x).catch(() => null) : null,
     body.site ? fetchSiteInfo(body.site).catch(() => null) : null,
+    body.slug ? fetchSalesEvents(body.slug, env).catch(() => null) : null,
   ]);
-  const extra = { bio, site };
+  const extra = { bio, site, sales };
 
   try {
     let raw, model;
@@ -68,7 +75,11 @@ export async function onRequestPost({ request, env }) {
     }
     const text = typeof raw === "string" ? raw : (raw.response || raw.description || raw.result || "");
     if (!text) return j({ error: "empty_response" }, 502);
-    return j({ text, model, hadImage: !!imageBytes, hadSite: !!site, hadBio: !!bio });
+    if (env.PREDICTIONS) {
+      const savePromise = savePrediction(env, body, text).catch(() => {});
+      if (waitUntil) waitUntil(savePromise); else await savePromise;
+    }
+    return j({ text, model, hadImage: !!imageBytes, hadSite: !!site, hadBio: !!bio, hadSales: !!sales });
   } catch (e) {
     return j({ error: "server_error", detail: String((e && e.message) || e).slice(0, 300) }, 500);
   }
@@ -79,18 +90,26 @@ imagen/logo, bio de X, y un extracto de su propia web) y debes juzgar, en base a
 scam, si merece la pena mintear.
 
 Fíjate especialmente en:
-- Imagen (si la hay): describe brevemente el arte y valora si parece genérico/plantilla, un placeholder,
-  o muy similar al estilo de otra colección conocida (posible arte derivativo/robado).
+- Imagen (si la hay): identifica el TIPO de sujeto (animal —cuál—, robot, humano/punk, abstracto,
+  personaje de videojuego, meme, objeto...) y valora si el arte parece genérico/plantilla, un
+  placeholder, o muy similar al estilo de otra colección conocida (posible arte derivativo/robado).
+  Con tu conocimiento general (no datos verificados, dilo si no estás seguro): ese arquetipo concreto
+  (ej. "PFP de animal pixelado", "robot genérico"), ¿es un patrón muy visto y saturado en NFT? Si conoces
+  colecciones famosas de ese mismo tipo, menciona brevemente cómo les fue (subieron, se desplomaron...) a
+  modo de referencia — pero dejando claro que es tu conocimiento general, no un dato de este radar.
 - Nombre: si en "Proyectos parecidos ya vistos" aparece algo, coméntalo como posible copia/variación de
-  una colección ya establecida en la misma red (copycat).
+  una colección ya establecida en la misma red (copycat) — ahí SÍ son datos reales del radar, con su
+  floor/popularidad si se indican.
 - Qué es el proyecto: usa la bio de X y el extracto de la web para explicar en una frase a qué dice
   dedicarse (arte, gaming, utilidad real, "comunidad" sin más, etc.) y si tiene whitepaper/docs enlazados
   — su ausencia total en un proyecto que promete "utilidad" es una señal de alerta.
 - Economía: precio público vs floor actual (si el floor ya está por debajo del precio público, mintear
   ahora mismo da pérdida). Supply muy grande sin demanda real.
-- Fiabilidad del floor (dato de OpenSea, no on-chain directo): si hay muy pocas ventas totales (<3) el
-  floor no es de fiar, puede ser una sola oferta/venta entre wallets del propio equipo (wash trading) más
-  que demanda real — dilo explícitamente si "ventas totales" es bajo o "mercado mínimo" está marcado.
+- Fiabilidad del floor: el "floor" de OpenSea es el precio del LISTADO más barato (una oferta, no
+  necesariamente una venta ejecutada). Si "ventas totales" es bajo (<3) el floor no es de fiar. Si te doy
+  "Últimas ventas reales" (eventos de venta reales, con wallets), compara el floor contra el precio de la
+  última venta real: si difieren mucho, dilo. Pocas wallets distintas comprando/vendiendo entre sí, o una
+  venta con el mismo comprador y vendedor, es wash trading casi seguro — dilo sin rodeos si lo ves.
   Si el % de propietarios únicos sobre lo minteado es muy bajo (mucha concentración en pocas wallets),
   es otra señal de posible acumulación/wash trading, no de comunidad real.
 - Estructura de fases: si las fases WL/GTD/FCFS (baratas o gratis) ya se repartieron y "el público" solo
@@ -132,9 +151,62 @@ Fases:
 Hype interno: ${b.hype ?? "?"}/100 · Popularidad: ${b.pop || "?"}
 Equipo: ${b.team || "desconocido"}
 Cuenta de X: ${b.xFollowers ?? "?"} seguidores, ${b.xAgeDays != null && b.xAgeDays >= 0 ? b.xAgeDays + " días de antigüedad" : "antigüedad desconocida"}${b.xRenames ? `, ⚠️ cambió de nombre ${b.xRenames} vez/veces (última: ${b.xLastRename || "?"})` : ", sin cambios de nombre detectados"}
+${salesLine(extra.sales)}
 Bio de X: ${extra.bio || "(no disponible)"}
 Proyectos parecidos ya vistos en el radar (misma red, nombre similar): ${similar.length ? similar.join(", ") : "ninguno detectado"}
 Web del proyecto: ${b.site ? (extra.site ? `\n  Whitepaper/docs enlazados: ${extra.site.whitepaper || "no encontrados en la portada"}\n  Extracto de la web: "${extra.site.text || "(sin texto legible)"}"` : "(no se pudo leer la web)") : "(sin web enlazada)"}`;
+}
+
+function salesLine(sales) {
+  if (!sales) return "Últimas ventas reales: (no disponible — sin slug de OpenSea o petición fallida)";
+  if (!sales.sales) return "Últimas ventas reales: ninguna venta registrada — el floor (si lo hay) es solo un listado, sin demanda confirmada";
+  const parts = [`${sales.sales} venta(s) recientes analizadas`, `${sales.uniqueBuyers} comprador(es) distinto(s)`, `${sales.uniqueSellers} vendedor(es) distinto(s)`];
+  if (sales.lastSalePrice != null) parts.push(`última venta real: ${sales.lastSalePrice} ${sales.lastSaleSymbol || ""}`.trim());
+  if (sales.selfTrades > 0) parts.push(`⚠️ ${sales.selfTrades} venta(s) con el MISMO comprador y vendedor (autoventa)`);
+  if (sales.walletOverlap > 0) parts.push(`⚠️ ${sales.walletOverlap} wallet(s) que aparecen como comprador Y vendedor entre las ventas vistas`);
+  if (sales.suspicious) parts.push("→ patrón sospechoso de wash trading");
+  return "Últimas ventas reales (OpenSea events): " + parts.join(", ");
+}
+
+// Eventos de venta reales de OpenSea (no solo el floor listado) para distinguir un
+// floor de verdad de una oferta suelta, y detectar wash trading básico (misma
+// wallet comprando/vendiendo, pocas wallets distintas moviendo todas las ventas).
+async function fetchSalesEvents(slug, env) {
+  if (!env.OPENSEA_API_KEY) return null;
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const r = await fetch(`https://api.opensea.io/api/v2/events/collection/${encodeURIComponent(slug)}?event_type=sale&limit=20`, {
+      signal: ctrl.signal,
+      headers: { "x-api-key": env.OPENSEA_API_KEY, accept: "application/json" },
+    });
+    if (!r.ok) return { sales: 0 };
+    const j2 = await r.json();
+    const events = j2?.asset_events || [];
+    if (!events.length) return { sales: 0 };
+    const buyers = new Set(), sellers = new Set();
+    let selfTrades = 0;
+    for (const e of events) {
+      const buyer = (e.buyer || "").toLowerCase(), seller = (e.seller || "").toLowerCase();
+      if (buyer) buyers.add(buyer);
+      if (seller) sellers.add(seller);
+      if (buyer && seller && buyer === seller) selfTrades++;
+    }
+    const walletOverlap = [...buyers].filter((a) => sellers.has(a)).length;
+    const last = events[0];
+    const p = last?.payment;
+    const lastSalePrice = p ? Number(p.quantity) / 10 ** (p.decimals ?? 18) : null;
+    const suspicious = selfTrades > 0 || walletOverlap >= 2 || (events.length >= 4 && (buyers.size <= 2 || sellers.size <= 2));
+    return {
+      sales: events.length, uniqueBuyers: buyers.size, uniqueSellers: sellers.size,
+      selfTrades, walletOverlap, lastSalePrice, lastSaleSymbol: p?.symbol || null,
+      lastSaleAt: last?.closing_date || last?.event_timestamp || null, suspicious,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(to);
+  }
 }
 
 // Imagen del proyecto: preferimos la de la colección en OpenSea (más fiable/nítida);
@@ -216,6 +288,32 @@ async function fetchSiteInfo(url) {
   } finally {
     clearTimeout(to);
   }
+}
+
+// Guarda el veredicto en KV para poder revisarlo más adelante (ver
+// review-predictions.js). Una entrada por proyecto+red: cada análisis nuevo
+// sobreescribe el anterior (nos interesa el último pronóstico antes del mint,
+// no un historial de reintentos). Requiere el binding KV "PREDICTIONS"
+// (Cloudflare dashboard → proyecto → Settings → Bindings → Add → KV namespace
+// → variable name "PREDICTIONS"; hay que crear el namespace una vez en
+// Workers & Pages → KV → Create namespace).
+async function savePrediction(env, b, text) {
+  const vm = /VEREDICTO:\s*(VALE_LA_PENA|DUDOSO|EVITAR)/i.exec(text);
+  if (!vm) return;
+  const key = predKey(b.chain, b.slug || b.name);
+  const record = {
+    name: b.name, chain: b.chain || null, slug: b.slug || null,
+    verdict: vm[1].toUpperCase(), predictedAt: new Date().toISOString(),
+    priceEth: b.priceEth ?? null, priceUsd: b.priceUsd ?? null, floorEth: b.floorEth ?? null, floorUsd: b.floorUsd ?? null,
+    when: b.when ?? null, sales: b.sales ?? null, ownersPct: b.ownersPct ?? null,
+    reviewedAt: null, outcome: null,
+  };
+  await env.PREDICTIONS.put(key, JSON.stringify(record));
+}
+
+function predKey(chain, slugOrName) {
+  const norm = String(slugOrName || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `pred:${chain || "robinhood"}:${norm}`;
 }
 
 function j(o, s = 200) {

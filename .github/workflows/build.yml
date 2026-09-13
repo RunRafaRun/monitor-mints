@@ -67,3 +67,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy site --project-name=monitor-mints --branch=master --commit-dirty=true
+
+      - name: Revisar predicciones de análisis con IA ya maduras
+        run: curl -s -X POST https://mintscope.fun/api/review-predictions || true

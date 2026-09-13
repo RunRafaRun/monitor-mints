@@ -2102,12 +2102,12 @@ async function runAnalysis(btn){
   try{
     const body = {
       name: m.name, slug: m.slug||null, image: m.xAvatar||null, x: m.x||null, site: m.site||null, chain: m.chain,
-      minted: m.minted, supply: m.supply, priceEth: publicPrice(m), free: !!m.free,
+      minted: m.minted, supply: m.supply, priceEth: publicPrice(m), priceUsd: publicPrice(m)!=null?publicPrice(m)*ETHUSD:null, free: !!m.free,
       floorEth: m.floorEth, floorUsd: m.floorUsd, ethUsd: ETHUSD,
       phases: (m.phases||[]).map(p=>({k:p.k, label:p.n, p:p.p, state:p.s})),
       team: m.team, xFollowers: m.xFollowers, xAgeDays: m.xAgeDays, xRenames: m.xRenames, xLastRename: m.xLastRename,
       hype: m.hype, pop: m.pop, haveKey: m.haveKey, similarNames: similarProjectNames(m),
-      sales: m.sales, owners: m.owners, ownersPct: m.ownersPct, floorThin: !!m.floorThin,
+      sales: m.sales, owners: m.owners, ownersPct: m.ownersPct, floorThin: !!m.floorThin, when: m.when,
       whaleHint: m.whaleHint, vol24: m.vol24, volTotal: m.volTotal,
     };
     const res = await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
