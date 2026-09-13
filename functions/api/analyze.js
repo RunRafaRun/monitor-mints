@@ -167,7 +167,7 @@ async function fetchXBio(xUrl) {
   const handle = xHandle(xUrl);
   if (!handle) return null;
   const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 4000);
+  const to = setTimeout(() => ctrl.abort(), 6000);
   try {
     const r = await fetch(`https://api.fxtwitter.com/${encodeURIComponent(handle)}`, { signal: ctrl.signal, headers: { accept: "application/json" } });
     if (!r.ok) return null;
@@ -183,7 +183,7 @@ async function fetchXBio(xUrl) {
 // Extracto de texto de la web del proyecto + detección de enlace a whitepaper/docs.
 async function fetchSiteInfo(url) {
   const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 4500);
+  const to = setTimeout(() => ctrl.abort(), 6000);
   try {
     const r = await fetch(url, { signal: ctrl.signal, headers: { "user-agent": "Mozilla/5.0 (compatible; MintscopeBot/1.0)" } });
     if (!r.ok) return null;
