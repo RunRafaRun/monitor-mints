@@ -1,4 +1,5 @@
 // Cloudflare Pages Function — análisis "a fondo" de un mint con IA (bajo demanda,
+// (forzar redeploy: variable GEMINI_API_KEY actualizada en el panel)
 // botón "Analizar a fondo" en el dashboard). A diferencia del veredicto gratis
 // (reglas fijas, calculado en el navegador desde datos ya conocidos), aquí se le
 // pasan los mismos datos + imagen + bio de X + contenido de la web del proyecto
