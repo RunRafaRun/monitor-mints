@@ -68,7 +68,7 @@ export async function onRequestPost({ request, env }) {
     }
     const text = typeof raw === "string" ? raw : (raw.response || raw.description || raw.result || "");
     if (!text) return j({ error: "empty_response" }, 502);
-    return j({ text, model, hadImage: !!imageBytes, hadSite: !!site, hadBio: !!bio, _bioDebug: globalThis.__bioDebug || null });
+    return j({ text, model, hadImage: !!imageBytes, hadSite: !!site, hadBio: !!bio });
   } catch (e) {
     return j({ error: "server_error", detail: String((e && e.message) || e).slice(0, 300) }, 500);
   }
@@ -168,8 +168,9 @@ function xHandle(url) {
   return m ? m[1] : null;
 }
 
-// Bio de la cuenta de X vía fxtwitter (gratis, sin clave). No hay forma gratuita
-// de leer el tweet fijado — esa parte de la API de X es de pago.
+// Bio de la cuenta de X vía vxtwitter (gratis, sin clave; fxtwitter bloquea con 401
+// las IPs de Cloudflare, vxtwitter no). No hay forma gratuita de leer el tweet
+// fijado — esa parte de la API de X es de pago.
 async function fetchXBio(xUrl) {
   const handle = xHandle(xUrl);
   if (!handle) return null;
@@ -180,11 +181,10 @@ async function fetchXBio(xUrl) {
       signal: ctrl.signal,
       headers: { accept: "application/json", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" },
     });
-    if (!r.ok) { globalThis.__bioDebug = "http_" + r.status; return null; }
+    if (!r.ok) return null;
     const j2 = await r.json();
     return (j2?.description || j2?.user?.description || "").slice(0, 300) || null;
-  } catch (e) {
-    globalThis.__bioDebug = "err_" + String((e && e.message) || e).slice(0, 120);
+  } catch {
     return null;
   } finally {
     clearTimeout(to);
