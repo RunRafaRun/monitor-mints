@@ -379,6 +379,7 @@ export async function buildData({ pub = false } = {}) {
     if (o && o.minted != null) { m.mintedLive = o.minted; m.minted = Math.max(m.minted || 0, o.minted); }
     // mercado / concentración / fee del creador (de las mismas llamadas a OpenSea)
     m.owners = o?.owners ?? null;
+    m.sales = o?.sales ?? null;
     m.fee = o?.fee ?? null;
     m.vol24 = o?.vol24 ?? null;
     m.volTotal = o?.volTotal ?? null;
@@ -2106,6 +2107,8 @@ async function runAnalysis(btn){
       phases: (m.phases||[]).map(p=>({k:p.k, label:p.n, p:p.p, state:p.s})),
       team: m.team, xFollowers: m.xFollowers, xAgeDays: m.xAgeDays, xRenames: m.xRenames, xLastRename: m.xLastRename,
       hype: m.hype, pop: m.pop, haveKey: m.haveKey, similarNames: similarProjectNames(m),
+      sales: m.sales, owners: m.owners, ownersPct: m.ownersPct, floorThin: !!m.floorThin,
+      whaleHint: m.whaleHint, vol24: m.vol24, volTotal: m.volTotal,
     };
     const res = await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
     if(res.error){

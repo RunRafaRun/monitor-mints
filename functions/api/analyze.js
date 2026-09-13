@@ -88,6 +88,11 @@ Fíjate especialmente en:
   — su ausencia total en un proyecto que promete "utilidad" es una señal de alerta.
 - Economía: precio público vs floor actual (si el floor ya está por debajo del precio público, mintear
   ahora mismo da pérdida). Supply muy grande sin demanda real.
+- Fiabilidad del floor (dato de OpenSea, no on-chain directo): si hay muy pocas ventas totales (<3) el
+  floor no es de fiar, puede ser una sola oferta/venta entre wallets del propio equipo (wash trading) más
+  que demanda real — dilo explícitamente si "ventas totales" es bajo o "mercado mínimo" está marcado.
+  Si el % de propietarios únicos sobre lo minteado es muy bajo (mucha concentración en pocas wallets),
+  es otra señal de posible acumulación/wash trading, no de comunidad real.
 - Estructura de fases: si las fases WL/GTD/FCFS (baratas o gratis) ya se repartieron y "el público" solo
   puede entrar en la fase pública cara — patrón clásico de "el equipo/insiders se quedan lo bueno barato
   y le pasan al público la reserva/lo que sobra".
@@ -118,7 +123,9 @@ function buildPrompt(b, extra) {
   return `Proyecto: ${b.name} (cadena: ${b.chain || "?"})
 Supply: ${b.minted ?? "?"} / ${b.supply ?? "?"} minteados
 Precio público: ${b.priceEth === 0 ? "GRATIS (solo gas)" : b.priceEth != null ? b.priceEth + " ETH" : b.free ? "desconocido (aunque hay alguna fase WL/GTD gratis, la pública no tiene precio confirmado)" : "desconocido"}
-Floor actual: ${b.floorEth != null ? b.floorEth + " ETH ($" + (b.floorUsd ?? "?") + ")" : "sin mercado / desconocido"}${mult ? ` (floor/precio ≈ ${mult}×)` : ""}
+Floor actual: ${b.floorEth != null ? b.floorEth + " ETH ($" + (b.floorUsd ?? "?") + ")" : "sin mercado / desconocido"}${mult ? ` (floor/precio ≈ ${mult}×)` : ""}${b.floorThin ? " — ⚠️ MERCADO MÍNIMO, floor poco fiable" : ""}
+Ventas totales registradas en OpenSea: ${b.sales ?? "?"}${b.sales != null && b.sales < 3 ? " (muy pocas — el floor puede no reflejar demanda real)" : ""}
+Propietarios únicos: ${b.owners ?? "?"}${b.ownersPct != null ? ` (${Math.round(b.ownersPct * 100)}% de lo minteado — ` + (b.ownersPct < 0.4 ? "concentración alta, posible acumulación" : "reparto normal") + ")" : ""}
 Fases:
   ${phases || "(sin datos de fases)"}
 ¿Ya tienes acceso a alguna fase de llave (WL/GTD/FCFS)?: ${b.haveKey ? "sí" : "no"}
