@@ -1,5 +1,4 @@
 // Cloudflare Pages Function — análisis "a fondo" de un mint con IA (bajo demanda,
-// (forzar redeploy: variable GEMINI_API_KEY actualizada en el panel)
 // botón "Analizar a fondo" en el dashboard). A diferencia del veredicto gratis
 // (reglas fijas, calculado en el navegador desde datos ya conocidos), aquí se le
 // pasan los mismos datos + imagen + bio de X + contenido de la web del proyecto
@@ -13,12 +12,13 @@
 //                        similarNames?:[...] }
 //   -> { text, model, hadImage }
 //
-// Modelo principal: Gemini 2.5 Flash (Google AI Studio) si hay GEMINI_API_KEY —
+// Modelo principal: Gemini 3.6 Flash (Google AI Studio) si hay GEMINI_API_KEY —
 // nivel gratuito real, sin tarjeta, 1500 peticiones/día, y mucho más fiable que
 // los modelos pequeños de abajo (no inventa cifras, sigue mejor el idioma pedido).
 // Clave gratis en https://aistudio.google.com/apikey (cuenta de Google, sin tarjeta)
-// → Cloudflare dashboard → proyecto → Settings → Bindings → Add → variable de texto
-// → nombre "GEMINI_API_KEY", valor la clave. Aviso: en el nivel gratuito, Google
+// → Cloudflare dashboard → proyecto → Settings → (entorno Production) →
+// "Variables and secrets" (NO "Bindings", es la sección de más arriba) → Add →
+// nombre "GEMINI_API_KEY", valor la clave. Aviso: en el nivel gratuito, Google
 // puede usar las peticiones para mejorar sus productos (no pasa en el nivel de pago).
 //
 // Si no hay GEMINI_API_KEY (o falla), cae en Cloudflare Workers AI (modelos
@@ -49,7 +49,7 @@
 // sola no frena abuso, y aunque sea gratis hasta las 10.000 neuronas/día, a partir
 // de ahí se cobra).
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.6-flash";
 const VISION_MODEL = "@cf/llava-hf/llava-1.5-7b-hf";
 const TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 
@@ -120,7 +120,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
   }
 }
 
-// Gemini 2.5 Flash (Google AI Studio, nivel gratuito). image = {bytes, mime} o null.
+// Gemini 3.6 Flash (Google AI Studio, nivel gratuito). image = {bytes, mime} o null.
 async function runGemini(env, promptText, image) {
   const parts = [];
   if (image?.bytes) parts.push({ inline_data: { mime_type: image.mime || "image/jpeg", data: bytesToBase64(image.bytes) } });
