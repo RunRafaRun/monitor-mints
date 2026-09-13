@@ -68,7 +68,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
   const image = imageUrl ? await fetchImage(imageUrl).catch(() => null) : null; // {bytes:Uint8Array, mime}
 
   try {
-    let text = null, model = null;
+    let text = null, model = null, geminiErr = null;
 
     if (env.GEMINI_API_KEY) {
       try {
@@ -77,8 +77,11 @@ export async function onRequestPost({ request, env, waitUntil }) {
         text = await runGemini(env, prompt, image);
         model = GEMINI_MODEL;
       } catch (e) {
+        geminiErr = String((e && e.message) || e).slice(0, 300);
         text = null; // cae al fallback de abajo
       }
+    } else {
+      geminiErr = "no_key";
     }
 
     if (!text) {
@@ -110,7 +113,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
       const savePromise = savePrediction(env, body, text).catch(() => {});
       if (waitUntil) waitUntil(savePromise); else await savePromise;
     }
-    return j({ text, model, hadImage: !!image, hadSite: !!site, hadBio: !!bio, hadSales: !!sales });
+    return j({ text, model, hadImage: !!image, hadSite: !!site, hadBio: !!bio, hadSales: !!sales, geminiErr });
   } catch (e) {
     return j({ error: "server_error", detail: String((e && e.message) || e).slice(0, 300) }, 500);
   }
