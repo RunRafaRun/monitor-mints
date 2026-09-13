@@ -117,7 +117,7 @@ function buildPrompt(b, extra) {
   const similar = (b.similarNames || []).filter((n) => n && n !== b.name);
   return `Proyecto: ${b.name} (cadena: ${b.chain || "?"})
 Supply: ${b.minted ?? "?"} / ${b.supply ?? "?"} minteados
-Precio público: ${b.free ? "GRATIS (solo gas)" : (b.priceEth != null ? b.priceEth + " ETH" : "desconocido")}
+Precio público: ${b.priceEth === 0 ? "GRATIS (solo gas)" : b.priceEth != null ? b.priceEth + " ETH" : b.free ? "desconocido (aunque hay alguna fase WL/GTD gratis, la pública no tiene precio confirmado)" : "desconocido"}
 Floor actual: ${b.floorEth != null ? b.floorEth + " ETH ($" + (b.floorUsd ?? "?") + ")" : "sin mercado / desconocido"}${mult ? ` (floor/precio ≈ ${mult}×)` : ""}
 Fases:
   ${phases || "(sin datos de fases)"}

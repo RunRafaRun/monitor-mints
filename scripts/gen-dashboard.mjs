@@ -2038,7 +2038,7 @@ function mintVerdict(m){
   else { score -= 15; add('v_pop_low'); }
 
   const pp = publicPrice(m);
-  if(pp===0 || m.free){ score += 10; add('v_free'); }
+  if(pp===0){ score += 10; add('v_free'); }
   else if(m.floorUsd!=null && m.floorUsd>0 && pp!=null){
     const mult = m.floorUsd/(pp*ETHUSD);
     if(mult>=1.3){ score += 20; add('v_floor_good', mult.toFixed(1)); }
