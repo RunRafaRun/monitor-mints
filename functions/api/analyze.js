@@ -46,7 +46,7 @@ export async function onRequestPost({ request, env }) {
     const imageBytes = imageUrl && (await fetchImageBytes(imageUrl).catch(() => null));
     if (imageBytes) {
       model = VISION_MODEL;
-      raw = await env.AI.run(VISION_MODEL, { image: imageBytes, prompt, max_tokens: 512 });
+      raw = await env.AI.run(VISION_MODEL, { image: imageBytes, prompt, max_tokens: 700 });
     } else {
       model = TEXT_MODEL;
       raw = await env.AI.run(TEXT_MODEL, {
@@ -89,7 +89,9 @@ RAZONES:
 - <razón 2>
 - <razón 3 opcional>
 
-No es asesoramiento financiero. Sé directo y conciso — nada de relleno.`;
+Usa EXACTAMENTE ese formato: cada razón empieza por un guion "-", sin asteriscos ni otro
+formato markdown, sin texto antes de VEREDICTO ni después de la última razón.
+No es asesoramiento financiero. Sé directo y conciso — nada de relleno, máximo 3 razones cortas.`;
 
 function buildPrompt(b) {
   const phases = (b.phases || [])

@@ -2101,7 +2101,7 @@ function renderAiText(text){
   const vm = /VEREDICTO:\\s*(VALE_LA_PENA|DUDOSO|EVITAR)/i.exec(text||'');
   if(!vm) return '<div class="ai-raw">'+esc(text||'')+'</div>';
   const sm = /RESUMEN:\\s*(.+)/i.exec(text);
-  const reasons = [...text.matchAll(/^-\\s*(.+)$/gm)].map(x=>x[1]);
+  const reasons = [...text.matchAll(/^[-*]\\s*(.+)$/gm)].map(x=>x[1]);
   const cls = /VALE_LA_PENA/i.test(vm[1])?'pop-hi':/DUDOSO/i.test(vm[1])?'pop-mid':'pop-lo';
   const label = /VALE_LA_PENA/i.test(vm[1])?t('v_go'):/DUDOSO/i.test(vm[1])?t('v_maybe'):t('v_avoid');
   return '<div class="ai-result"><span class="pill '+cls+'">'+esc(label)+'</span> '+esc(sm?sm[1]:'')+
