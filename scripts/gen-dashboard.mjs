@@ -1422,6 +1422,7 @@ const STR = {
   v_have_key:'Tienes acceso a una fase de llave (WL/GTD/FCFS)',v_tip:'Veredicto automático a partir de floor/precio, popularidad, cuenta de X y acceso. No es consejo financiero.',
   ai_btn:'Analizar a fondo',ai_tip:'Le manda estos datos + la imagen del proyecto a una IA para un juicio más a fondo (¿parece scam? ¿reparto de reserva al equipo?). Tarda unos segundos.',
   ai_loading:'Analizando…',ai_error:'Error al analizar',ai_notconfigured:'Análisis con IA no configurado en el servidor',ai_close:'Cerrar',
+  ai_timeout:'Está tardando demasiado (puede que tu conexión vaya lenta) — pulsa otra vez para reintentar.',
   c_before:'Floor antes',c_after:'Floor ahora',
   now:'en curso',sold_out:'AGOTADO',nothing_now:'nada minteando ahora',nothing_soon:'nada en 72 h',no_hist:'sin histórico todavía',
   pop_hi:'ALTA',pop_mid:'MEDIA',pop_lo:'BAJA',pop_nox:'sin X',
@@ -1578,6 +1579,7 @@ const STR = {
   v_have_key:'You have access to a key phase (WL/GTD/FCFS)',v_tip:'Automatic verdict from floor/price, popularity, X account and access. Not financial advice.',
   ai_btn:'Deep analysis',ai_tip:'Sends this data + the project image to an AI for a deeper judgment (does it look like a scam? a team-reserve dump?). Takes a few seconds.',
   ai_loading:'Analyzing…',ai_error:'Analysis failed',ai_notconfigured:'AI analysis not configured on the server',ai_close:'Close',
+  ai_timeout:'This is taking too long (your connection might be slow) — tap again to retry.',
   c_before:'Floor before',c_after:'Floor now',
   now:'live',sold_out:'SOLD OUT',nothing_now:'nothing minting now',nothing_soon:'nothing in 72 h',no_hist:'no history yet',
   pop_hi:'HIGH',pop_mid:'MEDIUM',pop_lo:'LOW',pop_nox:'no X',
@@ -2113,7 +2115,12 @@ async function runAnalysis(btn){
       whaleHint: m.whaleHint, vol24: m.vol24, volTotal: m.volTotal, lang: L,
       ruleVerdict: rv?.code || null, ruleReasons: rv?.reasons || [],
     };
-    const res = await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
+    const ctrl = new AbortController();
+    const to = setTimeout(()=>ctrl.abort(), 35000);
+    let res;
+    try{
+      res = await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:ctrl.signal}).then(x=>x.json());
+    } finally { clearTimeout(to); }
     if(res.error){
       const msg = res.error==='not_configured' ? t('ai_notconfigured') : (t('ai_error')+(res.detail?': '+res.detail:''));
       openAiPanel(name, r.left, r.bottom+4, '<div class="ai-err">'+esc(msg)+'</div>');
@@ -2121,7 +2128,9 @@ async function runAnalysis(btn){
       openAiPanel(name, r.left, r.bottom+4, renderAiText(res.text));
     }
   }catch(err){
-    openAiPanel(name, r.left, r.bottom+4, '<div class="ai-err">'+esc(t('ai_error')+': '+(err.message||err))+'</div>');
+    const timedOut = err && err.name==='AbortError';
+    const msg = timedOut ? t('ai_timeout') : (t('ai_error')+': '+(err.message||err));
+    openAiPanel(name, r.left, r.bottom+4, '<div class="ai-err">'+esc(msg)+'</div>');
   }
   btn.disabled = false;
 }

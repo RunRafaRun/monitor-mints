@@ -66,7 +66,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
     if (imageBytes) {
       model = VISION_MODEL;
       const prompt = SYSTEM_PROMPT + "\n\n" + buildPrompt(body, extra);
-      raw = await env.AI.run(VISION_MODEL, { image: imageBytes, prompt, max_tokens: 800 });
+      raw = await env.AI.run(VISION_MODEL, { image: imageBytes, prompt, max_tokens: 600 });
     } else {
       model = TEXT_MODEL;
       raw = await env.AI.run(TEXT_MODEL, {
