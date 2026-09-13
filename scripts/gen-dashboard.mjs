@@ -829,6 +829,8 @@ text-transform:uppercase;letter-spacing:.04em;padding:2px 2px 6px;border-bottom:
 .ai-loading{font-size:12.5px;color:var(--mut);display:flex;align-items:center;gap:6px}
 .ai-err{font-size:12.5px;color:var(--warn)}
 .ai-raw{font-size:12.5px;white-space:pre-wrap}
+.ai-facts{font-size:11.5px;color:var(--mut);border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:8px;display:flex;flex-direction:column;gap:3px}
+.ai-facts b{color:var(--fg)}
 .ai-result{font-size:12.5px}
 .ai-reasons{margin:6px 0 0;padding-left:18px}
 .ai-reasons li{margin:2px 0}
@@ -2095,6 +2097,17 @@ function similarProjectNames(m){
   }
   return [...new Set(out)].slice(0,5);
 }
+// Ficha de datos REALES (calculados por nosotros, no por la IA) que se muestra
+// encima del texto del modelo — evita que cifras inventadas (el modelo pequeño
+// a veces se equivoca con supply/nº de fases) se cuelen como si fueran un dato.
+function aiFactsBlock(m){
+  const pp = publicPrice(m);
+  return '<div class="ai-facts">'
+    +'<div>'+esc(t('c_supply'))+': <b>'+nf(m.minted)+' / '+nf(m.supply)+'</b></div>'
+    +'<div>'+esc(t('c_phases'))+': '+(phases(m.phases)||'<span class="muted">—</span>')+'</div>'
+    +'<div>'+esc(t('c_price'))+': <b>'+money(pp)+'</b> · '+esc(t('c_floor'))+': '+floorRadar(m)+'</div>'
+    +'</div>';
+}
 async function runAnalysis(btn){
   if(btn.disabled) return;
   const name = btn.dataset.ai;
@@ -2125,7 +2138,7 @@ async function runAnalysis(btn){
       const msg = res.error==='not_configured' ? t('ai_notconfigured') : (t('ai_error')+(res.detail?': '+res.detail:''));
       openAiPanel(name, r.left, r.bottom+4, '<div class="ai-err">'+esc(msg)+'</div>');
     } else {
-      openAiPanel(name, r.left, r.bottom+4, renderAiText(res.text));
+      openAiPanel(name, r.left, r.bottom+4, aiFactsBlock(m)+renderAiText(res.text));
     }
   }catch(err){
     const timedOut = err && err.name==='AbortError';

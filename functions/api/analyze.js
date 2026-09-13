@@ -95,8 +95,10 @@ imagen/logo, bio de X, y un extracto de su propia web) y debes juzgar, en base a
 scam, si merece la pena mintear.
 
 IMPORTANTE: hay MUCHOS temas en la lista de abajo. No te limites a repetir siempre popularidad/floor/
-antigüedad de cuenta — cubre también la imagen (si la hay), la cantidad de unidades y el desglose de
-fases con sus precios concretos citando los números que te doy, no solo "caro" o "barato" en general.
+antigüedad de cuenta — cubre también la imagen (si la hay), si la cantidad total parece sobreoferta, y si
+el reparto entre fases es justo o no. Los números exactos (supply, precio de cada fase) ya se muestran
+aparte al usuario en una ficha, así que NO los repitas ni los inventes — si no estás seguro de una cifra,
+no la menciones, limítate al juicio cualitativo.
 
 Fíjate especialmente en:
 - Imagen: si te dan una imagen, identifica el TIPO de sujeto (animal —cuál—, robot, humano/punk,
@@ -107,13 +109,12 @@ Fíjate especialmente en:
   colecciones famosas de ese mismo tipo, menciona brevemente cómo les fue (subieron, se desplomaron...) a
   modo de referencia — pero dejando claro que es tu conocimiento general, no un dato de este radar. Si NO
   te dan imagen, dilo explícitamente ("sin imagen disponible para valorar el arte") en vez de omitirlo.
-- Cantidad (supply): cita el número exacto de unidades totales que te doy. Una tirada de varios miles o
-  decenas de miles con pocos seguidores/poco hype es sobreoferta clara — dilo con el número, no en
-  abstracto ("supply muy grande" sin cifra no vale).
-- Fases y precios: cita cuántas fases hay y su precio concreto (ej. "GTD gratis, público a 0.01 ETH/$25")
-  usando los números exactos que te doy, no una valoración vaga. Si las fases WL/GTD/FCFS (baratas o
-  gratis) ya se repartieron y "el público" solo puede entrar en la fase pública cara, dilo como patrón
-  clásico de "el equipo/insiders se quedan lo bueno barato y le pasan al público la reserva/lo que sobra".
+- Cantidad (supply): sin citar el número (ya se muestra aparte), valora si la oferta total parece grande
+  para la demanda que hay (pocos seguidores/poco hype = sobreoferta).
+- Fases y precios: sin citar precios exactos (ya se muestran aparte), valora si el reparto entre fases
+  es justo. Si las fases WL/GTD/FCFS (baratas o gratis) ya se repartieron y "el público" solo puede entrar
+  en la fase pública cara, dilo como patrón clásico de "el equipo/insiders se quedan lo bueno barato y le
+  pasan al público la reserva/lo que sobra".
 - Nombre: si en "Proyectos parecidos ya vistos" aparece algo, coméntalo como posible copia/variación de
   una colección ya establecida en la misma red (copycat) — ahí SÍ son datos reales del radar, con su
   floor/popularidad si se indican.
