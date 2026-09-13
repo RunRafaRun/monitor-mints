@@ -169,13 +169,13 @@ async function fetchXBio(xUrl) {
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 6000);
   try {
-    const r = await fetch(`https://api.fxtwitter.com/${encodeURIComponent(handle)}`, {
+    const r = await fetch(`https://api.vxtwitter.com/${encodeURIComponent(handle)}`, {
       signal: ctrl.signal,
       headers: { accept: "application/json", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" },
     });
     if (!r.ok) { globalThis.__bioDebug = "http_" + r.status; return null; }
     const j2 = await r.json();
-    return (j2?.user?.description || "").slice(0, 300) || null;
+    return (j2?.description || j2?.user?.description || "").slice(0, 300) || null;
   } catch (e) {
     globalThis.__bioDebug = "err_" + String((e && e.message) || e).slice(0, 120);
     return null;
