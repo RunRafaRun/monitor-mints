@@ -128,14 +128,17 @@ async function runGemini(env, promptText, image) {
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 20000);
   try {
-    const key = encodeURIComponent(String(env.GEMINI_API_KEY || "").trim());
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`, {
+    const key = String(env.GEMINI_API_KEY || "").trim();
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
       method: "POST",
       signal: ctrl.signal,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({ contents: [{ role: "user", parts }] }),
     });
-    if (!r.ok) throw new Error("gemini_http_" + r.status);
+    if (!r.ok) {
+      const body = await r.text().catch(() => "");
+      throw new Error("gemini_http_" + r.status + ": " + body.slice(0, 250));
+    }
     const j2 = await r.json();
     const text = (j2?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
     if (!text) throw new Error("gemini_empty");
