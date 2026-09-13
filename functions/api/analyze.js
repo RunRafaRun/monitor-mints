@@ -73,7 +73,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
     if (env.GEMINI_API_KEY) {
       try {
         const langNote = body.lang === "en" ? "\n\nWrite RESUMEN and every RAZONES bullet in English (keep the VEREDICTO/RESUMEN/RAZONES labels and the VEREDICTO value untranslated)." : "";
-        const prompt = SYSTEM_PROMPT + langNote + "\n\n" + buildPrompt(body, extra);
+        const prompt = SYSTEM_PROMPT_RICH + langNote + "\n\n" + buildPrompt(body, extra, true);
         text = await runGemini(env, prompt, image);
         model = GEMINI_MODEL;
       } catch (e) {
@@ -147,6 +147,23 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
+const FORMAT_RULES = `Responde SIEMPRE en este formato, sin nada antes ni después:
+
+VEREDICTO: <VALE_LA_PENA|DUDOSO|EVITAR>
+RESUMEN: <una frase>
+RAZONES:
+- <razón 1>
+- <razón 2>
+- <razón 3 opcional>
+- <razón 4 opcional>
+
+Las etiquetas VEREDICTO/RESUMEN/RAZONES y el valor de VEREDICTO (VALE_LA_PENA, DUDOSO o EVITAR) van
+siempre literalmente así, sin traducir, sin importar en qué idioma escribas el resto. Cada razón empieza
+por un guion "-", sin asteriscos. No es asesoramiento financiero. Sé breve y directo.`;
+
+// Versión simplificada — para el fallback (LLaVA/Llama en Cloudflare Workers AI).
+// Estos modelos pequeños se confundían con demasiadas reglas: inventaban cifras o
+// directamente copiaban los datos de entrada como si fueran su propia respuesta.
 const SYSTEM_PROMPT = `Eres un analista escéptico de mints NFT. Con los datos de un proyecto (a veces
 imagen, bio de X, extracto de su web) juzga si merece la pena mintear, buscando señales de scam.
 
@@ -169,19 +186,41 @@ No cites cifras exactas de supply, número de fases o precios — el usuario ya 
 Haz solo la valoración cualitativa (ej. "la oferta parece grande para el interés que muestra", no "hay
 4444 unidades en 3 fases").
 
-Responde SIEMPRE en este formato, sin nada antes ni después:
+${FORMAT_RULES}`;
 
-VEREDICTO: <VALE_LA_PENA|DUDOSO|EVITAR>
-RESUMEN: <una frase>
-RAZONES:
-- <razón 1>
-- <razón 2>
-- <razón 3 opcional>
-- <razón 4 opcional>
+// Versión completa — para Gemini (modelo bastante más fiable: no suele inventar
+// cifras ni perderse con varias instrucciones a la vez).
+const SYSTEM_PROMPT_RICH = `Eres un analista escéptico de mints NFT. Con los datos de un proyecto (a veces
+imagen, bio de X, extracto de su web) juzga si merece la pena mintear, buscando señales de scam. Cubre
+varios temas distintos en tus razones, no te limites siempre a los mismos dos o tres.
 
-Las etiquetas VEREDICTO/RESUMEN/RAZONES y el valor de VEREDICTO (VALE_LA_PENA, DUDOSO o EVITAR) van
-siempre literalmente así, sin traducir, sin importar en qué idioma escribas el resto. Cada razón empieza
-por un guion "-", sin asteriscos. No es asesoramiento financiero. Sé breve y directo.`;
+Fíjate en:
+- Imagen (si la hay): identifica el TIPO de sujeto (animal —cuál—, robot, humano/punk, abstracto,
+  personaje de videojuego, meme, objeto...) y valora si el arte parece genérico/plantilla o copiado del
+  estilo de otra colección conocida (posible arte derivativo/robado). Con tu conocimiento general (no
+  datos verificados, dilo si no estás seguro): ¿es un arquetipo muy visto y saturado en NFT? Si conoces
+  colecciones famosas de ese mismo tipo, menciona brevemente cómo les fue — dejando claro que es tu
+  conocimiento general, no un dato de este radar. Si no hay imagen, dilo en vez de omitirlo.
+- Cantidad (supply) y fases: los números que te doy son reales — puedes citarlos (ej. "4.444 unidades",
+  "público a 0.01 ETH tras un GTD gratis") para argumentar tu punto, no hace falta evitarlos. Valora si la
+  oferta es grande para el interés mostrado, y si el reparto entre fases es justo o favorece al equipo.
+- Nombre: si aparece algo en "Proyectos parecidos ya vistos", es copia/variación de otra colección de la
+  misma red (dato real del radar) — coméntalo con su floor/popularidad si se indican.
+- Qué es el proyecto: según la bio de X y el extracto de la web, a qué dice dedicarse, y si tiene
+  whitepaper/docs enlazados (su ausencia en un proyecto que promete "utilidad" es mala señal).
+- Precio vs floor: si el floor ya está por debajo del precio público, mintear ahora da pérdida.
+- Floor fiable o no: el floor de OpenSea es el listado más barato, no necesariamente una venta ejecutada.
+  Pocas ventas totales, o ventas con el mismo comprador y vendedor, es floor poco fiable o wash trading.
+  Pocos propietarios únicos frente a lo minteado sugiere acumulación, no comunidad real.
+- Estructura de fases: si las fases baratas/gratis (WL/GTD/FCFS) ya se repartieron y solo queda la fase
+  pública cara, es la señal clásica de "el equipo se queda lo barato y le pasa al público lo que sobra".
+- Cuenta de X: muy nueva, pocos seguidores, o que ha cambiado de nombre varias veces (cuenta reciclada).
+- Equipo anónimo sin trayectoria verificable.
+- Si te doy un "Veredicto automático (reglas fijas)": es un cálculo determinista ya hecho, no una opinión.
+  Puedes coincidir o no, pero si tu VEREDICTO final es distinto, dilo en una razón y explica por qué
+  discrepas en vez de ignorarlo en silencio.
+
+${FORMAT_RULES}`;
 
 // El resto del prompt (arriba) queda fijo en español para que el modelo razone siempre igual;
 // esto solo le pide traducir el CONTENIDO (resumen + razones) al idioma de la web, manteniendo
@@ -208,13 +247,14 @@ async function translateToEnglish(env, text) {
   return translated || text;
 }
 
-function buildPrompt(b, extra) {
+function buildPrompt(b, extra, rich) {
   const phases = (b.phases || [])
     .map((p) => `${p.k}${p.label ? " (" + p.label + ")" : ""}: ${p.priceEth != null ? p.priceEth + " ETH" : p.p || "?"} — ${p.state || p.s || "?"}`)
     .join("\n  ");
   const mult = b.floorUsd != null && b.priceEth != null && b.priceEth > 0 ? (b.floorUsd / (b.priceEth * (b.ethUsd || 1))).toFixed(2) : null;
   const similar = (b.similarNames || []).filter((n) => n && n !== b.name);
-  return `Proyecto: ${b.name} (cadena: ${b.chain || "?"})
+  const ruleLine = rich && b.ruleVerdict ? `Veredicto automático (reglas fijas): ${b.ruleVerdict}${(b.ruleReasons || []).length ? " — razones: " + b.ruleReasons.join("; ") : ""}\n` : "";
+  return `${ruleLine}Proyecto: ${b.name} (cadena: ${b.chain || "?"})
 Supply: ${b.minted ?? "?"} / ${b.supply ?? "?"} minteados
 Precio público: ${b.priceEth === 0 ? "GRATIS (solo gas)" : b.priceEth != null ? b.priceEth + " ETH" : b.free ? "desconocido (aunque hay alguna fase WL/GTD gratis, la pública no tiene precio confirmado)" : "desconocido"}
 Floor actual: ${b.floorEth != null ? b.floorEth + " ETH ($" + (b.floorUsd ?? "?") + ")" : "sin mercado / desconocido"}${mult ? ` (floor/precio ≈ ${mult}×)` : ""}${b.floorThin ? " — ⚠️ MERCADO MÍNIMO, floor poco fiable" : ""}
