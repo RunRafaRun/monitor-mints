@@ -90,72 +90,41 @@ export async function onRequestPost({ request, env, waitUntil }) {
   }
 }
 
-const SYSTEM_PROMPT = `Eres un analista escéptico de mints NFT. Te dan datos de un proyecto (a veces su
-imagen/logo, bio de X, y un extracto de su propia web) y debes juzgar, en base a patrones típicos de
-scam, si merece la pena mintear.
+const SYSTEM_PROMPT = `Eres un analista escéptico de mints NFT. Con los datos de un proyecto (a veces
+imagen, bio de X, extracto de su web) juzga si merece la pena mintear, buscando señales de scam.
 
-IMPORTANTE: hay MUCHOS temas en la lista de abajo. No te limites a repetir siempre popularidad/floor/
-antigüedad de cuenta — cubre también la imagen (si la hay), si la cantidad total parece sobreoferta, y si
-el reparto entre fases es justo o no. Los números exactos (supply, precio de cada fase) ya se muestran
-aparte al usuario en una ficha, así que NO los repitas ni los inventes — si no estás seguro de una cifra,
-no la menciones, limítate al juicio cualitativo.
-
-Fíjate especialmente en:
-- Imagen: si te dan una imagen, identifica el TIPO de sujeto (animal —cuál—, robot, humano/punk,
-  abstracto, personaje de videojuego, meme, objeto...) y valora si el arte parece genérico/plantilla, un
-  placeholder, o muy similar al estilo de otra colección conocida (posible arte derivativo/robado).
-  Con tu conocimiento general (no datos verificados, dilo si no estás seguro): ese arquetipo concreto
-  (ej. "PFP de animal pixelado", "robot genérico"), ¿es un patrón muy visto y saturado en NFT? Si conoces
-  colecciones famosas de ese mismo tipo, menciona brevemente cómo les fue (subieron, se desplomaron...) a
-  modo de referencia — pero dejando claro que es tu conocimiento general, no un dato de este radar. Si NO
-  te dan imagen, dilo explícitamente ("sin imagen disponible para valorar el arte") en vez de omitirlo.
-- Cantidad (supply): sin citar el número (ya se muestra aparte), valora si la oferta total parece grande
-  para la demanda que hay (pocos seguidores/poco hype = sobreoferta).
-- Fases y precios: sin citar precios exactos (ya se muestran aparte), valora si el reparto entre fases
-  es justo. Si las fases WL/GTD/FCFS (baratas o gratis) ya se repartieron y "el público" solo puede entrar
-  en la fase pública cara, dilo como patrón clásico de "el equipo/insiders se quedan lo bueno barato y le
-  pasan al público la reserva/lo que sobra".
-- Nombre: si en "Proyectos parecidos ya vistos" aparece algo, coméntalo como posible copia/variación de
-  una colección ya establecida en la misma red (copycat) — ahí SÍ son datos reales del radar, con su
-  floor/popularidad si se indican.
-- Qué es el proyecto: usa la bio de X y el extracto de la web para explicar en una frase a qué dice
-  dedicarse (arte, gaming, utilidad real, "comunidad" sin más, etc.) y si tiene whitepaper/docs enlazados
-  — su ausencia total en un proyecto que promete "utilidad" es una señal de alerta.
-- Economía: precio público vs floor actual (si el floor ya está por debajo del precio público, mintear
-  ahora mismo da pérdida).
-- Fiabilidad del floor: el "floor" de OpenSea es el precio del LISTADO más barato (una oferta, no
-  necesariamente una venta ejecutada). Si "ventas totales" es bajo (<3) el floor no es de fiar. Si te doy
-  "Últimas ventas reales" (eventos de venta reales, con wallets), compara el floor contra el precio de la
-  última venta real: si difieren mucho, dilo. Pocas wallets distintas comprando/vendiendo entre sí, o una
-  venta con el mismo comprador y vendedor, es wash trading casi seguro — dilo sin rodeos si lo ves.
-  Si el % de propietarios únicos sobre lo minteado es muy bajo (mucha concentración en pocas wallets),
-  es otra señal de posible acumulación/wash trading, no de comunidad real.
-- Señales de la cuenta de X: cuenta muy nueva, pocos seguidores, o que ha cambiado de nombre varias veces
-  (cuenta reciclada — comprada ya con seguidores y renombrada para simular legitimidad).
+Fíjate en:
+- Imagen (si la hay): describe brevemente qué se ve (tipo de sujeto: animal, robot, humano, abstracto...)
+  y si el arte parece genérico, plantilla o copiado del estilo de otra colección conocida.
+- Nombre: si aparece algo en "Proyectos parecidos ya vistos", es posible copia de otra colección de la
+  misma red — coméntalo.
+- Qué es el proyecto: según la bio de X y el extracto de la web, a qué dice dedicarse, y si tiene
+  whitepaper/docs enlazados (su ausencia en un proyecto que promete "utilidad" es mala señal).
+- Precio vs floor: si el floor ya está por debajo del precio público, mintear ahora da pérdida.
+- Floor fiable o no: pocas ventas totales, o ventas con el mismo comprador y vendedor, es floor poco
+  fiable o wash trading. Pocos propietarios únicos frente a lo minteado sugiere acumulación, no comunidad.
+- Estructura de fases: si las fases baratas/gratis (WL/GTD/FCFS) ya se repartieron y solo queda la fase
+  pública cara, es la señal clásica de "el equipo se queda lo barato y le pasa al público lo que sobra".
+- Cuenta de X: muy nueva, pocos seguidores, o que ha cambiado de nombre varias veces (cuenta reciclada).
 - Equipo anónimo sin trayectoria verificable.
-- Si te doy un "Veredicto automático (reglas fijas)": es un cálculo determinista ya hecho (floor/precio,
-  popularidad, cuenta de X, acceso), no una opinión — tenlo en cuenta. Puedes coincidir o no, pero si tu
-  VEREDICTO final es distinto al automático, dilo explícitamente en una razón y explica por qué discrepas
-  (ej. "el automático marca EVITAR por el floor, pero la web y la bio compensan esa duda"). No lo repitas
-  sin más ni lo ignores en silencio.
 
-Responde SIEMPRE en este formato exacto, sin nada antes ni después:
+No cites cifras exactas de supply, número de fases o precios — el usuario ya las ve aparte en una ficha.
+Haz solo la valoración cualitativa (ej. "la oferta parece grande para el interés que muestra", no "hay
+4444 unidades en 3 fases").
+
+Responde SIEMPRE en este formato, sin nada antes ni después:
 
 VEREDICTO: <VALE_LA_PENA|DUDOSO|EVITAR>
 RESUMEN: <una frase>
 RAZONES:
 - <razón 1>
 - <razón 2>
-- <razón 3>
+- <razón 3 opcional>
 - <razón 4 opcional>
-- <razón 5 opcional>
 
-Usa EXACTAMENTE ese formato: las etiquetas VEREDICTO/RESUMEN/RAZONES y el valor de VEREDICTO
-(VALE_LA_PENA, DUDOSO o EVITAR) van SIEMPRE literalmente así, sin traducir, sin importar en qué idioma
-escribas el resto. Cada razón empieza por un guion "-", sin asteriscos ni otro formato markdown, sin
-texto antes de VEREDICTO ni después de la última razón. Incluye AL MENOS 3 razones y cubre temas
-distintos entre sí (no repitas la misma idea con otras palabras).
-No es asesoramiento financiero. Sé directo y conciso — nada de relleno, máximo 5 razones cortas.`;
+Las etiquetas VEREDICTO/RESUMEN/RAZONES y el valor de VEREDICTO (VALE_LA_PENA, DUDOSO o EVITAR) van
+siempre literalmente así, sin traducir, sin importar en qué idioma escribas el resto. Cada razón empieza
+por un guion "-", sin asteriscos. No es asesoramiento financiero. Sé breve y directo.`;
 
 // El resto del prompt (arriba) queda fijo en español para que el modelo razone siempre igual;
 // esto solo le pide traducir el CONTENIDO (resumen + razones) al idioma de la web, manteniendo
@@ -188,8 +157,7 @@ function buildPrompt(b, extra) {
     .join("\n  ");
   const mult = b.floorUsd != null && b.priceEth != null && b.priceEth > 0 ? (b.floorUsd / (b.priceEth * (b.ethUsd || 1))).toFixed(2) : null;
   const similar = (b.similarNames || []).filter((n) => n && n !== b.name);
-  return `Veredicto automático (reglas fijas): ${b.ruleVerdict || "no disponible"}${(b.ruleReasons || []).length ? " — razones: " + b.ruleReasons.join("; ") : ""}
-Proyecto: ${b.name} (cadena: ${b.chain || "?"})
+  return `Proyecto: ${b.name} (cadena: ${b.chain || "?"})
 Supply: ${b.minted ?? "?"} / ${b.supply ?? "?"} minteados
 Precio público: ${b.priceEth === 0 ? "GRATIS (solo gas)" : b.priceEth != null ? b.priceEth + " ETH" : b.free ? "desconocido (aunque hay alguna fase WL/GTD gratis, la pública no tiene precio confirmado)" : "desconocido"}
 Floor actual: ${b.floorEth != null ? b.floorEth + " ETH ($" + (b.floorUsd ?? "?") + ")" : "sin mercado / desconocido"}${mult ? ` (floor/precio ≈ ${mult}×)` : ""}${b.floorThin ? " — ⚠️ MERCADO MÍNIMO, floor poco fiable" : ""}
