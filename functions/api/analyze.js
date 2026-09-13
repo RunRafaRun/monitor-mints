@@ -56,7 +56,11 @@ export async function onRequestPost({ request, env, waitUntil }) {
   ]);
   const extra = { bio, site, sales };
 
-  const sys = SYSTEM_PROMPT + langDirective(body.lang);
+  // los modelos pequeños tienden a ignorar una instrucción de idioma si va sola al
+  // final de un prompt largo en español -> se repite al principio (primacía) y al
+  // final (recencia) para que de verdad la respete.
+  const ld = langDirective(body.lang);
+  const sys = ld + "\n\n" + SYSTEM_PROMPT + ld;
 
   try {
     let raw, model;
@@ -141,8 +145,8 @@ No es asesoramiento financiero. Sé directo y conciso — nada de relleno, máxi
 // esto solo le pide traducir el CONTENIDO (resumen + razones) al idioma de la web, manteniendo
 // las etiquetas de formato intactas para que el parser del cliente siga funcionando.
 function langDirective(lang) {
-  if (lang === "en") return "\n\nWrite the RESUMEN sentence and every RAZONES bullet in English. Keep the labels VEREDICTO/RESUMEN/RAZONES and the VEREDICTO value (VALE_LA_PENA/DUDOSO/EVITAR) exactly as given, untranslated.";
-  return "\n\nEscribe la frase de RESUMEN y cada razón de RAZONES en español.";
+  if (lang === "en") return "\n\nIMPORTANT LANGUAGE RULE: write the RESUMEN sentence and every RAZONES bullet in ENGLISH, not Spanish, even though the instructions below are in Spanish. Keep the labels VEREDICTO/RESUMEN/RAZONES and the VEREDICTO value (VALE_LA_PENA/DUDOSO/EVITAR) exactly as given, untranslated.\n";
+  return "\n\nIMPORTANTE: escribe la frase de RESUMEN y cada razón de RAZONES en ESPAÑOL.\n";
 }
 
 function buildPrompt(b, extra) {
