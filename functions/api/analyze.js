@@ -56,18 +56,20 @@ export async function onRequestPost({ request, env, waitUntil }) {
   ]);
   const extra = { bio, site, sales };
 
+  const sys = SYSTEM_PROMPT + langDirective(body.lang);
+
   try {
     let raw, model;
     const imageBytes = imageUrl && (await fetchImageBytes(imageUrl).catch(() => null));
     if (imageBytes) {
       model = VISION_MODEL;
-      const prompt = SYSTEM_PROMPT + "\n\n" + buildPrompt(body, extra);
+      const prompt = sys + "\n\n" + buildPrompt(body, extra);
       raw = await env.AI.run(VISION_MODEL, { image: imageBytes, prompt, max_tokens: 800 });
     } else {
       model = TEXT_MODEL;
       raw = await env.AI.run(TEXT_MODEL, {
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: sys },
           { role: "user", content: buildPrompt(body, extra) },
         ],
         max_tokens: 600,
@@ -119,7 +121,7 @@ Fíjate especialmente en:
   (cuenta reciclada — comprada ya con seguidores y renombrada para simular legitimidad).
 - Equipo anónimo sin trayectoria verificable.
 
-Responde SIEMPRE en este formato exacto, en español, sin nada antes ni después:
+Responde SIEMPRE en este formato exacto, sin nada antes ni después:
 
 VEREDICTO: <VALE_LA_PENA|DUDOSO|EVITAR>
 RESUMEN: <una frase>
@@ -129,9 +131,19 @@ RAZONES:
 - <razón 3 opcional>
 - <razón 4 opcional>
 
-Usa EXACTAMENTE ese formato: cada razón empieza por un guion "-", sin asteriscos ni otro
-formato markdown, sin texto antes de VEREDICTO ni después de la última razón.
+Usa EXACTAMENTE ese formato: las etiquetas VEREDICTO/RESUMEN/RAZONES y el valor de VEREDICTO
+(VALE_LA_PENA, DUDOSO o EVITAR) van SIEMPRE literalmente así, sin traducir, sin importar en qué idioma
+escribas el resto. Cada razón empieza por un guion "-", sin asteriscos ni otro formato markdown, sin
+texto antes de VEREDICTO ni después de la última razón.
 No es asesoramiento financiero. Sé directo y conciso — nada de relleno, máximo 4 razones cortas.`;
+
+// El resto del prompt (arriba) queda fijo en español para que el modelo razone siempre igual;
+// esto solo le pide traducir el CONTENIDO (resumen + razones) al idioma de la web, manteniendo
+// las etiquetas de formato intactas para que el parser del cliente siga funcionando.
+function langDirective(lang) {
+  if (lang === "en") return "\n\nWrite the RESUMEN sentence and every RAZONES bullet in English. Keep the labels VEREDICTO/RESUMEN/RAZONES and the VEREDICTO value (VALE_LA_PENA/DUDOSO/EVITAR) exactly as given, untranslated.";
+  return "\n\nEscribe la frase de RESUMEN y cada razón de RAZONES en español.";
+}
 
 function buildPrompt(b, extra) {
   const phases = (b.phases || [])

@@ -2108,7 +2108,7 @@ async function runAnalysis(btn){
       team: m.team, xFollowers: m.xFollowers, xAgeDays: m.xAgeDays, xRenames: m.xRenames, xLastRename: m.xLastRename,
       hype: m.hype, pop: m.pop, haveKey: m.haveKey, similarNames: similarProjectNames(m),
       sales: m.sales, owners: m.owners, ownersPct: m.ownersPct, floorThin: !!m.floorThin, when: m.when,
-      whaleHint: m.whaleHint, vol24: m.vol24, volTotal: m.volTotal,
+      whaleHint: m.whaleHint, vol24: m.vol24, volTotal: m.volTotal, lang: L,
     };
     const res = await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
     if(res.error){
