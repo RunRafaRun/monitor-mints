@@ -7,7 +7,8 @@
 // Pensado para llamarse solo (cron): el GitHub Action de build.yml lo invoca en
 // cada pasada (cada ~10 min). No hace falta tocar nada a mano.
 //
-// Requiere el binding KV "PREDICTIONS" (mismo que usa analyze.js para guardar) y,
+// Requiere el binding KV "PREDICTIONS" (creado en Storage & databases → KV,
+// enlazado en Settings → Bindings del proyecto de Pages) y, además,
 // para volver a mirar el floor actual, OPENSEA_API_KEY. Sin el binding KV, 503.
 //
 // Criterio de revisión: solo se revisan predicciones con "when" (fecha de mint)
