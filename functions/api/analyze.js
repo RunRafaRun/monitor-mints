@@ -12,18 +12,27 @@
 //                        similarNames?:[...] }
 //   -> { text, model, hadImage }
 //
-// Usa Cloudflare Workers AI (modelos open-source, gratis: 10.000 "neuronas"/día
-// sin tarjeta) en vez de una API de pago — no hace falta ninguna clave, solo
-// activar el binding "AI" en el proyecto de Pages:
+// Modelo principal: Gemini 2.5 Flash (Google AI Studio) si hay GEMINI_API_KEY —
+// nivel gratuito real, sin tarjeta, 1500 peticiones/día, y mucho más fiable que
+// los modelos pequeños de abajo (no inventa cifras, sigue mejor el idioma pedido).
+// Clave gratis en https://aistudio.google.com/apikey (cuenta de Google, sin tarjeta)
+// → Cloudflare dashboard → proyecto → Settings → Bindings → Add → variable de texto
+// → nombre "GEMINI_API_KEY", valor la clave. Aviso: en el nivel gratuito, Google
+// puede usar las peticiones para mejorar sus productos (no pasa en el nivel de pago).
+//
+// Si no hay GEMINI_API_KEY (o falla), cae en Cloudflare Workers AI (modelos
+// open-source, gratis: 10.000 "neuronas"/día sin tarjeta) — no hace falta ninguna
+// clave, solo activar el binding "AI" en el proyecto de Pages:
 //   Cloudflare dashboard → tu proyecto → Settings → (entorno Production) → Bindings
 //   → Add → Workers AI → variable name "AI".
-// Importante: el binding solo se aplica a los deployments creados DESPUÉS de
-// guardarlo — un simple "Retry deployment" de uno viejo no lo recoge, hace
-// falta un deployment nuevo (push, o "Create deployment" en el dashboard).
-// Sin ese binding, devuelve 503 not_configured (el botón lo indica en el dashboard).
+// Importante: un binding/variable solo se aplica a los deployments creados DESPUÉS
+// de guardarlo — un simple "Retry deployment" de uno viejo no lo recoge, hace falta
+// un deployment nuevo (push, o "Create deployment" en el dashboard).
+// Sin ninguna de las dos cosas, devuelve 503 not_configured (el botón lo indica).
 //
-// Con imagen -> @cf/llava-hf/llava-1.5-7b-hf (visión). Sin imagen -> @cf/meta/llama-3.1-8b-instruct-fast
-// (texto). Ambos son modelos abiertos servidos por Cloudflare, no hay llamada a terceros.
+// Fallback con imagen -> @cf/llava-hf/llava-1.5-7b-hf (visión). Sin imagen ->
+// @cf/meta/llama-3.1-8b-instruct-fast (texto). Modelos abiertos servidos por
+// Cloudflare, más limitados (a veces confunden cifras) — de ahí preferir Gemini.
 //
 // Nota: no hay forma gratuita de leer el "tweet fijado" de una cuenta (la API
 // oficial de X para eso es de pago); sí usamos la bio de X (vxtwitter, gratis).
@@ -39,11 +48,12 @@
 // sola no frena abuso, y aunque sea gratis hasta las 10.000 neuronas/día, a partir
 // de ahí se cobra).
 
+const GEMINI_MODEL = "gemini-2.5-flash";
 const VISION_MODEL = "@cf/llava-hf/llava-1.5-7b-hf";
 const TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 
 export async function onRequestPost({ request, env, waitUntil }) {
-  if (!env.AI) return j({ error: "not_configured" }, 503);
+  if (!env.AI && !env.GEMINI_API_KEY) return j({ error: "not_configured" }, 503);
 
   const body = await request.json().catch(() => null);
   if (!body || !body.name) return j({ error: "bad_request" }, 400);
@@ -55,39 +65,86 @@ export async function onRequestPost({ request, env, waitUntil }) {
     body.slug ? fetchSalesEvents(body.slug, env).catch(() => null) : null,
   ]);
   const extra = { bio, site, sales };
+  const image = imageUrl ? await fetchImage(imageUrl).catch(() => null) : null; // {bytes:Uint8Array, mime}
 
-  // Se genera SIEMPRE en español (es donde el modelo es fiable con el formato) y,
-  // si la web está en inglés, se traduce con una segunda llamada rápida al modelo
-  // de texto — más robusto que pedirle a LLaVA que razone y traduzca a la vez
-  // (con imagen de por medio ignoraba la instrucción de idioma).
   try {
-    let raw, model;
-    const imageBytes = imageUrl && (await fetchImageBytes(imageUrl).catch(() => null));
-    if (imageBytes) {
-      model = VISION_MODEL;
-      const prompt = SYSTEM_PROMPT + "\n\n" + buildPrompt(body, extra);
-      raw = await env.AI.run(VISION_MODEL, { image: imageBytes, prompt, max_tokens: 600 });
-    } else {
-      model = TEXT_MODEL;
-      raw = await env.AI.run(TEXT_MODEL, {
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: buildPrompt(body, extra) },
-        ],
-        max_tokens: 600,
-      });
+    let text = null, model = null;
+
+    if (env.GEMINI_API_KEY) {
+      try {
+        const langNote = body.lang === "en" ? "\n\nWrite RESUMEN and every RAZONES bullet in English (keep the VEREDICTO/RESUMEN/RAZONES labels and the VEREDICTO value untranslated)." : "";
+        const prompt = SYSTEM_PROMPT + langNote + "\n\n" + buildPrompt(body, extra);
+        text = await runGemini(env, prompt, image);
+        model = GEMINI_MODEL;
+      } catch (e) {
+        text = null; // cae al fallback de abajo
+      }
     }
-    let text = typeof raw === "string" ? raw : (raw.response || raw.description || raw.result || "");
+
+    if (!text) {
+      if (!env.AI) return j({ error: "server_error", detail: "gemini_failed_no_ai_fallback" }, 500);
+      let raw;
+      const imageBytes = image?.bytes ? [...image.bytes] : null;
+      if (imageBytes) {
+        model = VISION_MODEL;
+        const prompt = SYSTEM_PROMPT + "\n\n" + buildPrompt(body, extra);
+        raw = await env.AI.run(VISION_MODEL, { image: imageBytes, prompt, max_tokens: 600 });
+      } else {
+        model = TEXT_MODEL;
+        raw = await env.AI.run(TEXT_MODEL, {
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: buildPrompt(body, extra) },
+          ],
+          max_tokens: 600,
+        });
+      }
+      text = typeof raw === "string" ? raw : (raw.response || raw.description || raw.result || "");
+      // Se generó en español (modelo pequeño, más fiable así); si hace falta inglés,
+      // se traduce aparte en vez de pedirle las dos cosas a la vez.
+      if (text && body.lang === "en") text = await translateToEnglish(env, text).catch(() => text);
+    }
+
     if (!text) return j({ error: "empty_response" }, 502);
     if (env.PREDICTIONS) {
       const savePromise = savePrediction(env, body, text).catch(() => {});
       if (waitUntil) waitUntil(savePromise); else await savePromise;
     }
-    if (body.lang === "en") text = await translateToEnglish(env, text).catch(() => text);
-    return j({ text, model, hadImage: !!imageBytes, hadSite: !!site, hadBio: !!bio, hadSales: !!sales });
+    return j({ text, model, hadImage: !!image, hadSite: !!site, hadBio: !!bio, hadSales: !!sales });
   } catch (e) {
     return j({ error: "server_error", detail: String((e && e.message) || e).slice(0, 300) }, 500);
   }
+}
+
+// Gemini 2.5 Flash (Google AI Studio, nivel gratuito). image = {bytes, mime} o null.
+async function runGemini(env, promptText, image) {
+  const parts = [];
+  if (image?.bytes) parts.push({ inline_data: { mime_type: image.mime || "image/jpeg", data: bytesToBase64(image.bytes) } });
+  parts.push({ text: promptText });
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ contents: [{ role: "user", parts }] }),
+    });
+    if (!r.ok) throw new Error("gemini_http_" + r.status);
+    const j2 = await r.json();
+    const text = (j2?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
+    if (!text) throw new Error("gemini_empty");
+    return text;
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(binary);
 }
 
 const SYSTEM_PROMPT = `Eres un analista escéptico de mints NFT. Con los datos de un proyecto (a veces
@@ -244,13 +301,20 @@ async function resolveImage(b, env) {
   return b.image || null;
 }
 
-// LLaVA (Workers AI) quiere la imagen como array de bytes, no una URL.
-async function fetchImageBytes(url) {
+// Descarga la imagen una vez; Gemini quiere base64, LLaVA (Workers AI) un array de bytes —
+// ambos parten de este mismo Uint8Array.
+async function fetchImage(url) {
   const r = await fetch(url);
   if (!r.ok) return null;
   const buf = await r.arrayBuffer();
   if (buf.byteLength > 8 * 1024 * 1024) return null; // evita imágenes enormes
-  return [...new Uint8Array(buf)];
+  const mime = r.headers.get("content-type")?.split(";")[0] || guessMime(url);
+  return { bytes: new Uint8Array(buf), mime };
+}
+
+function guessMime(url) {
+  const ext = (url.split("?")[0].split(".").pop() || "").toLowerCase();
+  return { png: "image/png", gif: "image/gif", webp: "image/webp", jpg: "image/jpeg", jpeg: "image/jpeg" }[ext] || "image/jpeg";
 }
 
 function xHandle(url) {
