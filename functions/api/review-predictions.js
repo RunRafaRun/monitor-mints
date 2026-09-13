@@ -2,6 +2,7 @@
 // ha pasado tiempo suficiente desde el mint, para saber si acertamos o no.
 //
 //   GET|POST /api/review-predictions[?dry=1]
+//   GET      /api/review-predictions?stats=1
 //   -> { checked, reviewed, results:[{name,verdict,outcome,ratio}], pending, total }
 //
 // Pensado para llamarse solo (cron): el GitHub Action de build.yml lo invoca en
