@@ -14,8 +14,11 @@
 // Usa Cloudflare Workers AI (modelos open-source, gratis: 10.000 "neuronas"/día
 // sin tarjeta) en vez de una API de pago — no hace falta ninguna clave, solo
 // activar el binding "AI" en el proyecto de Pages:
-//   Cloudflare dashboard → tu proyecto → Settings → Functions → AI bindings
-//   → Add binding → variable name "AI".
+//   Cloudflare dashboard → tu proyecto → Settings → (entorno Production) → Bindings
+//   → Add → Workers AI → variable name "AI".
+// Importante: el binding solo se aplica a los deployments creados DESPUÉS de
+// guardarlo — un simple "Retry deployment" de uno viejo no lo recoge, hace
+// falta un deployment nuevo (push, o "Create deployment" en el dashboard).
 // Sin ese binding, devuelve 503 not_configured (el botón lo indica en el dashboard).
 //
 // Con imagen -> @cf/llava-hf/llava-1.5-7b-hf (visión). Sin imagen -> @cf/meta/llama-3.1-8b-instruct
