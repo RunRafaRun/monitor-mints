@@ -252,13 +252,23 @@ async function translateToEnglish(env, text) {
   return translated || text;
 }
 
+// El código del veredicto por reglas (VALE_LA_PENA/DUDOSO/EVITAR) es un identificador
+// interno, no texto para mostrar — si se le pasa tal cual a un análisis en inglés, el
+// modelo lo repite literalmente en español dentro de la frase. Se traduce a una
+// etiqueta natural en el idioma pedido antes de metérselo en el prompt.
+function humanVerdict(code, lang) {
+  const es = { VALE_LA_PENA: "vale la pena", DUDOSO: "dudoso", EVITAR: "evitar" };
+  const en = { VALE_LA_PENA: "worth it", DUDOSO: "iffy", EVITAR: "avoid" };
+  return (lang === "en" ? en : es)[code] || code;
+}
+
 function buildPrompt(b, extra, rich) {
   const phases = (b.phases || [])
     .map((p) => `${p.k}${p.label ? " (" + p.label + ")" : ""}: ${p.priceEth != null ? p.priceEth + " ETH" : p.p || "?"} — ${p.state || p.s || "?"}`)
     .join("\n  ");
   const mult = b.floorUsd != null && b.priceEth != null && b.priceEth > 0 ? (b.floorUsd / (b.priceEth * (b.ethUsd || 1))).toFixed(2) : null;
   const similar = (b.similarNames || []).filter((n) => n && n !== b.name);
-  const ruleLine = rich && b.ruleVerdict ? `Veredicto automático (reglas fijas): ${b.ruleVerdict}${(b.ruleReasons || []).length ? " — razones: " + b.ruleReasons.join("; ") : ""}\n` : "";
+  const ruleLine = rich && b.ruleVerdict ? `Veredicto automático (reglas fijas): ${humanVerdict(b.ruleVerdict, b.lang)}${(b.ruleReasons || []).length ? " — razones: " + b.ruleReasons.join("; ") : ""}\n` : "";
   return `${ruleLine}Proyecto: ${b.name} (cadena: ${b.chain || "?"})
 Supply: ${b.minted ?? "?"} / ${b.supply ?? "?"} minteados
 Precio público: ${b.priceEth === 0 ? "GRATIS (solo gas)" : b.priceEth != null ? b.priceEth + " ETH" : b.free ? "desconocido (aunque hay alguna fase WL/GTD gratis, la pública no tiene precio confirmado)" : "desconocido"}
