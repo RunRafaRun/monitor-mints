@@ -30,7 +30,7 @@
 // de ahí se cobra).
 
 const VISION_MODEL = "@cf/llava-hf/llava-1.5-7b-hf";
-const TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 
 export async function onRequestPost({ request, env }) {
   if (!env.AI) return j({ error: "not_configured" }, 503);
