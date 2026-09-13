@@ -83,9 +83,8 @@ export async function onRequestPost({ request, env, waitUntil }) {
       const savePromise = savePrediction(env, body, text).catch(() => {});
       if (waitUntil) waitUntil(savePromise); else await savePromise;
     }
-    let translateErr = null;
-    if (body.lang === "en") text = await translateToEnglish(env, text).catch((e) => { translateErr = String((e && e.message) || e).slice(0, 200); return text; });
-    return j({ text, model, hadImage: !!imageBytes, hadSite: !!site, hadBio: !!bio, hadSales: !!sales, translateErr });
+    if (body.lang === "en") text = await translateToEnglish(env, text).catch(() => text);
+    return j({ text, model, hadImage: !!imageBytes, hadSite: !!site, hadBio: !!bio, hadSales: !!sales });
   } catch (e) {
     return j({ error: "server_error", detail: String((e && e.message) || e).slice(0, 300) }, 500);
   }
