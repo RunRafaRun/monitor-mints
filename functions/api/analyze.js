@@ -56,35 +56,34 @@ export async function onRequestPost({ request, env, waitUntil }) {
   ]);
   const extra = { bio, site, sales };
 
-  // los modelos pequeños tienden a ignorar una instrucción de idioma si va sola al
-  // final de un prompt largo en español -> se repite al principio (primacía) y al
-  // final (recencia) para que de verdad la respete.
-  const ld = langDirective(body.lang);
-  const sys = ld + "\n\n" + SYSTEM_PROMPT + ld;
-
+  // Se genera SIEMPRE en español (es donde el modelo es fiable con el formato) y,
+  // si la web está en inglés, se traduce con una segunda llamada rápida al modelo
+  // de texto — más robusto que pedirle a LLaVA que razone y traduzca a la vez
+  // (con imagen de por medio ignoraba la instrucción de idioma).
   try {
     let raw, model;
     const imageBytes = imageUrl && (await fetchImageBytes(imageUrl).catch(() => null));
     if (imageBytes) {
       model = VISION_MODEL;
-      const prompt = sys + "\n\n" + buildPrompt(body, extra);
+      const prompt = SYSTEM_PROMPT + "\n\n" + buildPrompt(body, extra);
       raw = await env.AI.run(VISION_MODEL, { image: imageBytes, prompt, max_tokens: 800 });
     } else {
       model = TEXT_MODEL;
       raw = await env.AI.run(TEXT_MODEL, {
         messages: [
-          { role: "system", content: sys },
+          { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: buildPrompt(body, extra) },
         ],
         max_tokens: 600,
       });
     }
-    const text = typeof raw === "string" ? raw : (raw.response || raw.description || raw.result || "");
+    let text = typeof raw === "string" ? raw : (raw.response || raw.description || raw.result || "");
     if (!text) return j({ error: "empty_response" }, 502);
     if (env.PREDICTIONS) {
       const savePromise = savePrediction(env, body, text).catch(() => {});
       if (waitUntil) waitUntil(savePromise); else await savePromise;
     }
+    if (body.lang === "en") text = await translateToEnglish(env, text).catch(() => text);
     return j({ text, model, hadImage: !!imageBytes, hadSite: !!site, hadBio: !!bio, hadSales: !!sales });
   } catch (e) {
     return j({ error: "server_error", detail: String((e && e.message) || e).slice(0, 300) }, 500);
@@ -144,9 +143,26 @@ No es asesoramiento financiero. Sé directo y conciso — nada de relleno, máxi
 // El resto del prompt (arriba) queda fijo en español para que el modelo razone siempre igual;
 // esto solo le pide traducir el CONTENIDO (resumen + razones) al idioma de la web, manteniendo
 // las etiquetas de formato intactas para que el parser del cliente siga funcionando.
-function langDirective(lang) {
-  if (lang === "en") return "\n\nIMPORTANT LANGUAGE RULE: write the RESUMEN sentence and every RAZONES bullet in ENGLISH, not Spanish, even though the instructions below are in Spanish. Keep the labels VEREDICTO/RESUMEN/RAZONES and the VEREDICTO value (VALE_LA_PENA/DUDOSO/EVITAR) exactly as given, untranslated.\n";
-  return "\n\nIMPORTANTE: escribe la frase de RESUMEN y cada razón de RAZONES en ESPAÑOL.\n";
+// Traduce el resultado (ya generado en español) al inglés con una llamada aparte
+// y rápida al modelo de texto — separar "razonar" de "traducir" es más fiable que
+// pedirle las dos cosas a la vez a un modelo pequeño, sobre todo al de visión.
+async function translateToEnglish(env, text) {
+  const raw = await env.AI.run(TEXT_MODEL, {
+    messages: [
+      {
+        role: "system",
+        content: "Translate the following NFT mint analysis into natural English. Keep the literal labels "
+          + "'VEREDICTO:', 'RESUMEN:' and 'RAZONES:' untranslated, and keep the value after VEREDICTO "
+          + "(VALE_LA_PENA, DUDOSO or EVITAR) untranslated exactly as given. Translate only the free text after "
+          + "RESUMEN: and each '-' bullet under RAZONES. Output ONLY the translated text in the same structure, "
+          + "nothing else before or after.",
+      },
+      { role: "user", content: text },
+    ],
+    max_tokens: 700,
+  });
+  const translated = typeof raw === "string" ? raw : (raw.response || raw.description || raw.result || "");
+  return translated || text;
 }
 
 function buildPrompt(b, extra) {

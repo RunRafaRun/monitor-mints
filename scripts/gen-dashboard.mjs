@@ -702,6 +702,7 @@ td .sub2{display:block;font-size:11px;color:var(--mut);margin-top:2px;line-heigh
 td.num .sub2{text-align:right}
 td>b:first-child{font-weight:600}
 .pill{display:inline-block;font-size:11px;color:var(--mut);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin:1px 2px 1px 0}
+.vpill{background:transparent;font-family:inherit;cursor:pointer}
 .ph-GTD{color:var(--now);border-color:color-mix(in srgb,var(--now) 45%,var(--line))}
 .ph-FCFS{color:var(--soon);border-color:color-mix(in srgb,var(--soon) 45%,var(--line))}
 .ph-WL,.ph-HOLDER{color:var(--gold);border-color:color-mix(in srgb,var(--gold) 45%,var(--line))}
@@ -2065,7 +2066,7 @@ function verdictCell(m){
   const pill = (!m.x && m.floorUsd==null) ? '<span class="muted">—</span>' : (()=>{
     const v = mintVerdict(m);
     const tip = esc(t('v_tip') + (v.reasons.length? '\\n\\n'+v.reasons.map(r=>'• '+r).join('\\n') : ''));
-    return '<span class="pill '+v.cls+'" title="'+tip+'">'+esc(v.label)+'</span>';
+    return '<button class="pill vpill '+v.cls+'" data-name="'+esc(m.name)+'" data-tip="'+tip+'" title="'+tip+'">'+esc(v.label)+'</button>';
   })();
   return pill+' <button class="aibtn" data-ai="'+esc(m.name)+'" title="'+esc(t('ai_tip'))+'">'+ico('sparkle')+'</button>';
 }
@@ -2146,6 +2147,14 @@ function openAiPanel(name, x, y, html){
 function closeAiPanel(){ const e=document.getElementById('aiPanel'); if(e) e.remove(); }
 document.addEventListener('click', e=>{
   if(e.target.closest('#aiPanel')){ if(e.target.closest('#aiPanelClose')) closeAiPanel(); return; }
+  const vp=e.target.closest('.vpill');
+  if(vp){
+    e.stopPropagation();
+    const r=vp.getBoundingClientRect();
+    const html='<div class="ai-raw">'+vp.dataset.tip.replace(/\\n/g,'<br>')+'</div>';
+    openAiPanel(vp.dataset.name, r.left, r.bottom+4, html);
+    return;
+  }
   const b=e.target.closest('.aibtn');
   if(b){ e.stopPropagation(); runAnalysis(b); return; }
   closeAiPanel();
