@@ -303,9 +303,10 @@ async function savePrediction(env, b, text) {
   const key = predKey(b.chain, b.slug || b.name);
   const record = {
     name: b.name, chain: b.chain || null, slug: b.slug || null,
-    verdict: vm[1].toUpperCase(), predictedAt: new Date().toISOString(),
+    verdict: vm[1].toUpperCase(), reasoning: text.slice(0, 1500), predictedAt: new Date().toISOString(),
     priceEth: b.priceEth ?? null, priceUsd: b.priceUsd ?? null, floorEth: b.floorEth ?? null, floorUsd: b.floorUsd ?? null,
-    when: b.when ?? null, sales: b.sales ?? null, ownersPct: b.ownersPct ?? null,
+    when: b.when ?? null, sales: b.sales ?? null, ownersPct: b.ownersPct ?? null, team: b.team ?? null,
+    xRenames: b.xRenames ?? null, xAgeDays: b.xAgeDays ?? null,
     reviewedAt: null, outcome: null,
   };
   await env.PREDICTIONS.put(key, JSON.stringify(record));

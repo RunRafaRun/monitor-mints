@@ -79,15 +79,42 @@ async function statsReport(env) {
     if (raw) { try { all.push(JSON.parse(raw)); } catch {} }
   }
   const done = all.filter((r) => r.outcome);
-  const correct = done.filter((r) => r.outcome === "correct").length;
-  const incorrect = done.filter((r) => r.outcome === "incorrect").length;
+  const correctList = done.filter((r) => r.outcome === "correct");
+  const incorrectList = done.filter((r) => r.outcome === "incorrect");
   const unclear = done.filter((r) => r.outcome === "unclear").length;
+  // pista rápida de qué palabras del razonamiento aparecen mucho más en los fallos
+  // que en los aciertos — no es análisis serio, solo un punto de partida para
+  // decidir a mano qué tocar en SYSTEM_PROMPT.
+  const suspectWords = topOverrepresented(incorrectList, correctList);
   return j({
     total: all.length, reviewed: done.length, pendingReview: all.length - done.length,
-    correct, incorrect, unclear,
-    accuracy: correct + incorrect > 0 ? Math.round((correct / (correct + incorrect)) * 100) + "%" : "n/a",
-    predictions: all.sort((a, b) => Date.parse(b.predictedAt) - Date.parse(a.predictedAt)).slice(0, 100),
+    correctCount: correctList.length, incorrectCount: incorrectList.length, unclear,
+    accuracy: correctList.length + incorrectList.length > 0
+      ? Math.round((correctList.length / (correctList.length + incorrectList.length)) * 100) + "%" : "n/a",
+    suspectWordsInIncorrect: suspectWords,
+    incorrect: incorrectList.map(brief),
+    correct: correctList.slice(0, 20).map(brief),
+    pending: all.filter((r) => !r.outcome).slice(0, 30).map(brief),
   });
+}
+
+function brief(r) {
+  return { name: r.name, verdict: r.verdict, ratio: r.ratio, priceUsd: r.priceUsd, floorUsdAtReview: r.floorUsdAtReview, reasoning: r.reasoning || null, predictedAt: r.predictedAt };
+}
+
+const STOPWORDS = new Set("de la el en y a que un una con por para su sus es no al son las los del su este esta proyecto veredicto resumen razones".split(" "));
+function words(r) {
+  return (r.reasoning || "").toLowerCase().replace(/[^a-záéíóúñ0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 4 && !STOPWORDS.has(w));
+}
+function topOverrepresented(bad, good) {
+  const count = (list) => { const m = new Map(); for (const r of list) for (const w of new Set(words(r))) m.set(w, (m.get(w) || 0) + 1); return m; };
+  const badC = count(bad), goodC = count(good);
+  if (!bad.length) return [];
+  const scored = [...badC.entries()]
+    .map(([w, n]) => ({ word: w, inIncorrect: n, inCorrect: goodC.get(w) || 0, rate: n / bad.length }))
+    .filter((x) => x.inIncorrect >= 2 && x.rate > (x.inCorrect / Math.max(1, good.length)) * 1.5)
+    .sort((a, b) => b.rate - a.rate);
+  return scored.slice(0, 10);
 }
 
 async function fetchEthUsd() {
