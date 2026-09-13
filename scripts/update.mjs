@@ -26,6 +26,7 @@ const hasWallets = existsSync(join(HERE, "..", "data", "wallets.json"));
 
 const steps = [
   ["Radar de mints", "gen-radar.mjs", ["--write"]],
+  ["Historial de nombres en X", "fetch-x-history.mjs", []],
 ];
 if (hasKey && hasWallets) {
   steps.push(["Escaneo de wallets", "scan-wallets.mjs", ["--write"]]);

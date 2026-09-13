@@ -200,6 +200,12 @@ export async function buildData({ pub = false } = {}) {
   };
   const need1 = (n) => ({ name: n, owned: ownedAlias(n), wallets: walletsFor(n) });
 
+  // historial de nombres en X (memory.lol): data/x-history.json, lo escribe fetch-x-history.mjs
+  const xhistPath = join(ROOT, "data", "x-history.json");
+  const xhist = existsSync(xhistPath) ? (JSON.parse(readFileSync(xhistPath, "utf8")).handles || {}) : {};
+  const xHandleOf = (url) => { const m = /(?:x|twitter)\.com\/(?:#!\/)?@?([A-Za-z0-9_]{1,15})/i.exec(url || ""); return m ? m[1].toLowerCase() : null; };
+  const xHistFor = (url) => { const h = xHandleOf(url); return h ? xhist[h] : null; };
+
   const mints = [...seen.values()]
     .map((c) => {
       const liveGate = c.gates.find((g) => g.state === "live" || ((g.startMs ?? 0) <= now && (g.endMs ?? 1e18) > now));
@@ -211,11 +217,13 @@ export async function buildData({ pub = false } = {}) {
       else if (c.startMs && c.startMs > now && c.startMs <= soonCut) status = "soon";
       const openGate = openKey || liveGate;
       const need = (elig[c.name] || []).map(need1);
+      const xh = xHistFor(c.x);
       return {
         name: c.name, status, chain: c.chain || "robinhood",
         minted: c.minted, supply: c.supply, mintRate: c.mintRate,
         hype: c.hype ?? 0, tier: c.tier, team: c.team,
         xFollowers: c.xFollowers, xPosts: c.xPosts, xAgeDays: c.xAgeDays, socials: c.socials,
+        xRenames: xh?.renames ?? null, xLastRename: xh?.lastRenameAt ?? null, xAvatar: xh?.avatar ?? null,
         pop: popularityVerdict(c),
         priceEth: c.priceEth ?? null, free: !!c.free,
         when: (openGate || nextGate)?.startMs ?? c.startMs ?? null,
@@ -292,11 +300,13 @@ export async function buildData({ pub = false } = {}) {
         else if (keySoon) status = "soon";
         if (status === "later") continue;
         const need = [...new Set(e.phases.flatMap((p) => p.eligible || []))].map(need1);
+        const xh2 = xHistFor(e.x);
         mints.push({
           name: e.name, status, chain: e.chain || "robinhood",
           minted: null, supply: e.supply, mintRate: null,
           hype: 0, tier: null, team: null,
           xFollowers: null, xPosts: null, xAgeDays: -1, socials: 0,
+          xRenames: xh2?.renames ?? null, xLastRename: xh2?.lastRenameAt ?? null, xAvatar: xh2?.avatar ?? null,
           pop: "sin X",
           priceEth: null, free: e.phases.some((p) => p.free),
           when: (live || next)?.startMs ?? e.mintDate ?? null,
@@ -715,6 +725,7 @@ a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .xstat{display:inline-flex;align-items:center;gap:3px;margin-right:8px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .xstat svg{width:13px;height:13px;fill:currentColor;opacity:.75}
 .xnew{color:var(--warn)}
+.xrenamed{color:var(--warn);font-weight:700}
 .badge{display:inline-block;padding:1px 6px;border-radius:6px;font-size:11px;font-weight:700}
 .b-now{background:rgba(46,204,113,.16);color:var(--now)}.b-soon{background:rgba(74,163,255,.16);color:var(--soon)}
 .b-out{background:color-mix(in srgb,var(--mut) 22%,transparent);color:var(--mut)}
@@ -804,6 +815,21 @@ padding:5px;box-shadow:0 12px 40px rgba(0,0,0,.45);min-width:150px}
 font-size:12.5px;padding:6px 8px;border-radius:6px;cursor:pointer}
 #alertMenu button:hover{background:color-mix(in srgb,var(--accent) 22%,transparent)}
 #alertMenu button.sel{color:var(--now);font-weight:700}
+.aibtn{background:transparent;border:0;cursor:pointer;opacity:.55;padding:2px 4px;line-height:1;vertical-align:middle;color:var(--accent)}
+.aibtn:hover{opacity:1}.aibtn:disabled{opacity:.3;cursor:wait}
+.aibtn svg{width:14px;height:14px}
+#aiPanel{position:fixed;z-index:60;background:var(--card);border:1px solid var(--line);border-radius:10px;
+padding:8px;box-shadow:0 12px 40px rgba(0,0,0,.45);width:min(360px,90vw);max-height:70vh;overflow:auto}
+#aiPanel .am-h{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;color:var(--mut);
+text-transform:uppercase;letter-spacing:.04em;padding:2px 2px 6px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.ai-x{background:transparent;border:0;cursor:pointer;color:var(--mut);padding:2px}
+.ai-x svg{width:12px;height:12px}
+.ai-loading{font-size:12.5px;color:var(--mut);display:flex;align-items:center;gap:6px}
+.ai-err{font-size:12.5px;color:var(--warn)}
+.ai-raw{font-size:12.5px;white-space:pre-wrap}
+.ai-result{font-size:12.5px}
+.ai-reasons{margin:6px 0 0;padding-left:18px}
+.ai-reasons li{margin:2px 0}
 #alertBanner{position:fixed;top:0;left:0;right:0;z-index:70;background:var(--warn);color:#fff;
 padding:10px 14px;font-size:13.5px;font-weight:600;display:flex;flex-direction:column;gap:5px;
 box-shadow:0 6px 24px rgba(0,0,0,.5);animation:abflash .8s ease-in-out 4}
@@ -1280,7 +1306,8 @@ const ICN = {
   wallet:'M4 8.5A2.5 2.5 0 0 1 6.5 6H17v3M4 8.5V17a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3.5M4 8.5H17m3 4h-3a1.5 1.5 0 0 0 0 3h3',
   link:'M14 10a4 4 0 0 1 0 5.7l-2.5 2.5A4 4 0 0 1 5.8 12.5L7 11.3M10 14a4 4 0 0 1 0-5.7L12.5 5.8A4 4 0 0 1 18.2 11.5L17 12.7',
   dip:'M3 6l6 7 4-4 8 9M21 18v-5h-5',
-  conc:'M12 3a9 9 0 1 0 9 9h-9V3Z'
+  conc:'M12 3a9 9 0 1 0 9 9h-9V3Z',
+  sparkle:'M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18'
 };
 const ico = (n,cls) => '<svg class="ico'+(cls?' '+cls:'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+ICN[n]+'"/></svg>';
 // glifos de red (rellenos, color por cadena) — más corto y reconocible que el texto
@@ -1382,12 +1409,22 @@ const STR = {
   h_floors:'Alertas de floor (±15 % / 7 días)',
   note_floors:'Se llena según  node fetch-floors.mjs  va acumulando histórico.',
   c_project:'Proyecto',c_supply:'Minteado',c_hype:'Hype',c_pop:'Popularidad',c_x:'Actividad X',
-  c_phases:'Fases',c_when:'Cuándo',c_price:'Precio public',c_keys:'Acceso',c_have:'Tengo',
+  c_phases:'Fases',c_when:'Cuándo',c_price:'Precio public',c_keys:'Acceso',c_have:'Tengo',c_verdict:'Veredicto',
   c_coll:'Colección',c_prio:'Prio',c_tier:'Tier',c_floor:'Floor',c_wl:'wl_value',c_ev:'GTD/FCFS/WL',c_note:'Nota',
+  v_go:'Vale la pena',v_maybe:'Dudoso',v_avoid:'Evitar',
+  v_floor_good:'Floor por encima del precio público ({m}×)',v_floor_below:'Floor por debajo del precio público ({m}×) — riesgo de pérdida',
+  v_pop_low:'Popularidad baja / poca actividad en X',v_new_acct:'Cuenta de X muy nueva (<7 días)',
+  v_renamed:'La cuenta de X cambió de nombre {n} vez/veces — posible cuenta reciclada',
+  v_anon_team:'Equipo anónimo',v_free:'Mint gratis (solo pagas gas)',
+  v_only_public:'Las fases WL/GTD/FCFS ya pasaron y no tenías acceso — solo público (ojo con la reserva del equipo)',
+  v_have_key:'Tienes acceso a una fase de llave (WL/GTD/FCFS)',v_tip:'Veredicto automático a partir de floor/precio, popularidad, cuenta de X y acceso. No es consejo financiero.',
+  ai_btn:'Analizar a fondo',ai_tip:'Le manda estos datos + la imagen del proyecto a una IA para un juicio más a fondo (¿parece scam? ¿reparto de reserva al equipo?). Tarda unos segundos.',
+  ai_loading:'Analizando…',ai_error:'Error al analizar',ai_notconfigured:'Análisis con IA no configurado en el servidor',ai_close:'Cerrar',
   c_before:'Floor antes',c_after:'Floor ahora',
   now:'en curso',sold_out:'AGOTADO',nothing_now:'nada minteando ahora',nothing_soon:'nada en 72 h',no_hist:'sin histórico todavía',
   pop_hi:'ALTA',pop_mid:'MEDIA',pop_lo:'BAJA',pop_nox:'sin X',
   x_fol:'seguidores',x_posts:'posts',x_age:'antigüedad de la cuenta',days:'d',new_acct:'cuenta nueva',
+  x_renamed:'renombrada',x_renamed_tip:'Detectados {n} cambio(s) de nombre en X (último: {d}) — posible cuenta reciclada',
   need_unknown:'acceso sin investigar',have_key:'TIENES ACCESO',in_wallet:'wallet que te da el acceso',
   cartera:'accesos en tus wallets',cartera_none:'ningún acceso detectado en tus wallets',
   save_hint:'Marcado en este navegador. Para guardarlo en el fichero ejecuta:',
@@ -1528,12 +1565,22 @@ const STR = {
   h_floors:'Floor alerts (±15% / 7 days)',
   note_floors:'Fills up as  node fetch-floors.mjs  accumulates history.',
   c_project:'Project',c_supply:'Minted',c_hype:'Hype',c_pop:'Popularity',c_x:'X activity',
-  c_phases:'Phases',c_when:'When',c_price:'Public price',c_keys:'Access',c_have:'Have',
+  c_phases:'Phases',c_when:'When',c_price:'Public price',c_keys:'Access',c_have:'Have',c_verdict:'Verdict',
   c_coll:'Collection',c_prio:'Prio',c_tier:'Tier',c_floor:'Floor',c_wl:'wl_value',c_ev:'GTD/FCFS/WL',c_note:'Note',
+  v_go:'Worth it',v_maybe:'Iffy',v_avoid:'Avoid',
+  v_floor_good:'Floor above public price ({m}×)',v_floor_below:'Floor below public price ({m}×) — loss risk',
+  v_pop_low:'Low popularity / little X activity',v_new_acct:'Very new X account (<7 days)',
+  v_renamed:'X account was renamed {n} time(s) — possible recycled account',
+  v_anon_team:'Anonymous team',v_free:'Free mint (gas only)',
+  v_only_public:'WL/GTD/FCFS phases already passed and you had no access — public only (watch out for team dumps)',
+  v_have_key:'You have access to a key phase (WL/GTD/FCFS)',v_tip:'Automatic verdict from floor/price, popularity, X account and access. Not financial advice.',
+  ai_btn:'Deep analysis',ai_tip:'Sends this data + the project image to an AI for a deeper judgment (does it look like a scam? a team-reserve dump?). Takes a few seconds.',
+  ai_loading:'Analyzing…',ai_error:'Analysis failed',ai_notconfigured:'AI analysis not configured on the server',ai_close:'Close',
   c_before:'Floor before',c_after:'Floor now',
   now:'live',sold_out:'SOLD OUT',nothing_now:'nothing minting now',nothing_soon:'nothing in 72 h',no_hist:'no history yet',
   pop_hi:'HIGH',pop_mid:'MEDIUM',pop_lo:'LOW',pop_nox:'no X',
   x_fol:'followers',x_posts:'posts',x_age:'account age',days:'d',new_acct:'new account',
+  x_renamed:'renamed',x_renamed_tip:'Detected {n} username change(s) on X (last: {d}) — possible recycled account',
   need_unknown:'access not researched',have_key:'YOU HAVE ACCESS',in_wallet:'wallet that grants it',
   cartera:'access collections in your wallets',cartera_none:'no access collections in your wallets',
   save_hint:'Checked in this browser only. To save it to the file run:',
@@ -1607,7 +1654,8 @@ const noteOf = c => (L==='en' && c && c.notesEn) ? c.notesEn : (c && c.notes) ||
 const IC = {
  fol:'<svg viewBox="0 0 24 24"><path d="M7.8 10a4.4 4.4 0 1 0 0-8.9 4.4 4.4 0 0 0 0 8.9Zm8.9.3c1.9 0 3.5-1.6 3.5-3.6S18.6 3 16.7 3c-.5 0-1 .1-1.4.3.6.9 1 2 1 3.2 0 1.1-.4 2.2-1 3.1.4.2.9.3 1.4.3ZM1.5 18.8c0-2.6 3-4.7 6.3-4.7s6.3 2.1 6.3 4.7v2.1H1.5v-2.1Zm14.6-4.4c2.6.3 4.9 2.1 4.9 4.4v2.1h-3.5v-2.1c0-1.7-.6-3.2-1.4-4.4Z"/></svg>',
  posts:'<svg viewBox="0 0 24 24"><path d="M1.75 3.25A2.25 2.25 0 0 1 4 1h16a2.25 2.25 0 0 1 2.25 2.25v12.5A2.25 2.25 0 0 1 20 18H8.6l-4.9 4v-4H4a2.25 2.25 0 0 1-2.25-2.25V3.25Z"/></svg>',
- age:'<svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 0 0 3 6.5v13A2.5 2.5 0 0 0 5.5 22h13a2.5 2.5 0 0 0 2.5-2.5v-13A2.5 2.5 0 0 0 18.5 4H17V2h-2v2H9V2H7Zm-2 7h14v10.5a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5V9Z"/></svg>'
+ age:'<svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 0 0 3 6.5v13A2.5 2.5 0 0 0 5.5 22h13a2.5 2.5 0 0 0 2.5-2.5v-13A2.5 2.5 0 0 0 18.5 4H17V2h-2v2H9V2H7Zm-2 7h14v10.5a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5V9Z"/></svg>',
+ warn:'<svg viewBox="0 0 24 24"><path d="M12 2 1 21h22L12 2Zm0 6.5c.6 0 1 .4 1 1v5c0 .6-.4 1-1 1s-1-.4-1-1v-5c0-.6.4-1 1-1ZM12 18.3a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Z"/></svg>'
 };
 const nf = n => n==null ? '?' : n>=1e6 ? (n/1e6).toFixed(1)+'M' : n>=1e3 ? (n/1e3).toFixed(1)+'K' : ''+n;
 const xstat = (ic,val,title,cls='') => '<span class="xstat '+cls+'" title="'+title+'">'+IC[ic]+nf(val)+'</span>';
@@ -1672,9 +1720,13 @@ function popTxt(m){
 function xCell(m){
   if(!m.x) return '<span class="muted">—</span>';
   const young = m.xAgeDays>=0 && m.xAgeDays<30;
+  const renamed = m.xRenames>0
+    ? '<span class="xstat xrenamed" title="'+t('x_renamed_tip').replace('{n}',m.xRenames).replace('{d}',m.xLastRename||'?')+'">'+IC.warn+t('x_renamed')+' '+m.xRenames+'</span>'
+    : '';
   return xstat('fol',m.xFollowers,t('x_fol'))
     + xstat('posts',m.xPosts,t('x_posts'))
-    + xstat('age', m.xAgeDays>=0?m.xAgeDays:null, t('x_age') + (young?' — '+t('new_acct'):''), young?'xnew':'');
+    + xstat('age', m.xAgeDays>=0?m.xAgeDays:null, t('x_age') + (young?' — '+t('new_acct'):''), young?'xnew':'')
+    + renamed;
 }
 const publicPrice = m => { const g=m.phases.find(p=>/PUBLIC/i.test(p.k)); return g?priceOf(g.p):(m.priceEth??null); };
 
@@ -1924,6 +1976,7 @@ function mintRows(list){
     cell(t('c_keys'), needCell(m), null, keyRank(m))+
     cell(t('c_price'), money(publicPrice(m))+feeCell(m), 'num', publicPrice(m)??-1)+
     cell(t('c_floor'), floorRadar(m), 'num', m.floorUsd??-1)+
+    cell(t('c_verdict'), verdictCell(m))+
     cell(t('c_when'), bellBtn(m)+whenCell(m.when), 'num', m.when||9e15)+
   '</tr>';
   }).join('');
@@ -1973,6 +2026,106 @@ function floorRadar(m){
   if(mult>1000) return head;
   return head+'<span class="sub2 '+(mult>=1?'rise':'drop')+'">· '+mult.toFixed(1)+'×</span>';
 }
+
+// ---- veredicto automático (gratis, reglas) — floor/precio, popularidad, cuenta X, acceso ----
+function mintVerdict(m){
+  let score = 50;
+  const reasons = [];
+  const add = (key, val) => reasons.push(t(key).replace('{n}', val ?? '').replace('{m}', val ?? ''));
+
+  if(/ALTO|ALTA|HIGH/i.test(m.pop)) score += 15;
+  else if(/MEDIO|MEDIA|MEDIUM/i.test(m.pop)) score += 3;
+  else { score -= 15; add('v_pop_low'); }
+
+  const pp = publicPrice(m);
+  if(pp===0 || m.free){ score += 10; add('v_free'); }
+  else if(m.floorUsd!=null && m.floorUsd>0 && pp!=null){
+    const mult = m.floorUsd/(pp*ETHUSD);
+    if(mult>=1.3){ score += 20; add('v_floor_good', mult.toFixed(1)); }
+    else if(mult<0.9){ score += mult<0.5?-35:-20; add('v_floor_below', mult.toFixed(1)); }
+  }
+
+  if(m.xAgeDays!=null && m.xAgeDays>=0 && m.xAgeDays<7){ score -= 15; add('v_new_acct'); }
+  if(m.xRenames>0){ score -= 25; add('v_renamed', m.xRenames); }
+  if(m.team==='anon'){ score -= 5; add('v_anon_team'); }
+
+  const now = Date.now();
+  const KEYK = ['GTD','FCFS','WL','HOLDER'];
+  const keyEnded = (m.phases||[]).some(p=>KEYK.includes(p.k) && p.e && p.e<now);
+  const keyOpen = (m.phases||[]).some(p=>KEYK.includes(p.k) && (!p.e || p.e>=now));
+  if(m.haveKey){ score += 10; add('v_have_key'); }
+  else if(keyEnded && !keyOpen){ score -= 10; add('v_only_public'); }
+
+  score = Math.max(0, Math.min(100, score));
+  const [label, cls] = score>=65 ? [t('v_go'),'pop-hi'] : score>=40 ? [t('v_maybe'),'pop-mid'] : [t('v_avoid'),'pop-lo'];
+  return { score, label, cls, reasons };
+}
+function verdictCell(m){
+  const pill = (!m.x && m.floorUsd==null) ? '<span class="muted">—</span>' : (()=>{
+    const v = mintVerdict(m);
+    const tip = esc(t('v_tip') + (v.reasons.length? '\\n\\n'+v.reasons.map(r=>'• '+r).join('\\n') : ''));
+    return '<span class="pill '+v.cls+'" title="'+tip+'">'+esc(v.label)+'</span>';
+  })();
+  return pill+' <button class="aibtn" data-ai="'+esc(m.name)+'" title="'+esc(t('ai_tip'))+'">'+ico('sparkle')+'</button>';
+}
+// ---- "Analizar a fondo" (IA, bajo demanda) ----
+async function runAnalysis(btn){
+  if(btn.disabled) return;
+  const name = btn.dataset.ai;
+  const m = D.mints.find(mm=>mm.name===name); if(!m) return;
+  const r = btn.getBoundingClientRect();
+  btn.disabled = true;
+  openAiPanel(name, r.left, r.bottom+4, '<div class="ai-loading">'+ico('sparkle')+' '+t('ai_loading')+'</div>');
+  try{
+    const body = {
+      name: m.name, slug: m.slug||null, image: m.xAvatar||null, chain: m.chain,
+      minted: m.minted, supply: m.supply, priceEth: publicPrice(m), free: !!m.free,
+      floorEth: m.floorEth, floorUsd: m.floorUsd, ethUsd: ETHUSD,
+      phases: (m.phases||[]).map(p=>({k:p.k, label:p.n, p:p.p, state:p.s})),
+      team: m.team, xFollowers: m.xFollowers, xAgeDays: m.xAgeDays, xRenames: m.xRenames, xLastRename: m.xLastRename,
+      hype: m.hype, pop: m.pop, haveKey: m.haveKey,
+    };
+    const res = await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
+    if(res.error){
+      const msg = res.error==='not_configured' ? t('ai_notconfigured') : (t('ai_error')+(res.detail?': '+res.detail:''));
+      openAiPanel(name, r.left, r.bottom+4, '<div class="ai-err">'+esc(msg)+'</div>');
+    } else {
+      openAiPanel(name, r.left, r.bottom+4, renderAiText(res.text));
+    }
+  }catch(err){
+    openAiPanel(name, r.left, r.bottom+4, '<div class="ai-err">'+esc(t('ai_error')+': '+(err.message||err))+'</div>');
+  }
+  btn.disabled = false;
+}
+function renderAiText(text){
+  const vm = /VEREDICTO:\\s*(VALE_LA_PENA|DUDOSO|EVITAR)/i.exec(text||'');
+  if(!vm) return '<div class="ai-raw">'+esc(text||'')+'</div>';
+  const sm = /RESUMEN:\\s*(.+)/i.exec(text);
+  const reasons = [...text.matchAll(/^-\\s*(.+)$/gm)].map(x=>x[1]);
+  const cls = /VALE_LA_PENA/i.test(vm[1])?'pop-hi':/DUDOSO/i.test(vm[1])?'pop-mid':'pop-lo';
+  const label = /VALE_LA_PENA/i.test(vm[1])?t('v_go'):/DUDOSO/i.test(vm[1])?t('v_maybe'):t('v_avoid');
+  return '<div class="ai-result"><span class="pill '+cls+'">'+esc(label)+'</span> '+esc(sm?sm[1]:'')+
+    (reasons.length?'<ul class="ai-reasons">'+reasons.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'')+
+    '</div>';
+}
+function openAiPanel(name, x, y, html){
+  closeAiPanel();
+  const el = document.createElement('div');
+  el.id='aiPanel';
+  el.innerHTML = '<div class="am-h"><span>'+esc(name)+' · '+esc(t('ai_btn'))+'</span><button class="ai-x" id="aiPanelClose" title="'+esc(t('ai_close'))+'">'+ico('x')+'</button></div><div class="ai-body">'+html+'</div>';
+  document.body.appendChild(el);
+  const w=el.offsetWidth, h=el.offsetHeight;
+  el.style.left = Math.max(6, Math.min(x, innerWidth-w-6))+'px';
+  el.style.top  = Math.max(6, Math.min(y, innerHeight-h-6))+'px';
+}
+function closeAiPanel(){ const e=document.getElementById('aiPanel'); if(e) e.remove(); }
+document.addEventListener('click', e=>{
+  if(e.target.closest('#aiPanel')){ if(e.target.closest('#aiPanelClose')) closeAiPanel(); return; }
+  const b=e.target.closest('.aibtn');
+  if(b){ e.stopPropagation(); runAnalysis(b); return; }
+  closeAiPanel();
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeAiPanel(); });
 
 // filtro de texto (subcadena, sin acentos) sobre cualquier texto de la fila
 const sNorm = s => String(s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
@@ -2198,14 +2351,14 @@ function render(){
     (D.public ? ' · ' + esc(t('sys_update')) : '');
 
   const HNOW='<thead><tr><th>'+t('c_project')+'</th><th>'+t('c_supply')+'</th><th>'+t('c_hype')+'</th><th>'+t('c_pop')+
-    '</th><th>'+t('c_x')+'</th><th>'+t('c_phases')+'</th><th>'+t('c_keys')+'</th><th>'+t('c_price')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_when')+'</th></tr></thead>';
+    '</th><th>'+t('c_x')+'</th><th>'+t('c_phases')+'</th><th>'+t('c_keys')+'</th><th>'+t('c_price')+'</th><th>'+t('c_floor')+'</th><th>'+t('c_verdict')+'</th><th>'+t('c_when')+'</th></tr></thead>';
   // "minteando ahora" primero; los agotados al final (siguen visibles, marcados)
   const nowL = MINTS.filter(m=>m.status==='now' || m.status==='soldout')
     .sort((a,b)=>(a.status==='soldout'?1:0)-(b.status==='soldout'?1:0));
   let soonL = MINTS.filter(m=>m.status==='soon');
   if(document.getElementById('hideLow').checked) soonL = soonL.filter(m=>m.x || m.hype>0);
-  document.getElementById('tNow').innerHTML = HNOW + '<tbody>' + (mintRows(nowL) || '<tr><td colspan=10 class=muted>'+t('nothing_now')+'</td></tr>') + '</tbody>';
-  document.getElementById('tSoon').innerHTML = HNOW + '<tbody>' + (mintRows(soonL) || '<tr><td colspan=10 class=muted>'+t('nothing_soon')+'</td></tr>') + '</tbody>';
+  document.getElementById('tNow').innerHTML = HNOW + '<tbody>' + (mintRows(nowL) || '<tr><td colspan=11 class=muted>'+t('nothing_now')+'</td></tr>') + '</tbody>';
+  document.getElementById('tSoon').innerHTML = HNOW + '<tbody>' + (mintRows(soonL) || '<tr><td colspan=11 class=muted>'+t('nothing_soon')+'</td></tr>') + '</tbody>';
 
   document.getElementById('tKeys').innerHTML =
    '<thead><tr><th>'+t('c_have')+'</th><th>#</th><th>'+t('c_coll')+'</th><th>'+t('c_prio')+'</th><th>'+t('c_tier')+'</th><th>'+t('c_floor')+
