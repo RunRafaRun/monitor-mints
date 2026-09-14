@@ -61,15 +61,29 @@ export async function onRequestPost({ request, env }) {
         body: JSON.stringify({ label: `mintscope-${Date.now()}`, scopes: ["read:eligibility"], expiresInDays: 1 }),
       });
       if (!cr.ok) return j({ error: "pat_failed", detail: (await cr.text()).slice(0, 300) }, 401);
-      const pat = (await cr.json()).token;
+      const created = await cr.json();
+      const pat = created.token;
+
+      // El PAT solo hace falta un instante para el exchange de abajo; lo borramos
+      // siempre (éxito o fallo) para no acumular tokens contra el límite de 25
+      // por cuenta que impone OpenSea (así lo hace también su CLI oficial).
+      const deletePat = () =>
+        created.id
+          ? fetch(`${OS}/api/v2/auth/tokens/${created.id}`, { method: "DELETE", headers: { cookie } }).catch(() => {})
+          : Promise.resolve();
 
       const xr = await fetch(`${OS}/api/v2/auth/tokens/exchange`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ subjectToken: pat, subjectTokenType: "ACCESS_TOKEN" }),
       });
-      if (!xr.ok) return j({ error: "exchange_failed", detail: (await xr.text()).slice(0, 300) }, 401);
+      if (!xr.ok) {
+        const detail = (await xr.text()).slice(0, 300);
+        await deletePat();
+        return j({ error: "exchange_failed", detail }, 401);
+      }
       const x = await xr.json();
+      await deletePat();
       return j({ jwt: x.accessToken, expiresIn: x.expiresIn || 3600, address: (parsed.address || "").toLowerCase() });
     }
 
