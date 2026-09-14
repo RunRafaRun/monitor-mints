@@ -2825,6 +2825,10 @@ async function osConnect(want){
       osMsg((L==='es'?'Tu extensión está en '+shortAddr(addr)+'. Cambia a '+wn+' y vuelve a pulsar.':'Your extension is on '+shortAddr(addr)+'. Switch to '+wn+' and click again.'),1);
       return;
     }
+    // ya hay sesión OpenSea vigente para ESTA wallet: reutilízala en vez de
+    // volver a firmar y pedir otro token (así no se crea uno nuevo cada vez
+    // que se pulsa "comprobar fases" sobre una wallet ya conectada)
+    if(osJwt && osAddr===addr && osExp>Date.now()+60000){ await osCheckElig(); return; }
     const nr=await fetch('/api/os?op=nonce',{method:'POST'}).then(x=>x.json());
     if(!nr.nonce) throw new Error(nr.error||'nonce');
     const msg=siweMessage(addr,nr.nonce);
