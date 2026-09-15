@@ -9,6 +9,10 @@
 // Uso: const byChain = await fetchOpenSeaDropsAll(["arc","monad"]);
 //      byChain.get("arc") -> filas en el mismo formato que wlmt.mjs::fetchDailyMints
 
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { ROOT } from "./data.mjs";
+
 const OS = "https://api.opensea.io";
 const TYPES = ["upcoming", "featured", "recently_minted"];
 const MAX_DROPS = 60; // tope total de slugs a detallar (1 fetch por slug)
@@ -90,38 +94,73 @@ export async function fetchOpenSeaDropsAll(chains) {
   return out;
 }
 
-// Cadenas nuevas donde casi ninguna colección usa "Drops" (SeaDrop): sin fases,
-// no hay forma de saber si un mint está "ahora" o "luego". En vez de eso listamos
-// las colecciones con más volumen que YA tienen huella social (X/Discord/web) —
-// filtro anti-spam necesario: en chains recién lanzadas, >99% de lo que se crea
-// es basura de bots probando contratos (1-13 items, sin nombre/descr. real).
-// Se muestran siempre que sigan en el top al generar (sin fechas reales, no hay
-// "cuándo empezó/acaba" que guardar).
-export async function fetchOpenSeaTopCollections(chain, { limit = 25 } = {}) {
+const SUPPLY_CACHE = join(ROOT, "data", "monad-supply-cache.json");
+function loadSupplyCache() {
+  try { return JSON.parse(readFileSync(SUPPLY_CACHE, "utf8")); } catch { return {}; }
+}
+function saveSupplyCache(cache) {
+  try { writeFileSync(SUPPLY_CACHE, JSON.stringify(cache) + "\n"); } catch { /* no pasa nada si no se puede escribir */ }
+}
+
+// Cadenas nuevas donde casi ninguna colección usa "Drops" (SeaDrop): sin fases
+// no hay "start/end" que leer, así que no podemos saber si algo sigue minteando
+// con una sola consulta — total_supply (nº de ítems que existen ya) es una FOTO,
+// no dice si sigue subiendo o ya se paró (ej.: skrumpeys está agotada desde hace
+// meses y "seguía minteando" con la versión anterior de esto, que se inventaba
+// una ventana de 24h). La única señal honesta es comparar total_supply contra
+// el valor que teníamos la última vez que miramos esta MISMA colección — de ahí
+// el caché en disco. La primera vez que se ve una colección no hay con qué
+// comparar, así que no se muestra hasta la siguiente pasada.
+//
+// Además, filtro anti-spam: en una chain recién lanzada, >99% de lo que se crea
+// es basura de bots probando contratos (1-13 items, sin nombre/descr. real) —
+// por eso solo miramos las que ya tienen huella social (X/Discord/web) y piden
+// más detalle (fetch por colección) solo a esas, no a las 100 de la lista.
+export async function fetchOpenSeaTopCollections(chain, { limit = 25, maxCheck = 50 } = {}) {
   const key = process.env.OPENSEA_API_KEY;
   if (!key) return [];
   const H = { accept: "application/json", "x-api-key": key };
   const now = Date.now();
+  const cache = loadSupplyCache();
+  let cacheChanged = false;
   try {
     const r = await fetch(`${OS}/api/v2/collections?chain=${chain}&order_by=market_cap&limit=100`, { headers: H });
     if (!r.ok) return [];
     const body = await r.json().catch(() => null);
     const out = [];
+    let checked = 0;
     for (const c of body?.collections || []) {
       const social = c.twitter_username || c.discord_url || c.project_url;
       if (!social || c.is_disabled) continue;
+      if (checked >= maxCheck) break;
+      checked++;
+      const slug = c.collection;
+
+      let supply = null;
+      try {
+        const dr = await fetch(`${OS}/api/v2/collections/${slug}`, { headers: H });
+        if (dr.ok) { const det = await dr.json().catch(() => null); supply = det?.total_supply ?? null; }
+      } catch { /* sin detalle -> se descarta abajo */ }
+      if (checked % 5 === 0) await new Promise((res) => setTimeout(res, 200));
+      if (supply == null) continue;
+
+      const prev = cache[slug];
+      cache[slug] = { supply, ts: now };
+      cacheChanged = true;
+      if (!prev || !(supply > prev.supply)) continue; // sin subida confirmada -> no se marca "en curso"
+
       const contract = (c.contracts || []).find((x) => x.chain === chain)?.address || null;
       out.push({
-        name: c.name || c.collection,
+        name: c.name || slug,
         chain,
         supply: null,
-        slug: c.collection,
+        slug,
         x: c.twitter_username ? `https://x.com/${c.twitter_username}` : null,
         site: c.project_url || c.discord_url || null,
         mintDate: null,
         phases: [{
           kind: "PUBLIC",
-          label: "Colección activa (sin fases WL/GTD/FCFS en OpenSea)",
+          label: "Mint en curso (supply creciendo, sin fases WL/GTD/FCFS en OpenSea)",
           priceEth: null, priceUsd: null, currency: "ETH", free: false, allocation: null,
           startMs: now - 3600e3, endMs: now + 24 * 3600e3, eligible: [],
         }],
@@ -133,5 +172,7 @@ export async function fetchOpenSeaTopCollections(chain, { limit = 25 } = {}) {
   } catch (e) {
     console.error("opensea-drops (top):", e.message);
     return [];
+  } finally {
+    if (cacheChanged) saveSupplyCache(cache);
   }
 }

@@ -45,6 +45,14 @@ jobs:
         with:
           node-version: 20
 
+      - name: Restaurar caché de supply de Monad (para detectar mints en curso)
+        uses: actions/cache@v4
+        with:
+          path: data/monad-supply-cache.json
+          key: monad-supply-${{ github.run_id }}
+          restore-keys: |
+            monad-supply-
+
       - name: Generar dashboard público
         working-directory: scripts
         env:
