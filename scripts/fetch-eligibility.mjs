@@ -1,5 +1,5 @@
 // Comprueba si TU wallet está en la lista (GTD / FCFS / WL / presale) de cada
-// drop de OpenSea (SeaDrop) en RobinHood / Ethereum / Ink, y lo guarda en
+// drop de OpenSea (SeaDrop) en RobinHood / Ethereum / Ink / Arc, y lo guarda en
 // data/eligibility-wallet.json para que el dashboard lo pinte en el radar.
 //
 // Uso:
@@ -22,7 +22,7 @@ import { osCliBase, osCli, whoami, readAuth, refreshAuth, walletLabel } from "./
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(ROOT, "data", "eligibility-wallet.json");
-const CHAINS = ["robinhood", "ethereum", "ink"];
+const CHAINS = ["robinhood", "ethereum", "ink", "arc"];
 const MAX_DROPS = 60;                 // tope total (radar + calendario)
 const uuNorm = (u) => String(u || "").replace(/-/g, "").toLowerCase();
 const asJson = process.argv.includes("--json");

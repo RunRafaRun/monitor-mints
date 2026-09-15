@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { fetchFeed, popularityVerdict } from "./lib/trencher.mjs";
 import { fetchDailyMints } from "./lib/wlmt.mjs";
+import { fetchOpenSeaDropsAll, fetchOpenSeaTopCollections } from "./lib/opensea-drops.mjs";
 import {
   ROOT, loadCollections, demonstratedUtility, costEfficiency,
   parseCsv, findCollection, norm,
@@ -161,6 +162,9 @@ export async function buildData({ pub = false } = {}) {
     { id: "ethereum", label: "ETH", name: "Ethereum" },
     { id: "ink", label: "Ink", name: "Ink" },
     { id: "base", label: "Base", name: "Base" },
+    { id: "arc", label: "Arc", name: "Arc" },
+    { id: "monad", label: "Monad", name: "Monad" },
+    { id: "solana", label: "SOL", name: "Solana" },
   ];
 
   let cards = [];
@@ -243,6 +247,17 @@ export async function buildData({ pub = false } = {}) {
     for (const r of rows) r.chain = r.chain || id;
     extra.push(...rows);
   }
+
+  // --- API oficial de OpenSea (Drops) para cadenas que Trencher/WLMT aún no cubren:
+  // así no dependemos de que las añadan a su feed para ver mints ahí. Solo capta
+  // colecciones que usan el "Drops" propio de OpenSea (SeaDrop).
+  const NO_TRENCHER = ["base", "arc", "monad", "solana"];
+  const osDrops = await fetchOpenSeaDropsAll(NO_TRENCHER).catch(() => new Map());
+  for (const rows of osDrops.values()) extra.push(...rows);
+
+  // Monad: casi nada usa Drops todavía -> colecciones top por market cap con
+  // huella social real, sin fases (ver opensea-drops.mjs para el porqué).
+  extra.push(...await fetchOpenSeaTopCollections("monad").catch(() => []));
   if (extra.length) {
     const byName = new Map(mints.map((m) => [m.chain + "|" + norm(m.name), m]));
     const bySlug = new Map(mints.filter((m) => m.slug).map((m) => [m.slug, m]));
@@ -1319,7 +1334,10 @@ const CHAIN_ICO = {
   robinhood:{c:'#00c805',d:'M4.5 20C6 10.5 11.5 4.5 20 3.5c-1 9.5-7 15.5-15.5 16.5Z'},
   ethereum:{c:'#a9aecb',d:'M12 2.5 5.6 12.3 12 16l6.4-3.7L12 2.5ZM5.6 13.5 12 22l6.4-8.5L12 17.3 5.6 13.5Z'},
   ink:{c:'#7a63f5',d:'M12 3c-3.3 4.8-5.6 7.6-5.6 10.6a5.6 5.6 0 0 0 11.2 0C17.6 10.6 15.3 7.8 12 3Z'},
-  base:{c:'#4c86ff',d:'M12 3a9 9 0 1 0 0 18c3.6 0 6.7-2.1 8.2-5.2H9.7v-7.6h10.5A9 9 0 0 0 12 3Z'}
+  base:{c:'#4c86ff',d:'M12 3a9 9 0 1 0 0 18c3.6 0 6.7-2.1 8.2-5.2H9.7v-7.6h10.5A9 9 0 0 0 12 3Z'},
+  arc:{c:'#5b8def',d:'M4 12a8 8 0 0 1 16 0v7h-3v-7a5 5 0 0 0-10 0v7H4Z'},
+  monad:{c:'#7c5cff',d:'M12 3 4 12l8 9 8-9-8-9Zm0 4.2 4.6 4.8-4.6 4.8-4.6-4.8L12 7.2Z'},
+  solana:{c:'#14f195',d:'M6 7h13l-3 3H3l3-3Zm-3 7h13l-3 3H3l3-3Zm3-3.5h13l-3 3H3l3-3Z'}
 };
 function chainIco(id){
   const m = CHAIN_ICO[id||'robinhood']; if(!m) return '';
