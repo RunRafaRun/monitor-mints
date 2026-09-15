@@ -539,9 +539,10 @@ export async function buildData({ pub = false } = {}) {
       }
     : null;
 
-  // solo ofrecemos en el selector las redes que traen algo
-  const present = new Set([...mints.map((m) => m.chain), ...ranking.map((r) => r.chain)]);
-  const chains = CHAINS.filter((c) => present.has(c.id));
+  // el selector muestra siempre el catálogo completo de cadenas (aunque una
+  // todavía no traiga ningún mint) -> si no hay datos se ve al filtrar, no
+  // desaparece el icono
+  const chains = CHAINS;
   // cartera / P&L (data/trades.json, lo escribe fetch-trades.mjs). Personal.
   let trades = null;
   if (!pub) {
