@@ -40,9 +40,10 @@ VEREDICTO: 🟢 ALTO  /  🟡 MEDIO  /  🔴 BAJO / SOSPECHOSO
 
 ## Cómo obtener los datos
 - **Manual**: abrir el perfil de X, mirar seguidores, últimos posts, hacer media a ojo.
-- **Semiautomático (Fase 2)**: `scripts/x-popularity.mjs @handle` con `X_BEARER_TOKEN`
-  (API v2: `users/by/username`, `tweets` con `public_metrics`). Sin token, el script
-  deja la ficha en blanco para rellenar a mano.
+- **Semiautomático (Fase 2)**: `scripts/x-popularity.mjs @handle` con `SOCIALDATA_API_KEY`
+  (socialdata.tools: perfil + últimos tweets, pago por uso — la API oficial de X no
+  sirve porque el plan Free no permite leer datos). Sin clave, el script deja la
+  ficha en blanco para rellenar a mano.
 
 ## Uso en la decisión
 - 🟢 ALTO + tenemos llave → prioridad máxima, preparar wallet.

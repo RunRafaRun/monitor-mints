@@ -9,11 +9,22 @@ import { createServer } from "node:http";
 import { execSync, spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
-import { statSync } from "node:fs";
+import { statSync, readFileSync, existsSync, writeFileSync } from "node:fs";
 import { loadCollections, saveCollections, findCollection, ROOT } from "./lib/data.mjs";
 import { osCliBase, whoami, walletLabel } from "./lib/os-auth.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+// scripts/.env -> MWA_WORKER_URL / MWA_AUTH_TOKEN (mismo patron que ya usan
+// fetch-eligibility.mjs, etc. para OPENSEA_API_KEY)
+(() => {
+  const p = join(HERE, ".env");
+  if (!existsSync(p)) return;
+  for (const line of readFileSync(p, "utf8").split("\n")) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+    if (m) process.env[m[1]] ??= m[2].replace(/^["']|["']$/g, "");
+  }
+})();
 
 // Recarga gen-dashboard.mjs si cambia en disco -> no hay que reiniciar servidor.cmd
 const GD = join(HERE, "gen-dashboard.mjs");
@@ -29,12 +40,22 @@ const noFloors = argv.includes("--no-floors");
 
 let cache = null;
 let building = false;
+let rebuildAgain = false;
+// Si rebuild() ya esta corriendo (ej. el refresco automatico de 15min) y
+// se pide otro en el medio (ej. justo cuando termina "Comprobar
+// elegibilidad"), antes se perdia en silencio (el segundo pedido se
+// ignoraba) y la web quedaba con datos de elegibilidad desactualizados
+// hasta el proximo ciclo. Ahora se encola UNO mas para cuando termine el
+// que esta corriendo, en vez de descartarlo.
 async function rebuild() {
-  if (building) return;
+  if (building) { rebuildAgain = true; return; }
   building = true;
   try { cache = await (await gd()).buildData(); }
   catch (e) { console.error("build:", e.message); }
-  finally { building = false; }
+  finally {
+    building = false;
+    if (rebuildAgain) { rebuildAgain = false; rebuild(); }
+  }
 }
 rebuild(); // primera carga en segundo plano
 
@@ -97,6 +118,60 @@ const server = createServer(async (req, res) => {
       return res.end(JSON.stringify({ started: true }));
     }
 
+    // ---- Puente hacia mint-world-architecture: mintear/programar/cancelar
+    // en Cloudflare lo que este radar ya detecto. Camino separado del resto
+    // de este servidor (no toca collections/floors/opensea-login de arriba).
+    // Solo loopback (ver server.listen mas abajo), igual que todo lo demas.
+    if (path === "/mint") {
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      return res.end(readFileSync(join(HERE, "..", "web", "mint-actions.html"), "utf8"));
+    }
+    if (path === "/api/mint/schedule" && req.method === "POST") {
+      let body = ""; for await (const chunk of req) body += chunk;
+      res.setHeader("content-type", "application/json");
+      try {
+        const parsed = JSON.parse(body || "{}");
+        const result = await mwaSchedule(parsed);
+        if (result.ok) recordScheduled(parsed, result);
+        return res.end(JSON.stringify(result));
+      } catch (e) {
+        res.statusCode = 400;
+        return res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+    }
+    if (path === "/api/mint/status" && req.method === "GET") {
+      res.setHeader("content-type", "application/json");
+      const q = new URL(req.url, "http://x").searchParams;
+      try {
+        const result = await mwaProxy("status", "GET", null, q.get("project"), q.get("scheduler"));
+        return res.end(JSON.stringify(result));
+      } catch (e) {
+        res.statusCode = 400;
+        return res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+    }
+    if (path === "/api/mint/cancel" && req.method === "POST") {
+      const q = new URL(req.url, "http://x").searchParams;
+      res.setHeader("content-type", "application/json");
+      try {
+        const result = await mwaProxy("cancel", "POST", null, q.get("project"), q.get("scheduler"));
+        if (result.ok && q.get("project")) forgetScheduled(q.get("project"), q.get("scheduler"));
+        return res.end(JSON.stringify(result));
+      } catch (e) {
+        res.statusCode = 400;
+        return res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+    }
+    // El radar borra sola la entrada del registro local cuando un "Estado"
+    // devuelve un estado terminal (minted/error/needs-manual-review) para
+    // no seguir mostrando "programado" sobre algo que ya termino.
+    if (path === "/api/mint/forget" && req.method === "POST") {
+      const q = new URL(req.url, "http://x").searchParams;
+      res.setHeader("content-type", "application/json");
+      if (q.get("project")) forgetScheduled(q.get("project"), q.get("scheduler"));
+      return res.end(JSON.stringify({ ok: true }));
+    }
+
     res.statusCode = 404;
     res.end("not found");
   } catch (e) {
@@ -105,6 +180,191 @@ const server = createServer(async (req, res) => {
     console.error(e);
   }
 });
+
+// --- Puente hacia mint-world-architecture (Cloudflare Worker ya desplegado) ---
+// Config al vuelo a partir de contract+chain (el radar ya los trae) — no
+// hace falta crear un configs/*.json por proyecto como en mint-world-
+// architecture. Solo las chains que ya tenemos RPC verificado; el resto
+// (base/monad/solana) se rechaza con un error claro, no se adivina.
+const MWA_CHAINS = {
+  robinhood: {
+    chainId: 4663,
+    rpcUrl: "https://rpc.mainnet.chain.robinhood.com",
+    rpcUrls: ["https://robinhood-rpc.publicnode.com", "https://robinhood-mainnet.core.chainstack.com/2062c74fba5dc620ff757d6d5fc05ce4"],
+  },
+  ethereum: {
+    chainId: 1,
+    rpcUrl: "https://ethereum-rpc.publicnode.com",
+    rpcUrls: ["https://cloudflare-eth.com"],
+  },
+  // RPCs tomados del config ya validado de Moni-Bot (mismo dueño, en uso
+  // real) — arc/ink no tenian RPC propio verificado aca todavia, lo que
+  // bloqueaba "Programar" para ~74 proyectos en arc y 2 en ink del radar.
+  // El camino GTD/FCFS/WL (via API de OpenSea) no depende de un contrato
+  // SeaDrop fijo, asi que es de bajo riesgo; el camino PUBLIC (mintPublic
+  // directo) asume la misma direccion de SeaDrop que Robinhood/Ethereum —
+  // no verificado en Arc/Ink todavia, revisar si falla ahi.
+  arc: {
+    chainId: 5042,
+    rpcUrl: "https://rpc.mainnet.arc.io",
+    rpcUrls: ["https://rpc.drpc.mainnet.arc.io", "https://rpc.quicknode.mainnet.arc.io", "https://rpc.blockdaemon.mainnet.arc.io"],
+  },
+  ink: {
+    chainId: 57073,
+    rpcUrl: "https://rpc-gel.inkonchain.com",
+    rpcUrls: ["https://rpc-qnd.inkonchain.com", "https://rpc-mainnet.inkonchain.com", "https://ink.drpc.org"],
+  },
+};
+const MWA_SEADROP_CONTRACT = "0x00005EA00Ac477B1030CE78506496e8C2dE24bf5";
+const MWA_FEE_RECIPIENT = "0x0000a26b00c1F0DF003000390027140000fAa719";
+
+function mwaChainConfig(chain) {
+  const c = MWA_CHAINS[chain];
+  if (!c) throw new Error(`Chain '${chain}' todavia no tiene RPC verificado para mintear (solo robinhood/ethereum por ahora).`);
+  return c;
+}
+
+// El slug de OpenSea de fetch-eligibility.mjs trae el uuid de cada fase;
+// el radar de Trencher (buildData) NO lo trae, asi que se busca aparte en
+// data/eligibility-wallet.json en vez de tocar gen-dashboard.mjs.
+function findStageUuid(slug, kind) {
+  const p = join(ROOT, "data", "eligibility-wallet.json");
+  if (!existsSync(p)) throw new Error("No hay data/eligibility-wallet.json todavia — corre 'Comprobar elegibilidad' primero.");
+  const we = JSON.parse(readFileSync(p, "utf8"));
+  const stages = we.drops?.[slug]?.stages || [];
+  const hit = stages.find((s) => s.kind === kind && s.eligible);
+  if (!hit) throw new Error(`No se encontro una fase ${kind} elegible para '${slug}' en eligibility-wallet.json.`);
+  return hit.uuid;
+}
+
+async function mwaProxy(action, method, body, project, scheduler) {
+  if (!process.env.MWA_AUTH_TOKEN) throw new Error("Falta MWA_AUTH_TOKEN en scripts/.env.");
+  if (!project) throw new Error("Falta 'project'.");
+  const url = new URL(process.env.MWA_WORKER_URL || "https://mint-scheduler.unpin.workers.dev");
+  url.searchParams.set("project", project);
+  url.searchParams.set("action", action);
+  if (scheduler) url.searchParams.set("scheduler", scheduler);
+  const res = await fetch(url, {
+    method,
+    headers: { "x-auth-token": process.env.MWA_AUTH_TOKEN, "content-type": "application/json" },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  return res.json();
+}
+
+async function mwaSchedule({
+  chain, contract, slug, kind, quantity, gasMultiplier, waitUntil,
+  template, merkleProof, allowlistPricePerToken, allowlistCurrency, allowlistQuantityLimitPerWallet,
+  conditions, expiresAt, minPriorityFeeWei,
+}) {
+  if (!contract) throw new Error("Falta 'contract'.");
+  const chainCfg = mwaChainConfig(chain);
+  const isGtd = !!kind && kind !== "PUBLIC";
+  const project = String(contract).toLowerCase();
+  const body = {
+    quantity: Number(quantity) || 1,
+    gasMultiplier: Number(gasMultiplier) || 100,
+  };
+  if (waitUntil) body.targetTimestamp = Math.floor(new Date(waitUntil).getTime() / 1000);
+  // Suelo minimo de propina (wei) opcional — ver applyPriorityFeeFloor en
+  // cloudflare/src/index.mjs. Solo se activa si se manda explicitamente
+  // (opt-in), para mints disputados por bots donde gasMultiplier solo no
+  // basta porque puede estar multiplicando un maxPriorityFeePerGas de 0.
+  const withPriorityFloor = (cfg) => (minPriorityFeeWei != null ? { ...cfg, minPriorityFeeWei: String(minPriorityFeeWei) } : cfg);
+
+  // Disparo por condicion de mercado (supply%/restante, o precio de
+  // reventa vs precio de mint via Seaport) en vez de una hora fija —
+  // camino separado, ver ConditionMintScheduler en cloudflare/src/index.mjs.
+  // Puede mintear via SeaDrop estandar o via una plantilla conocida
+  // (template) por debajo, igual que el camino normal/custom.
+  if (Array.isArray(conditions) && conditions.length) {
+    body.conditions = conditions;
+    if (expiresAt) body.expiresAt = Math.floor(new Date(expiresAt).getTime() / 1000);
+    if (template) {
+      body.config = withPriorityFloor({ chainId: chainCfg.chainId, rpcUrl: chainCfg.rpcUrl, rpcUrls: chainCfg.rpcUrls, nftContract: contract, template });
+      if (Array.isArray(merkleProof) && merkleProof.length) {
+        body.merkleProof = merkleProof;
+        if (allowlistPricePerToken != null) body.allowlistPricePerToken = allowlistPricePerToken;
+        if (allowlistCurrency) body.allowlistCurrency = allowlistCurrency;
+        if (allowlistQuantityLimitPerWallet != null) body.allowlistQuantityLimitPerWallet = allowlistQuantityLimitPerWallet;
+      }
+    } else {
+      body.config = withPriorityFloor({
+        chainId: chainCfg.chainId, rpcUrl: chainCfg.rpcUrl, rpcUrls: chainCfg.rpcUrls,
+        nftContract: contract, seaDropContract: MWA_SEADROP_CONTRACT, feeRecipient: MWA_FEE_RECIPIENT,
+      });
+    }
+    return mwaProxy("schedule", "POST", body, project, "condition");
+  }
+
+  // Plantilla conocida (thirdweb DropERC721, etc.) — camino separado del
+  // resto, para contratos de "sitio propio" que no pasan ni por SeaDrop
+  // ni por OpenSea. Sin verificar todavia contra un contrato real (ver el
+  // comentario en cloudflare/src/index.mjs, CustomMintScheduler).
+  if (template) {
+    body.config = withPriorityFloor({ chainId: chainCfg.chainId, rpcUrl: chainCfg.rpcUrl, rpcUrls: chainCfg.rpcUrls, nftContract: contract, template });
+    if (Array.isArray(merkleProof) && merkleProof.length) {
+      body.merkleProof = merkleProof;
+      if (allowlistPricePerToken != null) body.allowlistPricePerToken = allowlistPricePerToken;
+      if (allowlistCurrency) body.allowlistCurrency = allowlistCurrency;
+      if (allowlistQuantityLimitPerWallet != null) body.allowlistQuantityLimitPerWallet = allowlistQuantityLimitPerWallet;
+    }
+    return mwaProxy("schedule", "POST", body, project, "custom");
+  }
+
+  if (isGtd) {
+    if (!slug) throw new Error("Falta 'slug' de OpenSea para programar una fase GTD/FCFS/WL.");
+    body.config = withPriorityFloor({ chainId: chainCfg.chainId, rpcUrl: chainCfg.rpcUrl, rpcUrls: chainCfg.rpcUrls });
+    body.slug = slug;
+    body.stageUuid = findStageUuid(slug, kind);
+    return mwaProxy("schedule", "POST", body, project, "gtd");
+  }
+
+  body.config = withPriorityFloor({
+    chainId: chainCfg.chainId,
+    rpcUrl: chainCfg.rpcUrl,
+    rpcUrls: chainCfg.rpcUrls,
+    nftContract: contract,
+    seaDropContract: MWA_SEADROP_CONTRACT,
+    feeRecipient: MWA_FEE_RECIPIENT,
+  });
+  return mwaProxy("schedule", "POST", body, project, null);
+}
+
+// Registro local de "lo que programe desde esta web" (contract+scheduler ->
+// detalle) para poder pintar un aviso "programado" en el radar sin tener
+// que golpear el Durable Object de cada uno de los ~160 proyectos en cada
+// carga de pagina. No sabe de mints programados desde la GUI de escritorio
+// (esa usa el mismo Worker pero no escribe aca) — solo cubre lo hecho via
+// esta web (/, /mint). Se borra la entrada al cancelar o cuando el Worker
+// confirma "minted"/"cancelled"/"error" en un chequeo de estado (ver
+// pruneScheduledIfDone en gen-dashboard.mjs, llamado desde el propio modal).
+const scheduledLedgerPath = join(ROOT, "data", "scheduled-mints.json");
+function loadScheduledLedger() {
+  try { return JSON.parse(readFileSync(scheduledLedgerPath, "utf8")); } catch { return {}; }
+}
+function saveScheduledLedger(ledger) {
+  try { writeFileSync(scheduledLedgerPath, JSON.stringify(ledger, null, 2) + "\n"); } catch {}
+}
+function recordScheduled({ chain, contract, name, slug, kind, quantity, gasMultiplier, template, conditions }, result) {
+  if (!contract) return;
+  const scheduler = conditions?.length ? "condition" : template ? "custom" : (!!kind && kind !== "PUBLIC") ? "gtd" : null;
+  const key = `${String(contract).toLowerCase()}:${scheduler || "public"}`;
+  const ledger = loadScheduledLedger();
+  ledger[key] = {
+    contract: String(contract).toLowerCase(), chain, name: name || null, slug: slug || null,
+    kind: kind || "PUBLIC", scheduler, template: template || null, conditions: conditions || null,
+    quantity: Number(quantity) || 1, gasMultiplier: Number(gasMultiplier) || 100,
+    targetTimestamp: result.targetTimestamp || null, scheduledAt: Date.now(),
+  };
+  saveScheduledLedger(ledger);
+}
+const KNOWN_SCHEDULERS = new Set(["gtd", "custom", "condition"]);
+function forgetScheduled(project, scheduler) {
+  const key = `${String(project).toLowerCase()}:${KNOWN_SCHEDULERS.has(scheduler) ? scheduler : "public"}`;
+  const ledger = loadScheduledLedger();
+  if (ledger[key]) { delete ledger[key]; saveScheduledLedger(ledger); }
+}
 
 function runFloors() {
   const p = spawn(process.execPath, [join(HERE, "fetch-floors.mjs")], { stdio: "inherit" });

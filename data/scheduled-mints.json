@@ -1,0 +1,96 @@
+{
+  "0xfdde03c3ce10764d9992b056c954d9fe135447cd:public": {
+    "contract": "0xfdde03c3ce10764d9992b056c954d9fe135447cd",
+    "chain": "robinhood",
+    "name": null,
+    "slug": null,
+    "kind": "PUBLIC",
+    "scheduler": null,
+    "quantity": 1,
+    "gasMultiplier": 100,
+    "targetTimestamp": 1789585200,
+    "scheduledAt": 1789584042149
+  },
+  "0xa9b2d2897082d55febb0839c1ee6216c9a691732:condition": {
+    "contract": "0xa9b2d2897082d55febb0839c1ee6216c9a691732",
+    "chain": "robinhood",
+    "name": null,
+    "slug": null,
+    "kind": "PUBLIC",
+    "scheduler": "condition",
+    "template": null,
+    "conditions": [
+      {
+        "type": "supply_remaining",
+        "threshold": 999987,
+        "maxSupply": 1000000
+      }
+    ],
+    "quantity": 1,
+    "gasMultiplier": 100,
+    "targetTimestamp": null,
+    "scheduledAt": 1789597040051
+  },
+  "0x5c0eb497e3d9d395114ed069dfea27ffd6fcebc4:condition": {
+    "contract": "0x5c0eb497e3d9d395114ed069dfea27ffd6fcebc4",
+    "chain": "arc",
+    "name": null,
+    "slug": null,
+    "kind": "PUBLIC",
+    "scheduler": "condition",
+    "template": null,
+    "conditions": [
+      {
+        "type": "supply_remaining",
+        "threshold": 345,
+        "maxSupply": 600
+      }
+    ],
+    "quantity": 1,
+    "gasMultiplier": 100,
+    "targetTimestamp": null,
+    "scheduledAt": 1789623775117
+  },
+  "0x35ab1a1166ddb8d8f3b7a77d22de2ec5c5854be8:gtd": {
+    "contract": "0x35ab1a1166ddb8d8f3b7a77d22de2ec5c5854be8",
+    "chain": "robinhood",
+    "name": null,
+    "slug": "out-of-order-804244409",
+    "kind": "WL",
+    "scheduler": "gtd",
+    "template": null,
+    "conditions": null,
+    "quantity": 1,
+    "gasMultiplier": 100,
+    "targetTimestamp": 1789619700,
+    "scheduledAt": 1789628937325
+  },
+  "0xfd9048db16cd373e0a6d5804def2bc7676bbae0b:gtd": {
+    "contract": "0xfd9048db16cd373e0a6d5804def2bc7676bbae0b",
+    "chain": "arc",
+    "name": null,
+    "slug": "fat-cat-bat-rat-wif-hat",
+    "kind": "GTD",
+    "scheduler": "gtd",
+    "template": null,
+    "conditions": null,
+    "quantity": 1,
+    "gasMultiplier": 100,
+    "targetTimestamp": 1789600807,
+    "scheduledAt": 1789628938492
+  },
+  "0x116eaa62241751e0c98da43d458600c6c17cd361:public": {
+    "contract": "0x116eaa62241751e0c98da43d458600c6c17cd361",
+    "chain": "robinhood",
+    "name": null,
+    "slug": null,
+    "kind": "PUBLIC",
+    "scheduler": null,
+    "template": null,
+    "conditions": null,
+    "quantity": 1,
+    "gasMultiplier": 100,
+    "targetTimestamp": 1789653620,
+    "scheduledAt": 1789641173380
+  }
+}

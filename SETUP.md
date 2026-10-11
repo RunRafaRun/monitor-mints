@@ -44,14 +44,15 @@ node floor-alerts.mjs      # avisa de caídas
 ```
 
 ## 3. Opcional — métricas de X más finas (`x-popularity.mjs`)
-El feed de NFT Trencher ya da followers/posts/antigüedad, así que esto es un extra.
-Si lo quieres:
-1. https://developer.x.com → cuenta Free.
-2. Crea un proyecto/app y copia el **Bearer Token**.
-3. En `scripts/.env`:  `X_BEARER_TOKEN=...`
+El feed de NFT Trencher ya da followers/posts/antigüedad, así que esto es un extra
+para calcular engagement rate real de un proyecto concreto. La API oficial de X no
+sirve (el plan Free no permite leer datos); en su lugar se usa **socialdata.tools**
+(pago por uso, sin suscripción, ~$0.004 por consulta):
+1. https://socialdata.tools → registro → API key.
+2. En `scripts/.env`:  `SOCIALDATA_API_KEY=...`
 
-La API Free de X tiene límites bajos (pocas consultas/mes), úsala solo para proyectos
-concretos que estés valorando en serio.
+Pago por uso: úsalo solo para proyectos concretos que estés valorando en serio,
+no para los ~60 de golpe.
 
 ## 4. Lo que NO se puede automatizar del todo
 Los **nombres exactos de las colecciones elegibles** para GTD/FCFS/WL no están en

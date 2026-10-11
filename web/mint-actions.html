@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>mintscope_ — mintear</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0a0f10; --panel: #121a1b; --line: #243230;
+    --fg: #e7efee; --mut: #8fa1a0; --dim: #7c8f8d;
+    --accent: #5ad1c8; --accent-ink: #04211f; --danger: #e5484d; --gold: #e8b45c; --ok: #4ade80;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 14px 16px 50px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  .max { max-width: 1480px; margin: 0 auto; }
+  .layout { display: flex; gap: 16px; align-items: flex-start; }
+  .layout .left { flex: 1; min-width: 0; }
+  .layout .right { width: 440px; flex: none; position: sticky; top: 14px; max-height: calc(100vh - 28px); overflow-y: auto; }
+  @media (max-width: 900px) {
+    .layout { display: block; }
+    .layout .right { width: auto; position: static; }
+  }
+
+  .topbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-size: 0.8rem; color: var(--mut); padding-bottom: 12px; margin-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar b { color: var(--fg); }
+  .topbar .wl { flex: 1; min-width: 160px; }
+  .topbar button.mini { margin: 0; padding: 5px 10px; font-size: 0.74rem; font-weight: 500; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 14px;
+  }
+  label { display: block; font-size: 0.78rem; color: var(--mut); margin: 12px 0 4px; }
+  label:first-child { margin-top: 0; }
+  input, select {
+    width: 100%; background: #0c1213; border: 1px solid var(--line); color: var(--fg);
+    border-radius: 6px; padding: 8px 10px; font-size: 0.88rem; font-family: inherit;
+  }
+  select:disabled, input:disabled { opacity: 0.5; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 130px; }
+  button {
+    background: var(--accent); color: var(--accent-ink); border: none; border-radius: 6px;
+    padding: 9px 14px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    margin-top: 12px; margin-right: 8px;
+  }
+  button.secondary { background: #1c2626; color: var(--fg); border: 1px solid var(--line); }
+  button.danger { background: var(--danger); color: #fff; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .hint { font-size: 0.76rem; color: var(--dim); margin-top: 4px; min-height: 1em; }
+  .warn { font-size: 0.78rem; color: var(--gold); margin-top: 8px; }
+  details { margin-top: 14px; }
+  details > summary { cursor: pointer; color: var(--mut); font-size: 0.8rem; list-style: none; padding: 4px 0; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: "▸ "; }
+  details[open] > summary::before { content: "▾ "; }
+  .actions { margin-top: 16px; }
+
+  /* --- buscador --- */
+  .searchcard { padding: 10px 14px; }
+  #search { margin: 0; }
+  .searchcard .hint { margin-top: 8px; }
+  .filters { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .filterpill {
+    background: #0c1213; border: 1px solid var(--line); color: var(--mut);
+    border-radius: 999px; padding: 5px 11px; font-size: 0.72rem; font-weight: 600;
+    cursor: pointer; margin: 0;
+  }
+  .filterpill.selected { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+  /* --- grid de proyectos (tarjetas, no <select>) --- */
+  /* Puede haber cientos de mints "ahora"/"pronto" en el radar a la vez —
+     sin limite de altura la pagina entera se hacia gigante y tapaba el
+     panel de accion. Scrollea adentro de su propia caja. */
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px; margin-bottom: 14px; max-height: 620px; overflow-y: auto;
+    padding: 2px; border: 1px solid var(--line); border-radius: 12px; background: #0a0f10;
+  }
+  .grid.empty { border: none; padding: 0; }
+  .pcard {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px; cursor: pointer; transition: border-color .12s, transform .12s;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .pcard:hover { border-color: #3a4d4a; }
+  .pcard.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .pcard .phead { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .pcard .thumb {
+    width: 30px; height: 30px; border-radius: 8px; background: #0c1213; border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center; flex: none; overflow: hidden;
+    font-size: 0.8rem; font-weight: 700; color: var(--mut);
+  }
+  .pcard .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .pcard .pname { font-size: 0.82rem; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pcard .pwhen { font-size: 0.68rem; color: var(--dim); }
+  .badges { display: flex; flex-wrap: wrap; gap: 4px; }
+  .badge {
+    font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
+    padding: 2px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--mut);
+  }
+  .badge.chain-robinhood { color: #4ade80; border-color: #2a5a3a; background: rgba(74,222,128,.08); }
+  .badge.chain-ethereum { color: #8fa8ff; border-color: #3a4066; background: rgba(143,168,255,.08); }
+  .badge.chain-arc { color: var(--gold); border-color: #5a4a2a; background: rgba(232,180,92,.08); }
+  .badge.chain-ink { color: #ff8fd6; border-color: #663a52; background: rgba(255,143,214,.08); }
+  .badge.now { color: var(--ok); border-color: #2a5a3a; }
+  .badge.soon { color: var(--gold); border-color: #5a4a2a; }
+  /* fases GTD/FCFS/WL detectadas por tarjeta, con tu elegibilidad real ya
+     visible sin tener que entrar al proyecto (era el reclamo: no se veia
+     donde tenias acceso). */
+  .pcard .phasebadges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 1px; }
+  .badge.ph-elig { color: var(--ok); border-color: #2a5a3a; background: rgba(74,222,128,.08); }
+  .badge.ph-notelig { color: var(--danger); border-color: #5a2a2a; background: rgba(229,72,77,.08); }
+  .badge.ph-unknown { color: var(--mut); border-color: var(--line); }
+  .empty-grid { color: var(--dim); font-size: 0.82rem; padding: 20px 4px; text-align: center; }
+
+  /* --- panel de accion --- */
+  .action-head { display: flex; align-items: center; gap: 10px; }
+  .action-head .thumb {
+    width: 38px; height: 38px; border-radius: 10px; background: #0c1213; border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center; flex: none; overflow: hidden;
+    font-weight: 700; color: var(--mut);
+  }
+  .action-head .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .a-name { font-size: 1rem; font-weight: 700; }
+  .a-sub { font-size: 0.75rem; color: var(--dim); font-family: ui-monospace, monospace; }
+
+  .phasepills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .phasepill {
+    background: #0c1213; border: 1px solid var(--line); color: var(--fg);
+    border-radius: 999px; padding: 6px 12px; font-size: 0.76rem; font-weight: 600;
+    cursor: pointer; margin: 0; display: flex; align-items: center; gap: 5px;
+  }
+  .phasepill .px { font-weight: 400; color: var(--dim); }
+  .phasepill.elig-true { border-color: #2a5a3a; }
+  .phasepill.elig-true .dot { color: var(--ok); }
+  .phasepill.elig-false { border-color: #5a2a2a; opacity: 0.75; }
+  .phasepill.elig-false .dot { color: var(--danger); }
+  .phasepill.selected { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .phasepill.selected .px, .phasepill.selected .dot { color: var(--accent-ink); opacity: 0.75; }
+
+  #status-box {
+    font-size: 0.84rem; margin-top: 12px; padding: 10px; border-radius: 6px;
+    background: #0c1213; border: 1px solid var(--line); display: none;
+  }
+  #status-box.show { display: block; }
+  #status-state { font-weight: 600; }
+  .st-scheduled, .st-preparing, .st-ready-to-fire, .st-retrying, .st-watching { color: var(--gold); }
+  .st-minted { color: var(--ok); }
+  .st-error, .st-needs-manual-review { color: var(--danger); }
+  .st-cancelled, .st-not-scheduled { color: var(--dim); }
+  .log-details summary { color: var(--dim); font-size: 0.76rem; }
+  pre#log {
+    background: #000; color: #6bff8f; border-radius: 8px; padding: 10px; max-height: 220px;
+    overflow: auto; font-size: 0.72rem; white-space: pre-wrap; word-break: break-all; margin: 8px 0 0;
+  }
+</style>
+</head>
+<body>
+<div class="max">
+
+  <div class="topbar">
+    <a href="/">← radar</a>
+    <span class="wl" id="wl-line">Comprobando conexion con OpenSea…</span>
+    <button class="mini secondary" id="btn-wl-login">Conectar</button>
+    <button class="mini secondary" id="btn-wl-refresh">Comprobar elegibilidad</button>
+  </div>
+
+  <div class="layout">
+    <div class="left">
+      <div class="card searchcard">
+        <input id="search" placeholder="Buscar proyecto (del radar)…" />
+        <div class="filters" id="status-filters"></div>
+        <div class="filters" id="chain-filters"></div>
+        <div class="filters" id="elig-filters"></div>
+        <div class="hint"><a href="#" id="manual-toggle">Escribir un proyecto que no esta en el radar →</a></div>
+      </div>
+
+      <div id="grid" class="grid"></div>
+
+      <details class="log-details">
+        <summary>Salida / debug</summary>
+        <pre id="log">(vacio)</pre>
+      </details>
+    </div>
+
+    <div class="right">
+      <div id="manual-card" class="card" hidden>
+        <label>Chain</label>
+        <select id="m-chain">
+          <option value="robinhood">robinhood</option>
+          <option value="ethereum">ethereum</option>
+          <option value="arc">arc</option>
+          <option value="ink">ink</option>
+        </select>
+        <label>Contrato NFT</label>
+        <input id="m-contract" placeholder="0x..." />
+        <label>Slug de OpenSea (solo si vas a mintear GTD/FCFS/WL)</label>
+        <input id="m-slug" placeholder="sexy-hub" />
+        <button class="secondary" id="manual-use">Usar este proyecto</button>
+      </div>
+
+      <div id="action-card" class="card" hidden>
+        <div class="action-head">
+          <div class="thumb" id="a-thumb">?</div>
+          <div>
+            <div class="a-name" id="a-name"></div>
+            <div class="a-sub" id="a-sub"></div>
+          </div>
+        </div>
+        <div class="warn" id="chain-warn" style="display:none"></div>
+
+        <label>Plantilla</label>
+        <select id="u-template">
+          <option value="">(auto — SeaDrop / OpenSea)</option>
+          <option value="thirdweb-drop-erc721">thirdweb DropERC721 (sitio propio)</option>
+        </select>
+        <div class="hint" id="tpl-hint" style="display:none">Plantilla "sitio propio": no usa fases de OpenSea ni slug. Sin verificar todavía contra un contrato real — probar con cuidado.</div>
+
+        <div id="phase-block">
+          <div class="phasepills" id="phasepills"></div>
+          <div class="hint" id="phase-hint"></div>
+        </div>
+
+        <div id="merkle-block" hidden style="margin-top:10px;padding:8px;border:1px dashed var(--line);border-radius:8px">
+          <label style="margin-top:0">Prueba Merkle (opcional — vacío = fase pública, usa la claim condition activa)</label>
+          <textarea id="u-proof" rows="3" placeholder='["0x...", "0x..."]' style="width:100%;background:#0c1213;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:7px 9px;font-size:12px;font-family:ui-monospace,monospace"></textarea>
+          <div class="row" style="margin-top:8px">
+            <div><label>Precio por token (wei, solo con prueba)</label><input id="u-proof-price" placeholder="opcional" /></div>
+            <div><label>Límite por wallet (solo con prueba)</label><input id="u-proof-limit" placeholder="opcional" /></div>
+          </div>
+        </div>
+
+        <label>Disparo</label>
+        <select id="u-trigger">
+          <option value="auto">Automático (según fase / claim condition)</option>
+          <option value="time">Hora exacta</option>
+          <option value="condition" id="u-trigger-condition-opt">Por condición de mercado</option>
+        </select>
+        <div class="hint" id="trigger-hint" style="display:none"></div>
+
+        <div id="time-block" hidden>
+          <label>Hora exacta</label>
+          <input id="u-wait" type="datetime-local" />
+        </div>
+
+        <div id="condition-block" hidden>
+          <div style="margin-top:10px;padding:8px;border:1px dashed var(--line);border-radius:8px">
+            <label style="margin-top:0">Condición 1</label>
+            <select id="cond1-type">
+              <option value="supply_pct">% del supply minteado ≥</option>
+              <option value="supply_remaining">Items restantes ≤</option>
+              <option value="floor_multiple">Última venta ≥ N× precio de mint</option>
+            </select>
+            <div class="row" style="margin-top:6px">
+              <div><label>Umbral</label><input id="cond1-threshold" placeholder="ej. 90" /></div>
+              <div id="cond1-extra-wrap"><label id="cond1-extra-label">Supply máximo</label><input id="cond1-extra" placeholder="ej. 10000" /></div>
+            </div>
+          </div>
+
+          <label style="display:flex;align-items:center;gap:6px;margin-top:10px;cursor:pointer"><input type="checkbox" id="cond2-enable" style="width:auto"> Agregar segunda condición (Y — deben cumplirse las dos)</label>
+          <div id="cond2-block" hidden style="margin-top:6px;padding:8px;border:1px dashed var(--line);border-radius:8px">
+            <label style="margin-top:0">Condición 2</label>
+            <select id="cond2-type">
+              <option value="supply_pct">% del supply minteado ≥</option>
+              <option value="supply_remaining">Items restantes ≤</option>
+              <option value="floor_multiple">Última venta ≥ N× precio de mint</option>
+            </select>
+            <div class="row" style="margin-top:6px">
+              <div><label>Umbral</label><input id="cond2-threshold" placeholder="ej. 2" /></div>
+              <div id="cond2-extra-wrap"><label id="cond2-extra-label">Supply máximo</label><input id="cond2-extra" placeholder="ej. 10000" /></div>
+            </div>
+          </div>
+
+          <label>Vencimiento (opcional — se cancela sola si nunca se cumple)</label>
+          <input id="cond-expires" type="datetime-local" />
+        </div>
+
+        <details>
+          <summary>Opciones avanzadas</summary>
+          <div class="row">
+            <div>
+              <label>Cantidad</label>
+              <input id="qty" type="number" min="1" value="1" />
+            </div>
+            <div>
+              <label>Multiplicador de gas (%)</label>
+              <input id="gas" type="number" min="100" value="100" />
+            </div>
+          </div>
+        </details>
+
+        <div class="actions">
+          <button id="btn-schedule">Programar (nube)</button>
+          <button class="secondary" id="btn-status">Estado</button>
+          <button class="danger" id="btn-cancel">Cancelar</button>
+        </div>
+
+        <div id="status-box">
+          <div>Estado: <span id="status-state">—</span></div>
+          <div id="status-detail"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const log = (obj) => { $("log").textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2); };
+  const initials = (name) => (name || "?").trim().slice(0, 2).toUpperCase();
+
+  let mints = [];
+  let statusTimer = null;
+  // sel: { manual:false, idx } o { manual:true, chain, contract, slug }
+  let sel = null;
+  let selPhases = []; // opciones de fase de la seleccion actual (con PUBLIC siempre primero)
+  let selPhaseIdx = 0;
+
+  const SUPPORTED_CHAINS = new Set(["robinhood", "ethereum", "arc", "ink"]);
+
+  // --- carga el radar (mismos datos que "/", ya cacheados por el servidor) ---
+  let statusFilter = "now"; // "now" | "soon" | "all" — con todo el radar cargado son ~200 tarjetas
+  let chainFilter = "all";
+  let eligOnly = false;
+
+  async function loadMints() {
+    try {
+      const data = await fetch("/api/data").then((r) => r.json());
+      mints = (data.mints || []).filter((m) => (m.status === "now" || m.status === "soon") && m.contract);
+      mints.sort((a, b) => (a.when || Infinity) - (b.when || Infinity));
+    } catch {
+      mints = [];
+    }
+    renderStatusFilters();
+    renderChainFilters();
+    renderEligFilters();
+    renderGrid();
+  }
+
+  function nonPublicPhases(m) {
+    return (m.phases || []).filter((ph) => ph.k && ph.k !== "PUBLIC" && ph.k !== "OTHER");
+  }
+  const normLabel = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  // Cruza la fase del radar (m.phases, feed de Trencher) contra la
+  // comprobacion real de tu wallet (m.wlElig.stages, via OpenSea) — dos
+  // fuentes independientes. Cruzar solo por "kind" (WL/GTD/FCFS) esta mal
+  // cuando un proyecto tiene VARIAS fases del mismo tipo (ej. Arcins: 4
+  // fases WL distintas — ARCSPOT V1/V2, TINYLIST V1/V2): .find() agarraba
+  // la primera y mostraba la elegibilidad de la fase equivocada. Los
+  // nombres SI coinciden entre las dos fuentes, asi que se cruza por
+  // tipo+nombre primero; si no hay match de nombre pero solo hay UNA fase
+  // de ese tipo, no hay ambiguedad posible y se usa esa; si hay varias y
+  // ninguna coincide por nombre, se devuelve null (no adivina).
+  function phaseEligibility(entity, ph) {
+    if (!ph || ph.k === "PUBLIC" || !entity.wlElig) return null;
+    const sameKind = entity.wlElig.stages.filter((x) => x.k === ph.k);
+    if (sameKind.length === 0) return null;
+    const byLabel = sameKind.find((x) => normLabel(x.label) === normLabel(ph.n));
+    if (byLabel) return byLabel.eligible;
+    if (sameKind.length === 1) return sameKind[0].eligible;
+    return null; // varias fases del mismo tipo y ninguna coincide por nombre: ambiguo
+  }
+  function hasEligiblePhase(m) {
+    return nonPublicPhases(m).some((ph) => phaseEligibility(m, ph) === true);
+  }
+
+  function renderStatusFilters() {
+    const nowN = mints.filter((m) => m.status === "now").length;
+    const soonN = mints.filter((m) => m.status === "soon").length;
+    const defs = [
+      ["now", `Ahora (${nowN})`],
+      ["soon", `Pronto (${soonN})`],
+      ["all", `Todos (${mints.length})`],
+    ];
+    $("status-filters").innerHTML = defs
+      .map(([k, label]) => `<button type="button" class="filterpill${statusFilter === k ? " selected" : ""}" data-k="${k}">${label}</button>`)
+      .join("");
+    $("status-filters").querySelectorAll(".filterpill").forEach((el) => {
+      el.addEventListener("click", () => {
+        statusFilter = el.dataset.k;
+        renderStatusFilters();
+        renderGrid();
+      });
+    });
+  }
+
+  function renderChainFilters() {
+    const chains = [...new Set(mints.map((m) => m.chain))].sort();
+    const defs = [["all", `Todas las redes (${mints.length})`], ...chains.map((c) => [c, `${c} (${mints.filter((m) => m.chain === c).length})`])];
+    $("chain-filters").innerHTML = defs
+      .map(([k, label]) => `<button type="button" class="filterpill${chainFilter === k ? " selected" : ""}" data-k="${k}">${label}</button>`)
+      .join("");
+    $("chain-filters").querySelectorAll(".filterpill").forEach((el) => {
+      el.addEventListener("click", () => {
+        chainFilter = el.dataset.k;
+        renderChainFilters();
+        renderGrid();
+      });
+    });
+  }
+
+  function renderEligFilters() {
+    const n = mints.filter(hasEligiblePhase).length;
+    $("elig-filters").innerHTML = `<button type="button" class="filterpill${eligOnly ? " selected" : ""}" data-k="elig">✓ Solo donde tengo acceso (GTD/FCFS/WL) — ${n}</button>`;
+    $("elig-filters").querySelector(".filterpill").addEventListener("click", () => {
+      eligOnly = !eligOnly;
+      renderEligFilters();
+      renderGrid();
+    });
+  }
+
+  function chainBadge(chain) {
+    const cls = SUPPORTED_CHAINS.has(chain) ? ` chain-${chain}` : "";
+    return `<span class="badge${cls}">${chain}</span>`;
+  }
+
+  function phaseBadgesFor(m) {
+    return nonPublicPhases(m)
+      .map((ph) => {
+        const elig = phaseEligibility(m, ph);
+        const cls = elig === true ? "ph-elig" : elig === false ? "ph-notelig" : "ph-unknown";
+        const dot = elig === true ? "✓" : elig === false ? "✗" : "?";
+        return `<span class="badge ${cls}">${dot} ${ph.k}</span>`;
+      })
+      .join("");
+  }
+
+  function renderGrid() {
+    const grid = $("grid");
+    const q = $("search").value.trim().toLowerCase();
+    let filtered = statusFilter === "all" ? mints : mints.filter((m) => m.status === statusFilter);
+    if (chainFilter !== "all") filtered = filtered.filter((m) => m.chain === chainFilter);
+    if (eligOnly) filtered = filtered.filter(hasEligiblePhase);
+    if (q) filtered = filtered.filter((m) => m.name.toLowerCase().includes(q));
+
+    grid.classList.toggle("empty", filtered.length === 0);
+    if (filtered.length === 0) {
+      grid.innerHTML = `<div class="empty-grid">${mints.length === 0 ? "No hay mints \"ahora\"/\"pronto\" en el radar en este momento." : "Sin resultados para ese filtro/busqueda."}</div>`;
+      return;
+    }
+
+    grid.innerHTML = filtered
+      .map((m) => {
+        const idx = mints.indexOf(m);
+        const isSel = sel && !sel.manual && sel.idx === idx;
+        const when = m.status === "now" ? "YA" : m.when ? new Date(m.when).toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+        const thumb = m.xAvatar ? `<img src="${m.xAvatar}" alt="" loading="lazy">` : initials(m.name);
+        const phBadges = phaseBadgesFor(m);
+        return `<div class="pcard${isSel ? " selected" : ""}" data-idx="${idx}">
+          <div class="phead">
+            <div class="thumb">${thumb}</div>
+            <div class="pname" title="${m.name.replace(/"/g, "&quot;")}">${m.name}</div>
+          </div>
+          <div class="badges">${chainBadge(m.chain)}<span class="badge ${m.status}">${when}</span></div>
+          ${phBadges ? `<div class="phasebadges">${phBadges}</div>` : ""}
+        </div>`;
+      })
+      .join("");
+
+    grid.querySelectorAll(".pcard").forEach((el) => {
+      el.addEventListener("click", () => selectProject(Number(el.dataset.idx)));
+    });
+  }
+
+  $("search").addEventListener("input", renderGrid);
+
+  $("manual-toggle").addEventListener("click", (e) => {
+    e.preventDefault();
+    $("manual-card").hidden = false;
+    $("manual-card").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+
+  $("manual-use").addEventListener("click", () => {
+    const contract = $("m-contract").value.trim();
+    if (!contract) { alert("Falta el contrato."); return; }
+    sel = { manual: true, chain: $("m-chain").value, contract, slug: $("m-slug").value.trim() || null, name: null, phases: [], wlElig: null };
+    renderGrid();
+    openAction();
+  });
+
+  function selectProject(idx) {
+    sel = { manual: false, idx };
+    renderGrid();
+    openAction();
+  }
+
+  function currentSelection() {
+    if (!sel) return null;
+    if (sel.manual) return sel;
+    const m = mints[sel.idx];
+    if (!m) return null;
+    return { chain: m.chain, contract: m.contract, slug: m.slug, name: m.name, xAvatar: m.xAvatar, phases: m.phases || [], wlElig: m.wlElig || null };
+  }
+
+  // true/false = elegibilidad real comprobada (data/eligibility-wallet.json,
+  // vive en m.wlElig.stages, cruzado por "kind"); null = todavia no se
+  // comprobo esta wallet contra este drop.
+  function eligibilityFor(s, ph) {
+    if (!ph || ph.k === "PUBLIC" || !s.wlElig) return null;
+    const hit = s.wlElig.stages.find((x) => x.k === ph.k);
+    return hit ? hit.eligible : null;
+  }
+
+  function openAction() {
+    const s = currentSelection();
+    $("action-card").hidden = false;
+    $("action-card").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    $("a-thumb").innerHTML = s.xAvatar ? `<img src="${s.xAvatar}" alt="">` : initials(s.name || s.contract);
+    $("a-name").textContent = s.name || "Proyecto a mano";
+    $("a-sub").textContent = `${s.contract}${s.slug ? " · " + s.slug : ""}`;
+
+    selPhases = [{ k: "PUBLIC", n: "Publica", p: "" }];
+    for (const ph of s.phases) {
+      if (ph.k && ph.k !== "PUBLIC" && ph.k !== "OTHER") selPhases.push(ph);
+    }
+    selPhaseIdx = 0;
+
+    // Reset del panel adaptativo a su estado por defecto cada vez que se
+    // elige un proyecto nuevo — evita arrastrar plantilla/disparo/condicion
+    // de la seleccion anterior sin que el usuario se de cuenta.
+    $("u-template").value = "";
+    $("u-trigger").value = "auto";
+    $("u-proof").value = "";
+    $("u-proof-price").value = "";
+    $("u-proof-limit").value = "";
+    $("u-wait").value = "";
+    $("cond2-enable").checked = false;
+    $("cond2-block").hidden = true;
+    onTemplateChange();
+    renderPhasePills();
+
+    if (!SUPPORTED_CHAINS.has(s.chain)) {
+      $("chain-warn").style.display = "block";
+      $("chain-warn").textContent = `Chain '${s.chain}' todavia no tiene RPC verificado en el Worker (solo robinhood/ethereum/arc/ink) — no se puede programar.`;
+    } else {
+      $("chain-warn").style.display = "none";
+    }
+    stopStatusPoll();
+    $("status-box").classList.remove("show");
+  }
+
+  function renderPhasePills() {
+    const s = currentSelection();
+    const wrap = $("phasepills");
+    wrap.innerHTML = selPhases
+      .map((ph, i) => {
+        const elig = eligibilityFor(s, ph);
+        const cls = ph.k === "PUBLIC" ? "" : elig === true ? " elig-true" : elig === false ? " elig-false" : "";
+        const dot = ph.k === "PUBLIC" ? "" : `<span class="dot">${elig === true ? "✓" : elig === false ? "✗" : "?"}</span>`;
+        const label = ph.k === "PUBLIC" ? "Publica" : `${ph.k}${ph.n ? " · " + ph.n : ""}`;
+        const price = ph.p ? `<span class="px">${ph.p}</span>` : "";
+        return `<button type="button" class="phasepill${cls}${i === selPhaseIdx ? " selected" : ""}" data-i="${i}">${dot}${label}${price}</button>`;
+      })
+      .join("");
+    wrap.querySelectorAll(".phasepill").forEach((el) => {
+      el.addEventListener("click", () => {
+        selPhaseIdx = Number(el.dataset.i);
+        renderPhasePills();
+        updatePhaseHint();
+        updateTriggerOptions();
+      });
+    });
+    updatePhaseHint();
+  }
+
+  function selectedPhase() {
+    return selPhases[selPhaseIdx] || selPhases[0];
+  }
+
+  function updatePhaseHint() {
+    const s = currentSelection();
+    const ph = selectedPhase();
+    if (ph && ph.k !== "PUBLIC" && !s.slug) {
+      $("phase-hint").textContent = "Esta fase necesita el slug de OpenSea (no esta en el radar para este proyecto — usa 'Escribir a mano').";
+    } else if (ph && ph.k !== "PUBLIC" && eligibilityFor(s, ph) === false) {
+      $("phase-hint").textContent = "Tu wallet NO calificaba para esta fase la ultima vez que se comprobo. Si programas igual, el Worker lo va a intentar y probablemente revierta (gasta gas igual).";
+    } else if (ph && ph.k !== "PUBLIC" && eligibilityFor(s, ph) === null) {
+      $("phase-hint").textContent = "Todavia no comprobaste tu elegibilidad para este drop — 'Comprobar elegibilidad' arriba.";
+    } else {
+      $("phase-hint").textContent = "";
+    }
+  }
+
+  // --- Panel adaptativo: plantilla + modo de disparo -----------------
+  // Una unica seccion que se ajusta segun lo elegido, en vez de 3 cajas
+  // sueltas (proyecto/plantilla/condicion) que antes vivian por separado
+  // sin saber una de la otra. Las incompatibilidades reales del backend
+  // (ver cloudflare/src/index.mjs) se bloquean aca, no se dejan pasar:
+  //  - "Por condicion" no existe para fases GTD/FCFS/WL: ConditionMintScheduler
+  //    solo sabe mintear via SeaDrop estandar o plantilla, no via el
+  //    constructor de tx de OpenSea que usa GtdMintScheduler.
+  //  - Elegir una plantilla oculta las fases (son conceptos de OpenSea/
+  //    SeaDrop, no aplican a un contrato de "sitio propio").
+  function currentTemplate() {
+    return $("u-template").value || null;
+  }
+
+  function onTemplateChange() {
+    const hasTpl = !!currentTemplate();
+    $("phase-block").style.display = hasTpl ? "none" : "";
+    $("tpl-hint").style.display = hasTpl ? "block" : "none";
+    $("merkle-block").hidden = !hasTpl;
+    updateTriggerOptions();
+  }
+  $("u-template").addEventListener("change", onTemplateChange);
+
+  function updateTriggerOptions() {
+    const hasTpl = !!currentTemplate();
+    const ph = selectedPhase();
+    const isGtdPhase = !hasTpl && ph && ph.k !== "PUBLIC";
+    const condOpt = $("u-trigger-condition-opt");
+    condOpt.disabled = !!isGtdPhase;
+    condOpt.title = isGtdPhase
+      ? "No disponible: las fases GTD/FCFS/WL usan el constructor de transacciones de OpenSea, que hoy no soporta disparo por condicion."
+      : "";
+    if (isGtdPhase && $("u-trigger").value === "condition") {
+      $("u-trigger").value = "auto";
+      alert("Cambiado a disparo Automatico: 'Por condicion' no esta disponible para fases GTD/FCFS/WL.");
+    }
+    renderTriggerBlocks();
+  }
+  $("u-trigger").addEventListener("change", renderTriggerBlocks);
+  function renderTriggerBlocks() {
+    const mode = $("u-trigger").value;
+    $("time-block").hidden = mode !== "time";
+    $("condition-block").hidden = mode !== "condition";
+    $("trigger-hint").style.display = "none";
+  }
+
+  // --- API ---
+  async function api(path, opts) {
+    const res = await fetch(path, opts);
+    return res.json();
+  }
+
+  // --- Wallet / elegibilidad (mismos endpoints que usa "/", ver gen-dashboard.mjs) ---
+  let wlStatus = null;
+  function wlShort(a) { return a ? a.slice(0, 6) + "…" + a.slice(-4) : ""; }
+  async function fetchWlStatus() {
+    try { wlStatus = await api("/api/opensea/status"); } catch { wlStatus = null; }
+    renderWlLine();
+    return wlStatus;
+  }
+  function renderWlLine() {
+    const el = $("wl-line");
+    if (wlStatus && wlStatus.connected) {
+      el.textContent = `Wallet: ${wlStatus.label ? wlStatus.label + " " : ""}${wlShort(wlStatus.address)}`;
+    } else if (wlStatus && wlStatus.cliAvailable === false) {
+      el.textContent = "El CLI de OpenSea no esta disponible en este servidor.";
+    } else {
+      el.textContent = "Wallet no conectada — las fases GTD/FCFS/WL se muestran sin saber si calificas.";
+    }
+  }
+  async function wlRefresh() {
+    $("wl-line").textContent = "Comprobando elegibilidad… (puede tardar)";
+    try { await api("/api/eligibility/refresh", { method: "POST" }); } catch (e) { $("wl-line").textContent = "Error: " + e.message; return; }
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      await fetchWlStatus();
+      if (wlStatus && !wlStatus.eligRunning) break;
+    }
+    await loadMints();
+    if (sel) { renderPhasePills(); }
+    renderWlLine();
+  }
+  $("btn-wl-refresh").addEventListener("click", async (e) => {
+    e.target.disabled = true;
+    await wlRefresh();
+    e.target.disabled = false;
+  });
+  $("btn-wl-login").addEventListener("click", async (e) => {
+    e.target.disabled = true;
+    try {
+      await fetchWlStatus();
+      if (wlStatus && wlStatus.connected) { await wlRefresh(); e.target.disabled = false; return; }
+      $("wl-line").textContent = "Abriendo login de OpenSea (se abre en otra pestaña, firmas un mensaje — no es una transaccion)…";
+      const r = await api("/api/opensea/login", { method: "POST" });
+      if (r.error === "no-cli") { $("wl-line").textContent = "El CLI de OpenSea no esta disponible en este servidor."; e.target.disabled = false; return; }
+      if (!r.url) { $("wl-line").textContent = "No se pudo obtener la URL de login."; e.target.disabled = false; return; }
+      const w = window.open(r.url, "_blank", "noopener");
+      if (!w) $("wl-line").textContent = "El navegador bloqueo la ventana — abrila a mano: " + r.url;
+      for (let i = 0; i < 60 && !(wlStatus && wlStatus.connected); i++) { await new Promise((res) => setTimeout(res, 3000)); await fetchWlStatus(); }
+      if (wlStatus && wlStatus.connected) await wlRefresh();
+      else $("wl-line").textContent = "No se detecto la conexion (tiempo agotado). Volve a intentar.";
+    } finally {
+      e.target.disabled = false;
+    }
+  });
+
+  function projectKey(s) {
+    return s.contract.toLowerCase();
+  }
+
+  function stopStatusPoll() {
+    if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+  }
+
+  function renderStatus(result, s) {
+    const box = $("status-box");
+    box.classList.add("show");
+    const state = result.state || (result.ok === false ? "error" : "?");
+    $("status-state").className = "st-" + state;
+    $("status-state").textContent = state;
+    const bits = [];
+    if (result.results?.length) bits.push(result.results.map((r) => `${r.met ? "✓" : "✗"} ${r.label}`).join(" · "));
+    if (result.conditionMet) bits.push(`cumplido: ${result.conditionMet}`);
+    if (result.reason) bits.push(`motivo: ${result.reason}`);
+    if (result.txHash) bits.push(`tx: ${result.txHash}`);
+    if (result.targetTimestamp) bits.push(`hora objetivo: ${new Date(result.targetTimestamp * 1000).toLocaleString()}`);
+    if (result.expiresAt) bits.push(`vence: ${new Date(result.expiresAt * 1000).toLocaleString()}`);
+    if (result.error) bits.push(`error: ${result.error}`);
+    if (result.updatedAt) bits.push(`actualizado: ${new Date(result.updatedAt).toLocaleTimeString()}`);
+    $("status-detail").textContent = bits.join(" · ");
+
+    stopStatusPoll();
+    if (["scheduled", "preparing", "ready-to-fire", "retrying", "watching"].includes(state)) {
+      statusTimer = setInterval(() => queryStatus(s, true), 4000);
+    }
+  }
+
+  function currentScheduler() {
+    const mode = $("u-trigger").value;
+    if (mode === "condition") return "condition";
+    if (currentTemplate()) return "custom";
+    const ph = selectedPhase();
+    return ph && ph.k !== "PUBLIC" ? "gtd" : null;
+  }
+
+  async function queryStatus(s, silent) {
+    const scheduler = currentScheduler();
+    const q = new URLSearchParams({ project: projectKey(s) });
+    if (scheduler) q.set("scheduler", scheduler);
+    const result = await api(`/api/mint/status?${q}`);
+    if (!silent) log(result);
+    renderStatus(result, s);
+    return result;
+  }
+
+  // --- Condicion: umbral/extra dinamicos segun el tipo elegido -------
+  function condExtraLabel(type) { return type === "floor_multiple" ? "Precio de mint (wei)" : "Supply máximo"; }
+  function condExtraPlaceholder(type) { return type === "floor_multiple" ? "ej. 500000000000000" : "ej. 10000"; }
+  function wireCondTypeSelect(typeSel, labelEl, extraInput) {
+    const update = () => { labelEl.textContent = condExtraLabel(typeSel.value); extraInput.placeholder = condExtraPlaceholder(typeSel.value); };
+    typeSel.addEventListener("change", update);
+    update();
+  }
+  wireCondTypeSelect($("cond1-type"), $("cond1-extra-label"), $("cond1-extra"));
+  wireCondTypeSelect($("cond2-type"), $("cond2-extra-label"), $("cond2-extra"));
+  $("cond2-enable").addEventListener("change", () => { $("cond2-block").hidden = !$("cond2-enable").checked; });
+
+  function buildOneCondition(typeSel, thresholdInput, extraInput) {
+    const type = typeSel.value;
+    const threshold = Number(thresholdInput.value);
+    if (!threshold && threshold !== 0) { alert("Falta el umbral de una condición."); return null; }
+    const cond = { type, threshold };
+    if (type === "floor_multiple") {
+      if (!extraInput.value.trim()) { alert("Falta el precio de mint (wei) para la condición de floor."); return null; }
+      cond.mintPriceWei = extraInput.value.trim();
+    } else {
+      if (!extraInput.value.trim()) { alert("Falta el supply máximo."); return null; }
+      cond.maxSupply = extraInput.value.trim();
+    }
+    return cond;
+  }
+
+  // --- Construccion del payload unico, segun el estado del panel -----
+  function buildScheduleBody(s) {
+    const template = currentTemplate();
+    const ph = selectedPhase();
+    const mode = $("u-trigger").value;
+
+    const body = {
+      chain: s.chain,
+      contract: s.contract,
+      quantity: Number($("qty").value || 1),
+      gasMultiplier: Number($("gas").value || 100),
+    };
+
+    if (template) {
+      body.template = template;
+      const proofRaw = $("u-proof").value.trim();
+      if (proofRaw) {
+        let merkleProof;
+        try {
+          merkleProof = proofRaw.startsWith("[") ? JSON.parse(proofRaw) : proofRaw.split(",").map((x) => x.trim()).filter(Boolean);
+        } catch {
+          alert("La prueba Merkle no es JSON válido ni una lista separada por comas.");
+          return null;
+        }
+        if (merkleProof.length) {
+          body.merkleProof = merkleProof;
+          if ($("u-proof-price").value.trim()) body.allowlistPricePerToken = $("u-proof-price").value.trim();
+          if ($("u-proof-limit").value.trim()) body.allowlistQuantityLimitPerWallet = $("u-proof-limit").value.trim();
+        }
+      }
+    } else {
+      if (!ph) { alert("Elegí una fase."); return null; }
+      if (ph.k !== "PUBLIC") {
+        if (!s.slug) { alert("Esta fase necesita el slug de OpenSea."); return null; }
+        if (mode === "condition") { alert("'Por condición' no está disponible para fases GTD/FCFS/WL."); return null; }
+        body.slug = s.slug;
+        body.kind = ph.k;
+        if (eligibilityFor(s, ph) === false) {
+          if (!confirm("Tu wallet NO calificaba para esta fase la última vez que se comprobó — casi seguro revierte (gastas gas igual). ¿Programar de todos modos?")) return null;
+        }
+      }
+    }
+
+    if (mode === "time") {
+      if (!$("u-wait").value) { alert("Falta la hora exacta."); return null; }
+      body.waitUntil = new Date($("u-wait").value).toISOString();
+    } else if (mode === "condition") {
+      const c1 = buildOneCondition($("cond1-type"), $("cond1-threshold"), $("cond1-extra"));
+      if (!c1) return null;
+      const conditions = [c1];
+      if ($("cond2-enable").checked) {
+        const c2 = buildOneCondition($("cond2-type"), $("cond2-threshold"), $("cond2-extra"));
+        if (!c2) return null;
+        conditions.push(c2);
+      }
+      body.conditions = conditions;
+      if ($("cond-expires").value) body.expiresAt = new Date($("cond-expires").value).toISOString();
+    }
+
+    return body;
+  }
+
+  $("btn-schedule").addEventListener("click", async () => {
+    const s = currentSelection();
+    if (!s || !s.contract) { alert("Elegí un proyecto primero."); return; }
+    if (!SUPPORTED_CHAINS.has(s.chain)) { alert("Esa chain todavía no tiene RPC verificado en el Worker."); return; }
+    const body = buildScheduleBody(s);
+    if (!body) return;
+
+    const label = s.name ? `'${s.name}'` : `el contrato ${s.contract}`;
+    const mode = $("u-trigger").value;
+    const actionLabel = mode === "condition" ? "dejar VIGILANDO una condición real" : "programar un mint real";
+    if (!confirm(`Vas a ${actionLabel} en Cloudflare para ${label}. Dispara solo, aunque cierres esta página. ¿Continuar?`)) return;
+
+    const result = await api("/api/mint/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    log(result);
+    renderStatus(result, s);
+  });
+
+  $("btn-status").addEventListener("click", async () => {
+    const s = currentSelection();
+    if (!s || !s.contract) { alert("Elegí un proyecto primero."); return; }
+    await queryStatus(s, false);
+  });
+
+  $("btn-cancel").addEventListener("click", async () => {
+    const s = currentSelection();
+    if (!s || !s.contract) { alert("Elegí un proyecto primero."); return; }
+    if (!confirm("¿Cancelar lo programado en Cloudflare para este proyecto?")) return;
+    const scheduler = currentScheduler();
+    const q = new URLSearchParams({ project: projectKey(s) });
+    if (scheduler) q.set("scheduler", scheduler);
+    const result = await api(`/api/mint/cancel?${q}`, { method: "POST" });
+    log(result);
+    stopStatusPoll();
+    $("status-box").classList.remove("show");
+  });
+
+  fetchWlStatus();
+  loadMints();
+})();
+</script>
+</body>
+</html>

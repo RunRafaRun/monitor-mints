@@ -30,12 +30,6 @@ import {
 const FLOOR_CACHE = join(ROOT, "data", "mint-floors.json");
 const FLOOR_TTL = 20 * 60 * 1000; // 20 min
 
-// agenda oficial del drop en OpenSea (SeaDrop). gql.opensea.io acepta queries
-// ad-hoc; devuelve null en dropBySlug si el mint no usa SeaDrop.
-const DROP_Q = `query($s:String!){dropBySlug(slug:$s){__typename` +
-  ` ...on Erc721SeaDropV1{stages{label stageType startTime endTime maxTotalMintableByWallet price{usd token{unit symbol}}}}` +
-  ` ...on Erc1155SeaDropV2{stages{label stageType startTime endTime maxTotalMintableByWallet price{usd token{unit symbol}}}}}}`;
-
 // Floor actual (ETH) + minteados EN VIVO de cada slug de OpenSea, con caché en disco.
 // El feed de NFT Trencher trae el "minted" a veces desfasado; OpenSea va al día.
 async function openseaForSlugs(items, ethUsd) {
@@ -97,50 +91,42 @@ async function openseaForSlugs(items, ethUsd) {
   return cache;
 }
 
-// Agenda oficial del drop (SeaDrop) vía gql.opensea.io. Se consulta SOLO para los
-// mints en curso / inminentes (no los ~60 slugs del floor) y con su propio TTL,
-// porque el endpoint tiene un límite de ráfaga bajo. Muta y reescribe `cache`.
-// dropBySlug devuelve null si el mint no usa SeaDrop -> nos quedamos sin agenda OS.
-const STAGES_TTL = 30 * 60 * 1000; // 30 min (la agenda no cambia tan a menudo)
+// Agenda oficial del drop (SeaDrop) vía api.opensea.io/v2/drops/{slug}.
+// Se consulta SOLO para mints en curso / inminentes, con TTL propio. Muta y
+// reescribe `cache`. Si un slug no tiene drop en OpenSea la respuesta tiene
+// stages:[] -> rec.stages queda null y no se reintenta hasta el próximo TTL.
+const STAGES_TTL = 2 * 3600 * 1000; // 2 h — el calendario de fases cambia poco
 async function openseaDropStages(slugs, cache) {
   if (process.env.OS_DROP_STAGES === "0") return;
   const key = process.env.OPENSEA_API_KEY;
+  if (!key) return;
   const now = Date.now();
-  // gql.opensea.io tiene un límite de ráfaga POR IP y persistente (~min). Si nos
-  // penalizó hace poco, ni lo intentamos hasta que pase el cooldown.
-  if ((cache.__gqlCooldown || 0) > now) return;
+  const H = { accept: "application/json", "x-api-key": key };
   const want = [...new Set(slugs.filter(Boolean))]
     .filter((s) => !(cache[s] && cache[s].bad) && now - ((cache[s] && cache[s].stagesAt) || 0) > STAGES_TTL);
   if (!want.length) return;
   let wrote = false;
   for (const slug of want.slice(0, 12)) {
-    let r;
     try {
-      r = await fetch("https://gql.opensea.io/graphql", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json", ...(key ? { "x-api-key": key } : {}) },
-        body: JSON.stringify({ query: DROP_Q, variables: { s: slug } }),
-      });
-    } catch { cache.__gqlCooldown = now + 15 * 60000; wrote = true; break; }
-    if (r.status === 429) { cache.__gqlCooldown = now + 30 * 60000; wrote = true; break; } // corta y espera 30 min
-    if (r.ok) {
-      try {
-        const st = (await r.json())?.data?.dropBySlug?.stages;
-        const rec = cache[slug] || (cache[slug] = { at: 0 });
-        rec.stagesAt = now;
-        rec.stages = Array.isArray(st) && st.length ? st.map((x) => ({
-          label: (x.label || "").trim() || null,
-          type: x.stageType || null,
-          a: Date.parse(x.startTime) || null,
-          e: Date.parse(x.endTime) || null,
-          lim: x.maxTotalMintableByWallet ?? null,
-          unit: x.price?.token?.unit ?? null,
-          usd: x.price?.usd ?? null,
+      const r = await fetch(`https://api.opensea.io/api/v2/drops/${slug}`, { headers: H });
+      const rec = cache[slug] || (cache[slug] = { at: 0 });
+      rec.stagesAt = now;
+      if (r.ok) {
+        const meta = await r.json().catch(() => null);
+        const st = Array.isArray(meta?.stages) ? meta.stages : [];
+        rec.stages = st.length ? st.map((s) => ({
+          label: (s.label || "").trim() || null,
+          type: s.stage_type || null,
+          a: Date.parse(s.start_time) || null,
+          e: Date.parse(s.end_time) || null,
+          lim: s.max_per_wallet ?? null,
+          unit: s.price != null ? Number(s.price) / 1e18 : null,
+          usd: null,
         })) : null;
-        wrote = true;
-      } catch {}
-    }
-    await new Promise((res) => setTimeout(res, 500));
+      }
+      wrote = true;
+    } catch { /* siguiente slug */ }
+    await new Promise((res) => setTimeout(res, 300));
   }
   if (wrote) { try { writeFileSync(FLOOR_CACHE, JSON.stringify(cache) + "\n"); } catch {} }
 }
@@ -476,6 +462,25 @@ export async function buildData({ pub = false } = {}) {
         }
         weMeta = { updated: we.updated, expiresAt: we.expiresAt, wallet: we.wallet?.label || null };
       } catch (e) { console.error("eligibility-wallet.json:", e.message); }
+    }
+  }
+
+  // Registro local de mints programados desde esta web (data/scheduled-
+  // mints.json, lo escribe serve.mjs al confirmar un "schedule" — ver el
+  // comentario ahi). Se cruza por contrato para pintar el aviso "programado"
+  // en el radar sin golpear el Worker por cada fila en cada carga.
+  if (!pub) {
+    const schedPath = join(ROOT, "data", "scheduled-mints.json");
+    if (existsSync(schedPath)) {
+      try {
+        const sched = JSON.parse(readFileSync(schedPath, "utf8"));
+        for (const m of mints) {
+          if (!m.contract) continue;
+          const c = m.contract.toLowerCase();
+          const hit = sched[`${c}:gtd`] || sched[`${c}:public`];
+          if (hit) m.scheduled = hit;
+        }
+      } catch (e) { console.error("scheduled-mints.json:", e.message); }
     }
   }
 
@@ -819,6 +824,46 @@ padding:22px 26px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .gloss .gt b{color:var(--fg)}
 .bell{background:transparent;border:0;cursor:pointer;font-size:13px;opacity:.45;padding:0 4px;line-height:1;vertical-align:middle}
 .bell:hover{opacity:.9}.bell.on{opacity:1;color:var(--accent)}
+.mintbtn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:6px;font-size:10px;font-weight:700;
+padding:3px 8px;cursor:pointer;white-space:nowrap;margin-top:3px}
+.mintbtn:hover{filter:brightness(1.08)}
+.mint-sched{display:inline-block;font-size:9.5px;font-weight:700;color:var(--gold);border:1px solid color-mix(in srgb,var(--gold) 50%,var(--line));
+border-radius:999px;padding:2px 7px;margin-top:3px;cursor:pointer;white-space:nowrap}
+#mintModal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;
+padding:40px 16px;z-index:50;overflow:auto}
+#mintModal[hidden]{display:none}
+.mm-box{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:min(1100px,95vw);width:100%;
+padding:20px 24px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5);max-height:calc(100vh - 80px);overflow-y:auto}
+.mm-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 28px}
+@media (max-width:820px){.mm-grid{display:block}}
+.mm-col{min-width:0}
+.mm-merkle textarea{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--fg);border-radius:6px;
+padding:7px 9px;font-size:12px;font-family:ui-monospace,Menlo,monospace}
+.mm-block{margin-top:10px;padding:8px;border:1px dashed var(--line);border-radius:8px}
+.mm-tplhint{font-size:11px;color:var(--mut);margin-top:4px}
+select.mm-select{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--fg);border-radius:6px;
+padding:7px 9px;font-size:12.5px;margin-top:3px}
+.mm-box h3{margin:.1em 0 .3em;font-size:15px;display:flex;align-items:center;gap:8px}
+.mm-sub{font-size:11px;color:var(--mut);font-family:ui-monospace,Menlo,monospace;margin-bottom:12px;word-break:break-all}
+.mm-pills{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.mm-pill{background:var(--bg);border:1px solid var(--line);color:var(--fg);border-radius:999px;padding:6px 12px;
+font-size:12px;font-weight:600;cursor:pointer}
+.mm-pill.elig-true{border-color:color-mix(in srgb,var(--now) 55%,var(--line))}
+.mm-pill.elig-false{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));opacity:.75}
+.mm-pill.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.mm-hint{font-size:11px;color:var(--mut);min-height:1.4em;margin:4px 0 8px}
+.mm-row{display:flex;gap:8px}
+.mm-row label{flex:1;font-size:11px;color:var(--mut);display:block}
+.mm-row input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:7px 9px;font-size:12.5px;margin-top:3px}
+.mm-actions{display:flex;gap:8px;margin-top:14px}
+.mm-actions button{flex:1;border:0;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer}
+.mm-actions .go{background:var(--accent);color:var(--accent-ink)}
+.mm-actions .st{background:var(--line);color:var(--fg)}
+.mm-actions .cc{background:var(--warn);color:#fff}
+.mm-status{margin-top:10px;font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:none}
+.mm-status.show{display:block}
+details.mm-adv{margin-top:10px}
+details.mm-adv summary{cursor:pointer;color:var(--mut);font-size:11px}
 #q{width:100%;max-width:520px;background:var(--card);color:var(--fg);border:1px solid var(--line);
 border-radius:5px;padding:8px 12px;font-size:13px}
 #q::placeholder{color:var(--mut)}
@@ -1072,6 +1117,97 @@ ${data.public ? "" : `<section data-p="spots" hidden>
   <div class="hm-box">
     <button id="helpClose" class="hm-x" title="cerrar" aria-label="cerrar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
     <div id="helpBody"></div>
+  </div>
+</div>
+
+<div id="mintModal" hidden>
+  <div class="mm-box">
+    <button id="mmClose" class="hm-x" title="cerrar" aria-label="cerrar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
+    <h3 id="mmName"></h3>
+    <div class="mm-sub" id="mmSub"></div>
+    <div class="mm-grid">
+      <div class="mm-col">
+        <label style="font-size:11px;color:var(--mut);display:block">Plantilla
+          <select id="mmTemplate" class="mm-select">
+            <option value="">(auto — SeaDrop / OpenSea)</option>
+            <option value="thirdweb-drop-erc721">thirdweb DropERC721 (sitio propio)</option>
+          </select>
+        </label>
+        <div class="mm-tplhint" id="mmTplHint" style="display:none">Plantilla "sitio propio": no usa fases de OpenSea ni slug. Sin verificar todavía contra un contrato real — probar con cuidado.</div>
+        <div id="mmPhaseBlock">
+          <div class="mm-pills" id="mmPills"></div>
+          <div class="mm-hint" id="mmHint"></div>
+        </div>
+        <div class="mm-block mm-merkle" id="mmMerkleBlock" hidden>
+          <label style="font-size:11px;color:var(--mut);display:block">Prueba Merkle (opcional — vacío = fase pública, usa la claim condition activa)
+            <textarea id="mmProof" rows="3" placeholder='["0x...", "0x..."]' style="margin-top:3px"></textarea>
+          </label>
+          <div class="mm-row" style="margin-top:8px">
+            <label>Precio por token (wei)<input id="mmProofPrice" placeholder="opcional"></label>
+            <label>Límite por wallet<input id="mmProofLimit" placeholder="opcional"></label>
+          </div>
+        </div>
+      </div>
+      <div class="mm-col">
+        <label style="font-size:11px;color:var(--mut);display:block">Disparo
+          <select id="mmTrigger" class="mm-select">
+            <option value="auto">Automático (según fase / claim condition)</option>
+            <option value="time">Hora exacta</option>
+            <option value="condition" id="mmTriggerConditionOpt">Por condición de mercado</option>
+          </select>
+        </label>
+        <div id="mmTimeBlock" hidden style="margin-top:8px">
+          <label style="font-size:11px;color:var(--mut);display:block">Hora exacta
+            <input id="mmWait" type="datetime-local" style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:7px 9px;font-size:12.5px;margin-top:3px">
+          </label>
+        </div>
+        <div id="mmConditionBlock" hidden>
+          <div class="mm-block">
+            <label style="font-size:11px;color:var(--mut);display:block">Condición 1
+              <select id="mmCond1Type" class="mm-select">
+                <option value="supply_pct">% del supply minteado ≥</option>
+                <option value="supply_remaining">Items restantes ≤</option>
+                <option value="floor_multiple">Última venta ≥ N× precio de mint</option>
+              </select>
+            </label>
+            <div class="mm-row" style="margin-top:6px">
+              <label>Umbral<input id="mmCond1Threshold" placeholder="ej. 90"></label>
+              <label id="mmCond1ExtraWrap">Supply máximo<input id="mmCond1Extra" placeholder="ej. 10000"></label>
+            </div>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:11px;color:var(--mut);cursor:pointer"><input type="checkbox" id="mmCond2Enable" style="width:auto"> Agregar segunda condición (Y)</label>
+          <div class="mm-block" id="mmCond2Block" hidden>
+            <label style="font-size:11px;color:var(--mut);display:block">Condición 2
+              <select id="mmCond2Type" class="mm-select">
+                <option value="supply_pct">% del supply minteado ≥</option>
+                <option value="supply_remaining">Items restantes ≤</option>
+                <option value="floor_multiple">Última venta ≥ N× precio de mint</option>
+              </select>
+            </label>
+            <div class="mm-row" style="margin-top:6px">
+              <label>Umbral<input id="mmCond2Threshold" placeholder="ej. 2"></label>
+              <label id="mmCond2ExtraWrap">Supply máximo<input id="mmCond2Extra" placeholder="ej. 10000"></label>
+            </div>
+          </div>
+          <label style="font-size:11px;color:var(--mut);display:block;margin-top:8px">Vencimiento (opcional)
+            <input id="mmCondExpires" type="datetime-local" style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:7px 9px;font-size:12.5px;margin-top:3px">
+          </label>
+        </div>
+        <details class="mm-adv">
+          <summary>Opciones avanzadas</summary>
+          <div class="mm-row" style="margin-top:8px">
+            <label>Cantidad<input id="mmQty" type="number" min="1" value="1"></label>
+            <label>Gas %<input id="mmGas" type="number" min="100" value="100"></label>
+          </div>
+        </details>
+        <div class="mm-actions">
+          <button class="go" id="mmSchedule">Programar</button>
+          <button class="st" id="mmStatus">Estado</button>
+          <button class="cc" id="mmCancel">Cancelar</button>
+        </div>
+        <div class="mm-status" id="mmStatusBox"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1687,10 +1823,23 @@ const xstat = (ic,val,title,cls='') => '<span class="xstat '+cls+'" title="'+tit
 
 const usd = eth => eth==null ? null : eth*ETHUSD;
 const fmtUsd = v => v==null ? '—' : '$'+(+v).toLocaleString(L==='es'?'es-ES':'en-US',{maximumFractionDigits: v<1?4:2});
-const money = eth => {
-  if(eth==null) return '—';
-  if(eth===0) return 'FREE';
-  return fmtUsd(usd(eth))+' <span class="eth">Ξ'+(+eth).toFixed(eth<0.01?5:4)+'</span>';
+// Arc paga en USDC nativo, no ETH (confirmado: nativeCurrency de Arc, y
+// price_currency_address de OpenSea para un drop Arc real usa la moneda
+// nativa) — antes esto siempre asumia ETH, asi que un precio Arc de "1
+// USDC" se mostraba como "—" (si habia fase PUBLIC detectada) o, peor,
+// como ~$2400 (1 * ETHUSD) si el proyecto caia al fallback de m.priceEth
+// sin fase PUBLIC explicita. Mapa chico: solo hace falta listar las
+// chains que NO son ETH-like; el resto usa ETH por defecto.
+const CHAIN_STABLE_CURRENCY = { arc: 'USDC' };
+const currencyFor = chain => CHAIN_STABLE_CURRENCY[chain] || 'ETH';
+// Convierte un "precio publico" (numero crudo, en la moneda nativa de esa
+// chain) a USD — 1:1 si es una stablecoin, *ETHUSD si es ETH-like.
+const usdOfPrice = (value, chain) => value==null ? null : (CHAIN_STABLE_CURRENCY[chain] ? value : value*ETHUSD);
+const money = (value, currency='ETH') => {
+  if(value==null) return '—';
+  if(value===0) return 'FREE';
+  if(currency!=='ETH') return fmtUsd(value)+' <span class="eth">'+esc(currency)+'</span>';
+  return fmtUsd(usd(value))+' <span class="eth">Ξ'+(+value).toFixed(value<0.01?5:4)+'</span>';
 };
 const esc = s => (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const rel = ms => { if(!ms) return '—'; const h=(ms-Date.now())/3.6e6; if(h<0) return t('now'); return h<1?Math.round(h*60)+'m':h.toFixed(1)+'h'; };
@@ -1716,10 +1865,17 @@ const links = m => [m.x&&'<a href="'+m.x+'" target="_blank">X</a>', m.site&&'<a 
 // enlace a OpenSea para las filas de Llaves / Comprar / Floors
 const osA = url => url ? ' <a href="'+url+'" target="_blank" rel="noopener" class="oslink" title="Ver en OpenSea">OpenSea ↗</a>' : '';
 const rankOs = name => { const c = D.ranking.find(x=>norm(x.name)===norm(name)); return c ? c.opensea : null; };
-const priceOf = s => { if(!s) return null; if(/free/i.test(s)) return 0; const m=String(s).match(/([\\d.]+)\\s*ETH/i); return m?+m[1]:null; };
-const phases = arr => arr.map(x=>{
+// Antes solo reconocia "X ETH" — un precio Arc como "1 USDC" no matcheaba
+// nunca y volvia null (perdiendo el dato). Ahora acepta cualquiera de las
+// monedas nativas que ya maneja el sistema.
+const priceOf = s => { if(!s) return null; if(/free/i.test(s)) return 0; const m=String(s).match(/([\\d.]+)\\s*(?:ETH|USDC)/i); return m?+m[1]:null; };
+const phases = (arr, chain) => arr.map(x=>{
   let e=priceOf(x.p);
-  if(e==null && x.usd!=null) e = ETHUSD ? x.usd/ETHUSD : null;
+  // x.usd/ETHUSD asume que el resultado va a ser ETH — valido solo si la
+  // chain es ETH-like; para una stablecoin (Arc/USDC) mejor dejar e=null
+  // (cae al texto crudo, ya correctamente etiquetado) que inventar un
+  // numero en la moneda equivocada.
+  if(e==null && x.usd!=null && !CHAIN_STABLE_CURRENCY[chain]) e = ETHUSD ? x.usd/ETHUSD : null;
   const st = x.s==='live'?' live':x.s==='ended'?' ended':'';
   const dot = x.s==='live'?'● ':'';
   let when='';
@@ -1732,7 +1888,7 @@ const phases = arr => arr.map(x=>{
   const label = !nm ? x.k
     : new RegExp(x.k,'i').test(nm.replace(/\\s+/g,'')) ? esc(nm)
     : '<b>'+x.k+'</b> · '+esc(nm);
-  return '<span class="phwrap"><span class="pill ph-'+x.k+st+'" title="'+x.k+(x.s?' — '+x.s:'')+'">'+dot+label+' '+(e==null?esc(x.p):money(e))+lim+'</span>'+sub+'</span>';
+  return '<span class="phwrap"><span class="pill ph-'+x.k+st+'" title="'+x.k+(x.s?' — '+x.s:'')+'">'+dot+label+' '+(e==null?esc(x.p):money(e, currencyFor(chain)))+lim+'</span>'+sub+'</span>';
 }).join(' ');
 
 function popClass(p){ if(/ALTO|ALTA|HIGH/i.test(p)) return 'pop-hi'; if(/MEDIO|MEDIA|MEDIUM/i.test(p)) return 'pop-mid'; return 'pop-lo'; }
@@ -1957,6 +2113,17 @@ function bellBtn(m){
   const tag = on && f!=='*' ? '<sub style="font-size:8px">'+esc(f)+'</sub>' : '';
   return '<button class="bell'+(on?' on':'')+'" data-alert="'+esc(m.name)+'" title="'+t('alert_tip')+'">'+(on?ico('bell'):ico('belloff'))+tag+'</button> ';
 }
+// boton "Mintear" (abre el modal de programar/estado/cancelar en la nube)
+// o el aviso "programado" si ya hay algo en cola para este contrato — solo
+// en modo servidor (los endpoints /api/mint/* no existen en el estatico).
+function mintBtn(m){
+  if(!SERVED || !m.contract) return '';
+  if(m.scheduled){
+    const when = m.scheduled.targetTimestamp ? localShort(m.scheduled.targetTimestamp*1000) : '?';
+    return '<br><span class="mint-sched" data-mint="'+esc(m.contract)+'" title="Click para ver/cancelar">🗓 programado · '+esc(when)+'</span>';
+  }
+  return '<br><button class="mintbtn" data-mint="'+esc(m.contract)+'">Mintear</button>';
+}
 // menú flotante para elegir la fase de la alerta
 function openAlertMenu(name, x, y){
   closeAlertMenu();
@@ -1997,12 +2164,12 @@ function mintRows(list){
     cell(t('c_hype'), m.hype, 'num', m.hype||0)+
     cell(t('c_pop'), popTxt(m))+
     cell(t('c_x'), xCell(m), null, m.xFollowers||0)+
-    cell(t('c_phases'), (phases(m.phases)||'<span class="muted">—</span>')+(m.schedSrc==='opensea'?' <span class="phwhen" title="'+t('sched_os')+'">· OpenSea</span>':''))+
+    cell(t('c_phases'), (phases(m.phases, m.chain)||'<span class="muted">—</span>')+(m.schedSrc==='opensea'?' <span class="phwhen" title="'+t('sched_os')+'">· OpenSea</span>':''))+
     cell(t('c_keys'), needCell(m), null, keyRank(m))+
-    cell(t('c_price'), money(publicPrice(m))+feeCell(m), 'num', publicPrice(m)??-1)+
+    cell(t('c_price'), money(publicPrice(m), currencyFor(m.chain))+feeCell(m), 'num', publicPrice(m)??-1)+
     cell(t('c_floor'), floorRadar(m), 'num', m.floorUsd??-1)+
     cell(t('c_verdict'), verdictCell(m))+
-    cell(t('c_when'), bellBtn(m)+whenCell(m.when), 'num', m.when||9e15)+
+    cell(t('c_when'), bellBtn(m)+whenCell(m.when)+mintBtn(m), 'num', m.when||9e15)+
   '</tr>';
   }).join('');
 }
@@ -2042,8 +2209,8 @@ function fPrice(usdV, ethV, sym){
 function floorRadar(m){
   if(m.floorUsd==null) return '<span class="muted">'+(m.floorThin?t('thin_market'):'—')+'</span>';
   if(m.floorUsd===0) return '<span class="muted">'+t('no_market')+'</span>';
-  const pp = publicPrice(m);            // precio public en ETH
-  const ppUsd = pp==null ? null : pp*ETHUSD;
+  const pp = publicPrice(m);            // precio public, en la moneda nativa de m.chain
+  const ppUsd = usdOfPrice(pp, m.chain);
   const head = fPrice(m.floorUsd, m.floorEth, m.floorSym);
   if(ppUsd==null) return head;
   if(pp===0) return head+'<span class="sub2 rise">· FREE→'+fmtUsd(m.floorUsd)+'</span>';
@@ -2065,7 +2232,7 @@ function mintVerdict(m){
   const pp = publicPrice(m);
   if(pp===0){ score += 10; add('v_free'); }
   else if(m.floorUsd!=null && m.floorUsd>0 && pp!=null){
-    const mult = m.floorUsd/(pp*ETHUSD);
+    const mult = m.floorUsd/usdOfPrice(pp, m.chain);
     if(mult>=1.3){ score += 20; add('v_floor_good', mult.toFixed(1)); }
     else if(mult<0.9){ score += mult<0.5?-35:-20; add('v_floor_below', mult.toFixed(1)); }
   }
@@ -2123,8 +2290,8 @@ function aiFactsBlock(m){
   const pp = publicPrice(m);
   return '<div class="ai-facts">'
     +'<div>'+esc(t('c_supply'))+': <b>'+nf(m.minted)+' / '+nf(m.supply)+'</b></div>'
-    +'<div>'+esc(t('c_phases'))+': '+(phases(m.phases)||'<span class="muted">—</span>')+'</div>'
-    +'<div>'+esc(t('c_price'))+': <b>'+money(pp)+'</b> · '+esc(t('c_floor'))+': '+floorRadar(m)+'</div>'
+    +'<div>'+esc(t('c_phases'))+': '+(phases(m.phases, m.chain)||'<span class="muted">—</span>')+'</div>'
+    +'<div>'+esc(t('c_price'))+': <b>'+money(pp, currencyFor(m.chain))+'</b> · '+esc(t('c_floor'))+': '+floorRadar(m)+'</div>'
     +'</div>';
 }
 async function runAnalysis(btn){
@@ -2138,7 +2305,7 @@ async function runAnalysis(btn){
     const rv = (!m.x && m.floorUsd==null) ? null : mintVerdict(m);
     const body = {
       name: m.name, slug: m.slug||null, image: m.xAvatar||null, x: m.x||null, site: m.site||null, chain: m.chain,
-      minted: m.minted, supply: m.supply, priceEth: publicPrice(m), priceUsd: publicPrice(m)!=null?publicPrice(m)*ETHUSD:null, free: !!m.free,
+      minted: m.minted, supply: m.supply, priceEth: publicPrice(m), priceUsd: usdOfPrice(publicPrice(m), m.chain), free: !!m.free,
       floorEth: m.floorEth, floorUsd: m.floorUsd, ethUsd: ETHUSD,
       phases: (m.phases||[]).map(p=>({k:p.k, label:p.n, p:p.p, state:p.s})),
       team: m.team, xFollowers: m.xFollowers, xAgeDays: m.xAgeDays, xRenames: m.xRenames, xLastRename: m.xLastRename,
@@ -2624,12 +2791,289 @@ document.getElementById('helpClose').addEventListener('click',closeHelp);
 helpM.addEventListener('click',e=>{ if(e.target===helpM) closeHelp(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !helpM.hidden) closeHelp(); });
 
-// panel de filtros (red · solo mis llaves · leyenda) — desplegable
+// ---- Modal de mintear/programar (boton por fila, ver mintBtn arriba) ----
+// Reusa la wallet/elegibilidad ya cargada en D (wlStatus/fetchWlStatus) y
+// pega contra los mismos endpoints /api/mint/* que ya usa /mint — camino
+// separado del resto de este dashboard, solo lee D.mints y escribe en su
+// propio modal, no toca el render principal salvo para refrescar la fila.
+const mintM = document.getElementById('mintModal');
+const SUPPORTED_MINT_CHAINS = new Set(['robinhood','ethereum','arc','ink']);
+let mmMint = null, mmPhases = [], mmPhaseIdx = 0, mmStatusTimer = null;
+
+function mmNonPublicPhases(m){ return (m.phases||[]).filter(ph=>ph.k && ph.k!=='PUBLIC' && ph.k!=='OTHER'); }
+function mmPhaseEligibility(m, ph){
+  if(!ph || ph.k==='PUBLIC' || !m.wlElig) return null;
+  const sameKind = m.wlElig.stages.filter(x=>x.k===ph.k);
+  if(!sameKind.length) return null;
+  const norm = s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const byLabel = sameKind.find(x=>norm(x.label)===norm(ph.n));
+  if(byLabel) return byLabel.eligible;
+  return sameKind.length===1 ? sameKind[0].eligible : null;
+}
+function mmSelectedPhase(){ return mmPhases[mmPhaseIdx] || mmPhases[0]; }
+
+function openMintModal(contract){
+  const m = D.mints.find(x=>x.contract && x.contract.toLowerCase()===String(contract).toLowerCase());
+  if(!m) return;
+  mmMint = m;
+  document.getElementById('mmName').textContent = m.name;
+  document.getElementById('mmSub').textContent = m.contract+(m.slug?' · '+m.slug:'');
+  mmPhases = [{k:'PUBLIC', n:'Publica', p:''}];
+  for(const ph of mmNonPublicPhases(m)) mmPhases.push(ph);
+  mmPhaseIdx = 0;
+
+  // Reset del panel adaptativo cada vez que se abre para un proyecto nuevo.
+  document.getElementById('mmTemplate').value = '';
+  document.getElementById('mmTrigger').value = 'auto';
+  document.getElementById('mmProof').value = '';
+  document.getElementById('mmProofPrice').value = '';
+  document.getElementById('mmProofLimit').value = '';
+  document.getElementById('mmWait').value = '';
+  document.getElementById('mmCond2Enable').checked = false;
+  document.getElementById('mmCond2Block').hidden = true;
+  mmOnTemplateChange();
+  mmRenderPhases();
+
+  const warn = SUPPORTED_MINT_CHAINS.has(m.chain) ? '' :
+    'Chain \\''+m.chain+'\\' todavia no tiene RPC verificado en el Worker — no se puede programar.';
+  if(warn) document.getElementById('mmHint').textContent = warn;
+  document.getElementById('mmStatusBox').classList.remove('show');
+  if(mmStatusTimer){ clearInterval(mmStatusTimer); mmStatusTimer=null; }
+  mintM.hidden = false;
+  if(m.scheduled) mmQueryStatus(true);
+}
+function closeMintModal(){ mintM.hidden = true; if(mmStatusTimer){ clearInterval(mmStatusTimer); mmStatusTimer=null; } }
+
+function mmRenderPhases(){
+  const wrap = document.getElementById('mmPills');
+  wrap.innerHTML = mmPhases.map((ph,i)=>{
+    const elig = mmPhaseEligibility(mmMint, ph);
+    const cls = ph.k==='PUBLIC' ? '' : elig===true?' elig-true':elig===false?' elig-false':'';
+    const dot = ph.k==='PUBLIC' ? '' : (elig===true?'✓ ':elig===false?'✗ ':'? ');
+    const label = ph.k==='PUBLIC' ? 'Publica' : ph.k+(ph.n?' · '+ph.n:'');
+    return '<button type="button" class="mm-pill'+cls+(i===mmPhaseIdx?' sel':'')+'" data-i="'+i+'">'+dot+esc(label)+(ph.p?' <span style="opacity:.6">'+esc(ph.p)+'</span>':'')+'</button>';
+  }).join('');
+  wrap.querySelectorAll('.mm-pill').forEach(el=>{
+    el.addEventListener('click',()=>{ mmPhaseIdx=Number(el.dataset.i); mmRenderPhases(); mmUpdateHint(); mmUpdateTriggerOptions(); });
+  });
+  mmUpdateHint();
+}
+function mmUpdateHint(){
+  if(!SUPPORTED_MINT_CHAINS.has(mmMint.chain)) return; // ya se muestra el aviso de chain
+  const ph = mmSelectedPhase();
+  const el = document.getElementById('mmHint');
+  if(ph && ph.k!=='PUBLIC' && !mmMint.slug) el.textContent = 'Esta fase necesita el slug de OpenSea (no esta en el radar).';
+  else if(ph && ph.k!=='PUBLIC' && mmPhaseEligibility(mmMint,ph)===false) el.textContent = 'Tu wallet NO calificaba para esta fase la ultima vez que se comprobo.';
+  else if(ph && ph.k!=='PUBLIC' && mmPhaseEligibility(mmMint,ph)===null) el.textContent = 'Todavia no comprobaste tu elegibilidad para este drop.';
+  else el.textContent = '';
+}
+
+// --- Panel adaptativo: plantilla + modo de disparo (mismo criterio que
+// /mint, ver mint-actions.html) — "por condicion" no existe para fases
+// GTD/FCFS/WL (ConditionMintScheduler no sabe usar el constructor de tx
+// de OpenSea), asi que se bloquea en vez de dejar que falle en silencio.
+function mmCurrentTemplate(){ return document.getElementById('mmTemplate').value || null; }
+function mmOnTemplateChange(){
+  const hasTpl = !!mmCurrentTemplate();
+  document.getElementById('mmPhaseBlock').style.display = hasTpl ? 'none' : '';
+  document.getElementById('mmTplHint').style.display = hasTpl ? 'block' : 'none';
+  document.getElementById('mmMerkleBlock').hidden = !hasTpl;
+  mmUpdateTriggerOptions();
+}
+document.getElementById('mmTemplate').addEventListener('change', mmOnTemplateChange);
+
+function mmUpdateTriggerOptions(){
+  const hasTpl = !!mmCurrentTemplate();
+  const ph = mmSelectedPhase();
+  const isGtdPhase = !hasTpl && ph && ph.k!=='PUBLIC';
+  const condOpt = document.getElementById('mmTriggerConditionOpt');
+  condOpt.disabled = !!isGtdPhase;
+  condOpt.title = isGtdPhase ? 'No disponible: las fases GTD/FCFS/WL usan el constructor de transacciones de OpenSea, que hoy no soporta disparo por condicion.' : '';
+  const trigSel = document.getElementById('mmTrigger');
+  if(isGtdPhase && trigSel.value==='condition'){
+    trigSel.value = 'auto';
+    alert('Cambiado a disparo Automatico: \\'Por condicion\\' no esta disponible para fases GTD/FCFS/WL.');
+  }
+  mmRenderTriggerBlocks();
+}
+document.getElementById('mmTrigger').addEventListener('change', mmRenderTriggerBlocks);
+function mmRenderTriggerBlocks(){
+  const mode = document.getElementById('mmTrigger').value;
+  document.getElementById('mmTimeBlock').hidden = mode!=='time';
+  document.getElementById('mmConditionBlock').hidden = mode!=='condition';
+}
+function mmCondExtraLabel(type){ return type==='floor_multiple' ? 'Precio de mint (wei)' : 'Supply máximo'; }
+function mmCondExtraPlaceholder(type){ return type==='floor_multiple' ? 'ej. 500000000000000' : 'ej. 10000'; }
+function mmWireCondTypeSelect(typeSel, wrapEl, extraInput){
+  const update = () => { wrapEl.firstChild.textContent = mmCondExtraLabel(typeSel.value); extraInput.placeholder = mmCondExtraPlaceholder(typeSel.value); };
+  typeSel.addEventListener('change', update);
+  update();
+}
+mmWireCondTypeSelect(document.getElementById('mmCond1Type'), document.getElementById('mmCond1ExtraWrap'), document.getElementById('mmCond1Extra'));
+mmWireCondTypeSelect(document.getElementById('mmCond2Type'), document.getElementById('mmCond2ExtraWrap'), document.getElementById('mmCond2Extra'));
+document.getElementById('mmCond2Enable').addEventListener('change', ()=>{ document.getElementById('mmCond2Block').hidden = !document.getElementById('mmCond2Enable').checked; });
+function mmBuildOneCondition(typeSel, thresholdInput, extraInput){
+  const type = typeSel.value;
+  const threshold = Number(thresholdInput.value);
+  if(!threshold && threshold!==0){ alert('Falta el umbral de una condición.'); return null; }
+  const cond = { type, threshold };
+  if(type==='floor_multiple'){
+    if(!extraInput.value.trim()){ alert('Falta el precio de mint (wei) para la condición de floor.'); return null; }
+    cond.mintPriceWei = extraInput.value.trim();
+  } else {
+    if(!extraInput.value.trim()){ alert('Falta el supply máximo.'); return null; }
+    cond.maxSupply = extraInput.value.trim();
+  }
+  return cond;
+}
+function mmCurrentScheduler(){
+  const mode = document.getElementById('mmTrigger').value;
+  if(mode==='condition') return 'condition';
+  if(mmCurrentTemplate()) return 'custom';
+  const ph = mmSelectedPhase();
+  return ph && ph.k!=='PUBLIC' ? 'gtd' : null;
+}
+
+async function mmApi(path, opts){ const r = await fetch(path, opts); return r.json(); }
+function mmProjectKey(){ return mmMint.contract.toLowerCase(); }
+
+function mmRenderStatus(result){
+  const box = document.getElementById('mmStatusBox');
+  box.classList.add('show');
+  const state = result.state || (result.ok===false?'error':'?');
+  const bits = ['Estado: <b>'+esc(state)+'</b>'];
+  if(result.results && result.results.length) bits.push(result.results.map(r=>(r.met?'✓':'✗')+' '+esc(r.label)).join('<br>'));
+  if(result.conditionMet) bits.push('cumplido: '+esc(result.conditionMet));
+  if(result.reason) bits.push('motivo: '+esc(result.reason));
+  if(result.txHash) bits.push('tx: '+esc(result.txHash));
+  if(result.targetTimestamp) bits.push('hora: '+esc(localShort(result.targetTimestamp*1000)));
+  if(result.expiresAt) bits.push('vence: '+esc(localShort(result.expiresAt*1000)));
+  if(result.error) bits.push('error: '+esc(result.error));
+  box.innerHTML = bits.join('<br>');
+  if(mmStatusTimer){ clearInterval(mmStatusTimer); mmStatusTimer=null; }
+  if(['scheduled','preparing','ready-to-fire','retrying','watching'].includes(state)){
+    mmStatusTimer = setInterval(()=>mmQueryStatus(false), 4000);
+  } else if(['minted','error','cancelled','needs-manual-review'].includes(state) && mmMint.scheduled){
+    // ya termino de verdad: limpia el registro local para que no siga
+    // apareciendo "programado" en la fila.
+    const scheduler = mmCurrentScheduler();
+    mmApi('api/mint/forget?'+new URLSearchParams({project:mmProjectKey(), ...(scheduler?{scheduler}:{})})+'', {method:'POST'}).catch(()=>{});
+    delete mmMint.scheduled;
+    render();
+  }
+}
+async function mmQueryStatus(silent){
+  const scheduler = mmCurrentScheduler();
+  const q = new URLSearchParams({project: mmProjectKey(), ...(scheduler?{scheduler}:{})});
+  const result = await mmApi('api/mint/status?'+q);
+  mmRenderStatus(result);
+  return result;
+}
+
+function mmBuildScheduleBody(){
+  const template = mmCurrentTemplate();
+  const ph = mmSelectedPhase();
+  const mode = document.getElementById('mmTrigger').value;
+  const body = {
+    chain: mmMint.chain, contract: mmMint.contract,
+    quantity: Number(document.getElementById('mmQty').value||1),
+    gasMultiplier: Number(document.getElementById('mmGas').value||100),
+  };
+  if(template){
+    body.template = template;
+    const proofRaw = document.getElementById('mmProof').value.trim();
+    if(proofRaw){
+      let merkleProof;
+      try { merkleProof = proofRaw.startsWith('[') ? JSON.parse(proofRaw) : proofRaw.split(',').map(x=>x.trim()).filter(Boolean); }
+      catch(e){ alert('La prueba Merkle no es JSON válido ni una lista separada por comas.'); return null; }
+      if(merkleProof.length){
+        body.merkleProof = merkleProof;
+        if(document.getElementById('mmProofPrice').value.trim()) body.allowlistPricePerToken = document.getElementById('mmProofPrice').value.trim();
+        if(document.getElementById('mmProofLimit').value.trim()) body.allowlistQuantityLimitPerWallet = document.getElementById('mmProofLimit').value.trim();
+      }
+    }
+  } else {
+    if(ph.k!=='PUBLIC'){
+      if(!mmMint.slug){ alert('Esta fase necesita el slug de OpenSea.'); return null; }
+      if(mode==='condition'){ alert('\\'Por condición\\' no está disponible para fases GTD/FCFS/WL.'); return null; }
+      body.slug = mmMint.slug;
+      body.kind = ph.k;
+      if(mmPhaseEligibility(mmMint,ph)===false){
+        if(!confirm('Tu wallet NO calificaba para esta fase — casi seguro revierte (gastas gas igual). Programar de todos modos?')) return null;
+      }
+    }
+  }
+  if(mode==='time'){
+    if(!document.getElementById('mmWait').value){ alert('Falta la hora exacta.'); return null; }
+    body.waitUntil = new Date(document.getElementById('mmWait').value).toISOString();
+  } else if(mode==='condition'){
+    const c1 = mmBuildOneCondition(document.getElementById('mmCond1Type'), document.getElementById('mmCond1Threshold'), document.getElementById('mmCond1Extra'));
+    if(!c1) return null;
+    const conditions = [c1];
+    if(document.getElementById('mmCond2Enable').checked){
+      const c2 = mmBuildOneCondition(document.getElementById('mmCond2Type'), document.getElementById('mmCond2Threshold'), document.getElementById('mmCond2Extra'));
+      if(!c2) return null;
+      conditions.push(c2);
+    }
+    body.conditions = conditions;
+    if(document.getElementById('mmCondExpires').value) body.expiresAt = new Date(document.getElementById('mmCondExpires').value).toISOString();
+  }
+  return body;
+}
+
+document.getElementById('mmSchedule').addEventListener('click', async()=>{
+  if(!mmMint) return;
+  if(!SUPPORTED_MINT_CHAINS.has(mmMint.chain)){ alert('Esa chain todavia no tiene RPC verificado.'); return; }
+  const body = mmBuildScheduleBody();
+  if(!body) return;
+  const mode = document.getElementById('mmTrigger').value;
+  const actionLabel = mode==='condition' ? 'dejar VIGILANDO una condición real' : 'programar un mint real';
+  if(!confirm('Vas a '+actionLabel+' en Cloudflare para \\''+mmMint.name+'\\'. Dispara solo, aunque cierres esta pagina. Continuar?')) return;
+  const result = await mmApi('api/mint/schedule', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
+  if(result.ok){
+    mmMint.scheduled = { contract: mmMint.contract, chain: mmMint.chain, targetTimestamp: result.targetTimestamp||null };
+    render();
+    toast('✅ Programado: '+mmMint.name);
+    mmRenderStatus(result);
+  } else {
+    toast('⚠️ '+(result.error||'no se pudo programar'));
+  }
+});
+document.getElementById('mmStatus').addEventListener('click', ()=>{ if(mmMint) mmQueryStatus(false); });
+document.getElementById('mmCancel').addEventListener('click', async()=>{
+  if(!mmMint) return;
+  if(!confirm('Cancelar lo programado para este proyecto?')) return;
+  const scheduler = mmCurrentScheduler();
+  const q = new URLSearchParams({project: mmProjectKey(), ...(scheduler?{scheduler}:{})});
+  const result = await mmApi('api/mint/cancel?'+q, {method:'POST'});
+  if(result.ok){ delete mmMint.scheduled; render(); toast('Cancelado.'); document.getElementById('mmStatusBox').classList.remove('show'); }
+  else toast('⚠️ '+(result.error||'no se pudo cancelar'));
+});
+document.getElementById('mmClose').addEventListener('click', closeMintModal);
+mintM.addEventListener('click', e=>{ if(e.target===mintM) closeMintModal(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !mintM.hidden) closeMintModal(); });
+document.addEventListener('click', e=>{
+  const b = e.target.closest('[data-mint]');
+  if(b){ openMintModal(b.dataset.mint); }
+});
+
+// panel de filtros (red · solo mis llaves · leyenda · OpenSea) — desplegable.
+// OJO: antes usaba fpanel.addEventListener('click', e=>e.stopPropagation())
+// para que un clic DENTRO del panel no lo cerrara — pero eso corta la
+// propagacion para TODO lo de adentro, incluidos los botones "Refresh
+// eligibility"/"Reconnect" del wlBar (que ahora vive dentro de este panel),
+// cuyo handler real esta en document (mas abajo, "data-wl"). Sin la
+// propagacion llegando a document, esos botones quedaban muertos. Arreglo:
+// no cortar la propagacion — el cierre "al hacer clic fuera" comprueba el
+// objetivo del clic en vez de depender de bloquearla.
 (function(){
   const fpanel=document.getElementById('filtersPanel'), fbtn=document.getElementById('filtersBtn');
   fbtn.addEventListener('click',e=>{ e.stopPropagation(); fpanel.hidden=!fpanel.hidden; fbtn.classList.toggle('on',!fpanel.hidden); });
-  fpanel.addEventListener('click',e=>e.stopPropagation());
-  document.addEventListener('click',()=>{ if(!fpanel.hidden){ fpanel.hidden=true; fbtn.classList.remove('on'); } });
+  document.addEventListener('click',e=>{
+    if(fpanel.hidden) return;
+    if(fpanel.contains(e.target) || e.target===fbtn) return;
+    fpanel.hidden=true; fbtn.classList.remove('on');
+  });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !fpanel.hidden){ fpanel.hidden=true; fbtn.classList.remove('on'); } });
 })();
 function updateFdot(){

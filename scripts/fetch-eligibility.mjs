@@ -23,7 +23,13 @@ import { osCliBase, osCli, whoami, readAuth, refreshAuth, walletLabel } from "./
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(ROOT, "data", "eligibility-wallet.json");
 const CHAINS = ["robinhood", "ethereum", "ink", "arc"];
-const MAX_DROPS = 60;                 // tope total (radar + calendario)
+// El radar ya tiene ~160 mints "ahora"/"pronto" en simultaneo (crecio desde
+// que este tope se puso en 60) — con 60 se salteaban en silencio proyectos
+// reales donde SI tenias plaza (confirmado: kizohood y lazy-du nunca se
+// llegaban a comprobar). Con sesion+bearer ya logueada esto usa fetch()
+// directo (no CLI), rapido: ~20s para comprobar 60 de golpe con cache de
+// metadata tibia, asi que 200 tiene margen de sobra.
+const MAX_DROPS = 200;
 const uuNorm = (u) => String(u || "").replace(/-/g, "").toLowerCase();
 const asJson = process.argv.includes("--json");
 const log = (...a) => console.error(...a);

@@ -34,7 +34,7 @@ Guardar en `scripts/.env` (nunca commitear):
 ```
 OPENSEA_API_KEY=
 COINGECKO_API_KEY=        # opcional
-X_BEARER_TOKEN=           # opcional, para métricas de X vía API v2
+SOCIALDATA_API_KEY=       # opcional, para métricas de X vía socialdata.tools (x-popularity.mjs)
 ```
 
 ## Limitaciones conocidas

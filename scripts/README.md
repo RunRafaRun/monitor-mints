@@ -9,7 +9,7 @@ cp .env.example .env      # y rellena las claves que tengas
 | Clave | Para qué | Necesaria |
 |---|---|---|
 | `OPENSEA_API_KEY` | floors y su histórico (`fetch-floors.mjs`) | sí, para floors |
-| `X_BEARER_TOKEN` | métricas de X en `x-popularity.mjs` | opcional (el feed ya trae followers/posts) |
+| `SOCIALDATA_API_KEY` | métricas de X en `x-popularity.mjs` (socialdata.tools) | opcional (el feed ya trae followers/posts) |
 | `COINGECKO_API_KEY` | — | opcional |
 
 `gen-radar.mjs` **no necesita ninguna clave**: el feed de NFT Trencher es público.
@@ -80,7 +80,7 @@ elegible reconocida. Formato del JSON: ver cabecera de `log-mint.mjs`.
 ```bash
 node x-popularity.mjs @ProyectoNFT
 ```
-Con `X_BEARER_TOKEN`: seguidores, ritmo de posts, engagement rate. Sin token:
+Con `SOCIALDATA_API_KEY`: seguidores, ritmo de posts, engagement rate. Sin clave:
 plantilla en blanco (el radar ya trae followers/posts del feed).
 
 ## Rutina
