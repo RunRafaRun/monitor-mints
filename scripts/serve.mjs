@@ -10,6 +10,7 @@ import { execSync, spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 import { statSync, readFileSync, existsSync, writeFileSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import { loadCollections, saveCollections, findCollection, ROOT } from "./lib/data.mjs";
 import { osCliBase, whoami, walletLabel } from "./lib/os-auth.mjs";
 
@@ -37,6 +38,11 @@ async function gd() {
 const argv = process.argv.slice(2);
 const PORT = Number(argv[argv.indexOf("--port") + 1]) || 8787;
 const noFloors = argv.includes("--no-floors");
+// Por defecto solo loopback. Con --lan escucha en toda la red local para
+// poder abrirlo desde el móvil (http://<IP-de-la-PC>:PORT). OJO: expone
+// TODOS los endpoints (owned/mint/opensea) a cualquiera en la misma red.
+const LAN = argv.includes("--lan");
+const HOST = LAN ? "0.0.0.0" : "127.0.0.1";
 
 let cache = null;
 let building = false;
@@ -426,15 +432,27 @@ function kickElig() {
 
 // Solo loopback: el panel y sus endpoints (owned, opensea/login, eligibility)
 // NO deben quedar expuestos a la red local.
-server.listen(PORT, "127.0.0.1", () => {
+server.listen(PORT, HOST, () => {
   const u = `http://localhost:${PORT}/`;
   console.log(`\n  mintscope_  →  ${u}`);
+  if (LAN) console.log(`   Móvil (misma WiFi) →  http://${lanIp()}:${PORT}/`);
   console.log("   Checkboxes de 'Tengo' → se guardan en data/colecciones.json");
   console.log("   Feed de mints: refresco automático cada 15 min");
   console.log(noFloors ? "   Floors: desactivados (--no-floors)" : "   Floors (OpenSea): cada 60 min");
   console.log("   Ctrl+C para parar\n");
   try { execSync(`start "" "${u}"`, { shell: "cmd.exe" }); } catch {}
 });
+
+// IP de la PC en la red local (IPv4 no-loopback, prioriza Wi-Fi/Ethernet).
+function lanIp() {
+  const skip = (n) => /loopback|WSL|Hyper-V|vEthernet|virtual|VMware|VirtualBox|Tailscale|ZeroTier/i.test(n);
+  const out = [];
+  for (const [name, addrs] of Object.entries(networkInterfaces())) {
+    if (skip(name)) continue;
+    for (const a of addrs || []) if (a.family === "IPv4" && !a.internal) out.push(a.address);
+  }
+  return out[0] || "localhost";
+}
 
 setInterval(rebuild, 15 * 60 * 1000);            // feed de mints / popularidad
 if (!noFloors) setInterval(runFloors, 60 * 60 * 1000);  // floors + histórico
