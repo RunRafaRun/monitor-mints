@@ -993,10 +993,10 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
   <div class="tabbar" id="tabs">
     <button data-t="radar" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l3-8 4 16 3-8h4"/></svg><span data-k="tab_radar"></span></button>
     <button data-t="keys"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="5"/><path d="M11.6 11.4 21 2M16.5 6.5l3 3M13.5 9.5l3 3"/></svg><span data-k="tab_keys"></span></button>
-    <button data-t="buy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.3 12.1a2 2 0 0 0 2 1.6h8.5a2 2 0 0 0 2-1.6L23 6.5H6"/></svg><span data-k="tab_buy"></span></button>
+    ${data.public ? "" : `<button data-t="buy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.3 12.1a2 2 0 0 0 2 1.6h8.5a2 2 0 0 0 2-1.6L23 6.5H6"/></svg><span data-k="tab_buy"></span></button>
     <button data-t="floors"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6 6 4-4 8 8"/><path d="M21 15v6h-6"/></svg><span data-k="tab_floors"></span></button>
-    ${data.public ? "" : `<button data-t="spots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5a2 2 0 0 0 0 4 2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 12.5a2 2 0 0 0 0-4z"/><path d="M13 6.5v11" stroke-dasharray="1.5 2.5"/></svg><span data-k="tab_spots"></span></button>`}
-    <button data-t="wallet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H17v3M3 7.5V17a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3.5M3 7.5h17"/><circle cx="17" cy="12.5" r="1.3" fill="currentColor" stroke="none"/></svg><span data-k="tab_wallet"></span></button>
+    <button data-t="spots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5a2 2 0 0 0 0 4 2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 12.5a2 2 0 0 0 0-4z"/><path d="M13 6.5v11" stroke-dasharray="1.5 2.5"/></svg><span data-k="tab_spots"></span></button>
+    <button data-t="wallet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H17v3M3 7.5V17a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3.5M3 7.5h17"/><circle cx="17" cy="12.5" r="1.3" fill="currentColor" stroke="none"/></svg><span data-k="tab_wallet"></span></button>`}
   </div>
   <div class="freshline" id="upd"></div>
   <div class="fpanel" id="filtersPanel" hidden>
@@ -1021,25 +1021,7 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
 
 <section data-p="keys" hidden>
   <h2 data-k="h_keys"></h2>
-  ${data.public ? `<div class="wcheck">
-    <div class="wcheck-hd" data-k="wc_title"></div>
-    <div class="wcheck-in">
-      <button id="wOsConnect" class="chk wc-go" data-k="wc_os_connect"></button>
-      <span id="wOsMsg" class="wcheck-msg"></span>
-    </div>
-    <div class="wcheck-note" data-k="wc_note"></div>
-    <div class="wallets-box">
-      <div class="wl-hd" data-k="wl_mine"></div>
-      <div id="wList" class="wallet-rows"></div>
-      <div class="wcheck-in" style="margin-top:9px">
-        <input id="wAddr" type="text" autocomplete="off" spellcheck="false" placeholder="0x… , 0x… , 0x…">
-        <button id="wConnect" class="chk" data-k="wc_connect"></button>
-        <button id="wCheck" class="chk wc-go" data-k="wl_add"></button>
-      </div>
-      <div id="wMsg" class="wcheck-msg" hidden></div>
-      <div class="wcheck-note" data-k="wc_adv_note"></div>
-    </div>
-  </div>` : ""}
+  <!-- comprobación de wallets (vía /api/os + /api/wallet) deprecada -->
   <p class="note" data-k="note_keys"></p>
   <div class="scroll"><table id="tKeys"></table></div>
 </section>
@@ -2258,7 +2240,7 @@ function verdictCell(m){
     const tip = esc(t('v_tip') + (v.reasons.length? '\\n\\n'+v.reasons.map(r=>'• '+r).join('\\n') : ''));
     return '<button class="pill vpill '+v.cls+'" data-name="'+esc(m.name)+'" data-tip="'+tip+'" title="'+tip+'">'+esc(v.label)+'</button>';
   })();
-  return pill+' <button class="aibtn" data-ai="'+esc(m.name)+'" title="'+esc(t('ai_tip'))+'">'+ico('sparkle')+'</button>';
+  return pill + (D.public ? '' : ' <button class="aibtn" data-ai="'+esc(m.name)+'" title="'+esc(t('ai_tip'))+'">'+ico('sparkle')+'</button>');
 }
 // ---- "Analizar a fondo" (IA, bajo demanda) ----
 function normProjName(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
