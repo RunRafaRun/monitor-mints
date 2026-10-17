@@ -1021,7 +1021,25 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
 
 <section data-p="keys" hidden>
   <h2 data-k="h_keys"></h2>
-  <!-- comprobación de wallets (vía /api/os + /api/wallet) deprecada -->
+  ${data.public ? `<div class="wcheck">
+    <div class="wcheck-hd" data-k="wc_title"></div>
+    <div class="wcheck-in">
+      <button id="wOsConnect" class="chk wc-go" data-k="wc_os_connect"></button>
+      <span id="wOsMsg" class="wcheck-msg"></span>
+    </div>
+    <div class="wcheck-note" data-k="wc_note"></div>
+    <div class="wallets-box">
+      <div class="wl-hd" data-k="wl_mine"></div>
+      <div id="wList" class="wallet-rows"></div>
+      <div class="wcheck-in" style="margin-top:9px">
+        <input id="wAddr" type="text" autocomplete="off" spellcheck="false" placeholder="0x… , 0x… , 0x…">
+        <button id="wConnect" class="chk" data-k="wc_connect"></button>
+        <button id="wCheck" class="chk wc-go" data-k="wl_add"></button>
+      </div>
+      <div id="wMsg" class="wcheck-msg" hidden></div>
+      <div class="wcheck-note" data-k="wc_adv_note"></div>
+    </div>
+  </div>` : ""}
   <p class="note" data-k="note_keys"></p>
   <div class="scroll"><table id="tKeys"></table></div>
 </section>
