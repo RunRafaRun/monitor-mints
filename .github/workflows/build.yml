@@ -1,18 +1,21 @@
 name: build-dashboard
 
 # Regenera data/dashboard.html (modo público, sin datos personales) y lo publica
-# en Cloudflare Pages. Las claves van como "Secrets" del repo, nunca en el HTML.
+# en Netlify. Las claves van como "Secrets" del repo, nunca en el HTML.
 #
 # Secrets necesarios (Settings -> Secrets and variables -> Actions):
 #   OPENSEA_API_KEY        clave de OpenSea (ya la tenías)
 #   WLMT_URL / WLMT_KEY    fuente WLMT opcional (ya las tenías)
-#   CLOUDFLARE_API_TOKEN   panel CF -> My Profile -> API Tokens ->
-#                          plantilla "Edit Cloudflare Workers" (o permiso
-#                          Account · Cloudflare Pages · Edit)
-#   CLOUDFLARE_ACCOUNT_ID  panel CF -> Workers & Pages -> Account ID (barra derecha)
+#   NETLIFY_AUTH_TOKEN     panel Netlify -> User settings -> Applications ->
+#                          Personal access tokens -> New access token
+#   NETLIFY_SITE_ID        panel Netlify -> tu sitio -> Site configuration ->
+#                          Site details -> Site ID
 #
-# El proyecto de Pages ("monitor-mints") se crea una vez en el panel de Cloudflare
-# (o con `wrangler pages project create monitor-mints --production-branch=master`).
+# El sitio de Netlify ("monitor-mints") se crea una vez en el panel (Add new
+# site -> Deploy manually). Las funciones de /api/* viven en netlify/functions/
+# y se despliegan junto con el sitio. Variables de entorno de las funciones
+# (OPENSEA_API_KEY, BLOCKSCOUT_API_KEY, GEMINI_API_KEY) se ponen en el panel,
+# no aquí.
 
 on:
   push:
@@ -65,16 +68,14 @@ jobs:
       - name: Preparar carpeta de publicación
         run: |
           mkdir -p site/app
-          cp -r web/. site/                           # landing + assets -> mintscope.fun/
-          cp data/dashboard.html site/app/index.html  # radar            -> mintscope.fun/app/
-          cp -r functions site/functions              # Pages Functions  -> /api/*
+          cp -r web/. site/                           # landing + assets -> /
+          cp data/dashboard.html site/app/index.html  # radar            -> /app/
 
-      - name: Desplegar en Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site --project-name=monitor-mints --branch=master --commit-dirty=true
+      - name: Desplegar en Netlify
+        run: npx --yes netlify-cli@latest deploy --prod --dir=site --functions=netlify/functions --message "${{ github.sha }}"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
 
       - name: Revisar predicciones de análisis con IA ya maduras
         run: curl -s -X POST https://mintscope.fun/api/review-predictions || true

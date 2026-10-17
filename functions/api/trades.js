@@ -50,8 +50,9 @@ async function handle({ request, env }) {
     `https://x/trades?v=${CACHE_V}&a=${addr}&c=${chain}&k=${want ? [...want].sort().join(",").slice(0, 400) : "all"}`,
     { method: "GET" },
   );
-  const cache = caches.default;
-  const hit = await cache.match(cacheKey);
+  let cache = null;
+  try { if (typeof caches !== "undefined") cache = caches.default || (await caches.open("mints-api")); } catch {}
+  const hit = cache ? await cache.match(cacheKey).catch(() => null) : null;
   if (hit) return hit;
 
   const base = `https://api.blockscout.com/${cid}/api/v2`;
@@ -101,7 +102,7 @@ async function handle({ request, env }) {
   // modo "solo enumerar colecciones" (para trocear wallets muy activas en lotes)
   if (contractsOnly) {
     const ck2 = new Request(`https://x/tcontracts?v=${CACHE_V}&a=${addr}&c=${chain}`, { method: "GET" });
-    const h2 = await cache.match(ck2);
+    const h2 = cache ? await cache.match(ck2).catch(() => null) : null;
     if (h2) return h2;
     const seen = new Map();
     const add = (ct, name, n, held) => {
@@ -124,7 +125,7 @@ async function handle({ request, env }) {
     const contracts = [...seen.values()].sort((a, b) => (b.held - a.held) || (b.count - a.count));
     const r2 = j({ chain, contracts, truncated, subreq }, 200,
       { "cache-control": `public, max-age=${truncated || !contracts.length ? 120 : 3600}` });
-    if (!truncated && contracts.length) await cache.put(ck2, r2.clone());
+    if (cache && !truncated && contracts.length) await cache.put(ck2, r2.clone()).catch(() => {});
     return r2;
   }
 
@@ -338,7 +339,7 @@ async function handle({ request, env }) {
 
   const body = { chain, ethUsd: rate, positions, truncated, partial: apiErr > 0, updated: new Date().toISOString() };
   const res = j(body, 200, { "cache-control": `public, max-age=${TTL}` });
-  await cache.put(cacheKey, res.clone());
+  if (cache) await cache.put(cacheKey, res.clone()).catch(() => {});
   return res;
 }
 

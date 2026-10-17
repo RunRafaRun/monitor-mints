@@ -23,10 +23,10 @@ export async function onRequestGet({ request, env }) {
     return json({ error: "not_configured" }, 503);
   }
 
-  const cache = caches.default;
+  let cache = null;
+  try { if (typeof caches !== "undefined") cache = caches.default || (await caches.open("mints-api")); } catch {}
   const cacheKey = new Request(`${url.origin}/api/wallet?address=${addr}`, { method: "GET" });
-  const cached = await cache.match(cacheKey);
-  if (cached) return cached;
+  if (cache) { const cached = await cache.match(cacheKey).catch(() => null); if (cached) return cached; }
 
   const H = { accept: "application/json", "x-api-key": env.OPENSEA_API_KEY };
   const chains = {};
@@ -70,7 +70,7 @@ export async function onRequestGet({ request, env }) {
     partial: apiErr > 0,
   };
   const res = json(body, 200, { "cache-control": `public, max-age=${TTL}` });
-  await cache.put(cacheKey, res.clone());
+  if (cache) await cache.put(cacheKey, res.clone()).catch(() => {});
   return res;
 }
 

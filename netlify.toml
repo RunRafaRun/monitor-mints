@@ -1,0 +1,15 @@
+# Config de Netlify. El sitio estático (landing + /app/) se genera en el
+# workflow a la carpeta `site/`; las "funciones" reemplazan a las Pages
+# Functions de Cloudflare y viven en `netlify/functions/`.
+#
+# Variables de entorno necesarias (en el panel: Project -> Site configuration
+# -> Environment variables, con scope "Functions"):
+#   OPENSEA_API_KEY     holdings y floors (wallet.js, trades.js, analyze.js, os.js)
+#   BLOCKSCOUT_API_KEY  P&L on-chain (trades.js)
+#   GEMINI_API_KEY      análisis con IA (analyze.js)   [gratis: aistudio.google.com/apikey]
+
+[build]
+  publish = "site"
+
+[functions]
+  directory = "netlify/functions"
