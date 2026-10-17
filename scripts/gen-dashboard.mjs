@@ -3206,8 +3206,12 @@ recomputeWalletOwned();
 document.getElementById('wCheck')?.addEventListener('click',()=>addWallets(document.getElementById('wAddr').value));
 document.getElementById('wAddr')?.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); addWallets(e.target.value); } });
 document.getElementById('wConnect')?.addEventListener('click',async()=>{
-  if(!window.ethereum){ wMsg(L==='es'?'No hay wallet en el navegador — pega la dirección.':'No browser wallet — paste the address.',1); return; }
-  try{ const acc = await window.ethereum.request({method:'eth_requestAccounts'}); if(acc&&acc[0]) addWallets(acc[0]); }catch(e){}
+  if(!window.ethereum||typeof window.ethereum.request!=='function'){ wMsg(L==='es'?'No hay wallet en el navegador — pega la dirección.':'No browser wallet — paste the address.',1); return; }
+  try{
+    const acc = await osWait(window.ethereum.request({method:'eth_requestAccounts'}),120000);
+    if(acc&&acc[0]) addWallets(acc[0]);
+    else wMsg(L==='es'?'No se obtuvo ninguna cuenta: desbloquea tu wallet y reintenta.':'No account returned: unlock your wallet and try again.',1);
+  }catch(e){ wMsg((L==='es'?'Error: ':'Error: ')+(e.message||e),1); }
 });
 document.getElementById('wList')?.addEventListener('click',e=>{
   const b=e.target.closest('[data-wrm]'); if(b){ removeWallet(b.dataset.wrm); return; }
@@ -3275,14 +3279,22 @@ async function osCheckElig(quiet){
     }
   }catch(e){ osMsg((L==='es'?'Error: ':'Error: ')+e.message,1); }
 }
+// Si la extensión de wallet no contesta (bloqueada, sin extensión real, o el aviso
+// abierto en otra ventana) el await se quedaba colgado para siempre y el botón se
+// quedaba en "Connecting…" sin explicar nada. Con timeout el usuario ve un error y
+// puede reintentar.
+function osWait(p,ms){
+  let t;
+  return Promise.race([p,new Promise((_,rej)=>{t=setTimeout(()=>rej(new Error(L==='es'?'La wallet no responde (¿bloqueada, sin extensión activa, o el aviso en otra ventana?). Reintenta.':'Wallet not responding (locked, no active extension, or prompt in another window?). Try again.')),ms);})]).finally(()=>clearTimeout(t));
+}
 async function osConnect(want){
-  if(!window.ethereum){ osMsg(L==='es'?'Necesitas una wallet en el navegador (MetaMask…).':'You need a browser wallet (MetaMask…).',1); return; }
+  if(!window.ethereum||typeof window.ethereum.request!=='function'){ osMsg(L==='es'?'Necesitas una wallet en el navegador (MetaMask…).':'You need a browser wallet (MetaMask…).',1); return; }
   want=(want||'').toLowerCase();
   try{
     osMsg(L==='es'?'Conectando…':'Connecting…');
-    const accs=await window.ethereum.request({method:'eth_requestAccounts'});
+    const accs=await osWait(window.ethereum.request({method:'eth_requestAccounts'}),120000);
     const addr=(accs&&accs[0]||'').toLowerCase();
-    if(!addr) return;
+    if(!addr){ osMsg(L==='es'?'No se obtuvo ninguna cuenta: desbloquea tu wallet y reintenta.':'No account returned: unlock your wallet and try again.',1); return; }
     if(want && addr!==want){
       const wn=walletLabels[want]||shortAddr(want);
       osMsg((L==='es'?'Tu extensión está en '+shortAddr(addr)+'. Cambia a '+wn+' y vuelve a pulsar.':'Your extension is on '+shortAddr(addr)+'. Switch to '+wn+' and click again.'),1);
@@ -3296,7 +3308,7 @@ async function osConnect(want){
     if(!nr.nonce) throw new Error(nr.error||'nonce');
     const msg=siweMessage(addr,nr.nonce);
     osMsg(L==='es'?'Firma el mensaje en tu wallet (no es una transacción)…':'Sign the message in your wallet (not a transaction)…');
-    const sig=await window.ethereum.request({method:'personal_sign',params:[msg,addr]});
+    const sig=await osWait(window.ethereum.request({method:'personal_sign',params:[msg,addr]}),180000);
     osMsg(L==='es'?'Verificando con OpenSea…':'Verifying with OpenSea…');
     const a=await fetch('/api/os?op=auth',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:msg,signature:sig})}).then(x=>x.json());
     if(a.error) throw new Error(a.error+(a.detail?' — '+a.detail:''));
@@ -3587,8 +3599,12 @@ document.getElementById('pnlRead')?.addEventListener('click',pnlRead);
 document.getElementById('pnlGoFull')?.addEventListener('click',()=>{ if(pnlGrabAddr()) pnlAnalyze(true); });
 document.getElementById('pnlAddr')?.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); pnlMode()==='full' ? (pnlGrabAddr()&&pnlAnalyze(true)) : pnlRead(); } });
 document.getElementById('pnlConnect')?.addEventListener('click',async()=>{
-  if(!window.ethereum){ pnlMsg(L==='es'?'No hay wallet en el navegador — pega la dirección.':'No browser wallet — paste the address.',1); return; }
-  try{ const acc=await window.ethereum.request({method:'eth_requestAccounts'}); if(acc&&acc[0]){ document.getElementById('pnlAddr').value=acc[0]; pnlMode()==='full' ? (pnlGrabAddr()&&pnlAnalyze(true)) : pnlRead(); } }catch(e){}
+  if(!window.ethereum||typeof window.ethereum.request!=='function'){ pnlMsg(L==='es'?'No hay wallet en el navegador — pega la dirección.':'No browser wallet — paste the address.',1); return; }
+  try{
+    const acc=await osWait(window.ethereum.request({method:'eth_requestAccounts'}),120000);
+    if(acc&&acc[0]){ document.getElementById('pnlAddr').value=acc[0]; pnlMode()==='full' ? (pnlGrabAddr()&&pnlAnalyze(true)) : pnlRead(); }
+    else pnlMsg(L==='es'?'No se obtuvo ninguna cuenta: desbloquea tu wallet y reintenta.':'No account returned: unlock your wallet and try again.',1);
+  }catch(e){ pnlMsg((L==='es'?'Error: ':'Error: ')+(e.message||e),1); }
 });
 // pre-rellenar con una dirección ya conocida (OpenSea conectado, o chequeo de holdings)
 { const known = (typeof osAddr!=='undefined'&&osAddr) || pnlAddr || walletList[0] || '';
