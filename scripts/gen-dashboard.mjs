@@ -1041,7 +1041,7 @@ padding:5px 11px;cursor:pointer;font-size:12px;display:inline-flex;align-items:c
       <div class="wcheck-note" data-k="wc_adv_note"></div>
     </div>
   </div>` : ""}
-  ${data.public ? "" : `<p class="note" data-k="note_keys"></p>
+  ${data.public ? `<table id="tKeys" hidden></table>` : `<p class="note" data-k="note_keys"></p>
   <div class="scroll"><table id="tKeys"></table></div>`}
 </section>
 
