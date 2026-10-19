@@ -41,7 +41,7 @@ function parseCard(block) {
   if (!chain) return null;
 
   const num = (v) => (v == null || v === "" ? null : Number(v));
-  const nameM = block.match(/<h1 class="name[^"]*">([^<]*)<\/h1>/);
+  const nameM = block.match(/<h[123] class="name[^"]*">([^<]*)<\/h[123]>/) || block.match(/title="([^"]+)"/);;
   const supplyM =
     block.match(/class="minted">([\d,]+)<\/span><span class="of-max">\/([\d,]+)/) ||
     block.match(/aria-label="Minted ([\d,]+) of ([\d,]+)"/);
