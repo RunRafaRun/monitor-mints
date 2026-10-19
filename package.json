@@ -1,0 +1,24 @@
+{
+  "name": "monitor-mints",
+  "version": "1.0.0",
+  "description": "(antes «Monitor MINTS». La carpeta del proyecto sigue llamándose `Monitor MINTS/`.)",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RunRafaRun/monitor-mints.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/RunRafaRun/monitor-mints/issues"
+  },
+  "homepage": "https://github.com/RunRafaRun/monitor-mints#readme"
+}

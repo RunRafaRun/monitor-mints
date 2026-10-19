@@ -1,0 +1,4 @@
+{
+  "outputDirectory": "site",
+  "buildCommand": "node scripts/gen-dashboard.mjs --public && mkdir -p site/app && cp -r web/. site/ && cp data/dashboard.html site/app/index.html"
+}

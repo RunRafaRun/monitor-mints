@@ -153,8 +153,9 @@ export async function buildData({ pub = false } = {}) {
     { id: "solana", label: "SOL", name: "Solana" },
   ];
 
+  // En modo público el radar viene on-demand de /api/radar — no hace falta fetchear aquí.
   let cards = [];
-  for (const { id } of CHAINS) {
+  if (!pub) for (const { id } of CHAINS) {
     try {
       const cc = await fetchFeed(id);
       for (const c of cc) c.chain = c.chain || id;
@@ -226,9 +227,9 @@ export async function buildData({ pub = false } = {}) {
     })
     .filter((m) => m.status !== "later");
 
-  // --- fuente secundaria: cruce y complemento ---
+  // --- fuente secundaria: cruce y complemento (solo modo local) ---
   let extra = [];
-  for (const { id } of CHAINS) {
+  if (!pub) for (const { id } of CHAINS) {
     const rows = await fetchDailyMints(id).catch(() => []);
     for (const r of rows) r.chain = r.chain || id;
     extra.push(...rows);
@@ -555,7 +556,7 @@ export async function buildData({ pub = false } = {}) {
     if (existsSync(tPath)) { try { trades = JSON.parse(readFileSync(tPath, "utf8")); } catch (e) { console.error("trades.json:", e.message); } }
   }
 
-  const out = { updated: new Date().toISOString(), ethUsd: ETHUSD, mints, ranking, alerts, holdings: holdSummary, chains, public: !!pub, wlElig: weMeta, trades };
+  const out = { updated: new Date().toISOString(), ethUsd: ETHUSD, mints: pub ? [] : mints, ranking, alerts, holdings: holdSummary, chains, public: !!pub, wlElig: weMeta, trades };
   return pub ? stripPersonal(out) : out;
 }
 
@@ -3651,6 +3652,7 @@ pnlSyncClear();
   } }
 
 render();
+if(D.public){(async()=>{try{const r=await fetch('/api/radar',{cache:'no-store'});if(r.ok){const d=await r.json();D.mints=d.mints;D.updated=d.updated;render();}}catch(e){}})();}
 try{ window.scrollTo(0,0); }catch(e){}
 try{ if(!localStorage.getItem('mints_help_seen')) openHelp(); }catch(e){}
 renderWalletList();
