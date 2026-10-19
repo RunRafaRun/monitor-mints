@@ -1,1 +1,1 @@
-export default async () => Response.json({ ok: true, ts: Date.now() });
+export default (req, res) => res.json({ ok: true, ts: Date.now() });
