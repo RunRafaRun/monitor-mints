@@ -1,9 +1,9 @@
 // Feed de mints en vivo desde NFT Trencher. Reemplaza el baking de D.mints en el HTML estático.
-import { fetchFeed, popularityVerdict } from "../../scripts/lib/trencher.mjs";
+import { parseFeed, popularityVerdict } from "../../scripts/lib/trencher.mjs";
 
 export const config = { path: "/api/radar" };
 
-const CHAINS = ["robinhood", "ethereum", "ink", "base", "arc", "monad", "solana"];
+const FEED_URL = "https://cdn.neverfuckingtrade.com/feed.html";
 const KEYPHASE = ["GTD", "FCFS", "WL", "HOLDER"];
 
 export default async () => {
@@ -11,17 +11,18 @@ export default async () => {
   const soonCut = now + 72 * 3600e3;
   const relevant = (g) => KEYPHASE.includes(g.kind) && (g.endMs ?? 0) > now;
 
+  const r = await fetch(`${FEED_URL}?v=${now}`, {
+    headers: { "user-agent": "Mozilla/5.0 (Monitor-MINTS)" },
+  });
+  if (!r.ok) return Response.json({ mints: [], updated: new Date().toISOString(), error: `feed ${r.status}` });
+  const html = await r.text();
+  const allCards = parseFeed(html, null);
+
   const seen = new Map();
-  for (const id of CHAINS) {
-    try {
-      const cards = await fetchFeed(id);
-      for (const c of cards) {
-        c.chain = c.chain || id;
-        const k = c.chain + "|" + c.name.toLowerCase();
-        const score = (x) => (x.hype ?? 0) + (x.x ? 5 : 0) + x.gates.length;
-        if (!seen.has(k) || score(c) > score(seen.get(k))) seen.set(k, c);
-      }
-    } catch { /* cadena no disponible */ }
+  for (const c of allCards) {
+    const k = (c.chain || "robinhood") + "|" + c.name.toLowerCase();
+    const score = (x) => (x.hype ?? 0) + (x.x ? 5 : 0) + x.gates.length;
+    if (!seen.has(k) || score(c) > score(seen.get(k))) seen.set(k, c);
   }
 
   const mints = [...seen.values()].map((c) => {
