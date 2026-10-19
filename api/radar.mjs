@@ -3,18 +3,24 @@ import { parseFeed, popularityVerdict } from "../scripts/lib/trencher.mjs";
 const FEED_URL = "https://cdn.neverfuckingtrade.com/feed.html";
 const KEYPHASE = ["GTD", "FCFS", "WL", "HOLDER"];
 
-export default async () => {
+export default async (req, res) => {
   const now = Date.now();
   const soonCut = now + 72 * 3600e3;
   const relevant = (g) => KEYPHASE.includes(g.kind) && (g.endMs ?? 0) > now;
 
-  // Una sola descarga del feed (~1MB) para todas las cadenas
-  const r = await fetch(`${FEED_URL}?v=${now}`, {
-    headers: { "user-agent": "Mozilla/5.0 (Monitor-MINTS)" },
-  });
-  if (!r.ok) return Response.json({ mints: [], updated: new Date().toISOString(), error: `feed ${r.status}` });
-  const html = await r.text();
-  const allCards = parseFeed(html, null); // null = todas las cadenas
+  let html;
+  try {
+    const r = await fetch(`${FEED_URL}?v=${now}`, {
+      headers: { "user-agent": "Mozilla/5.0 (Monitor-MINTS)" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return res.json({ mints: [], updated: new Date().toISOString(), error: `feed ${r.status}` });
+    html = await r.text();
+  } catch (e) {
+    return res.json({ mints: [], updated: new Date().toISOString(), error: String(e) });
+  }
+
+  const allCards = parseFeed(html, null);
 
   const seen = new Map();
   for (const c of allCards) {
@@ -55,7 +61,6 @@ export default async () => {
 
   mints.sort((a, b) => a.status === b.status ? b.hype - a.hype : a.status === "now" ? -1 : 1);
 
-  return Response.json({ mints, updated: new Date().toISOString() }, {
-    headers: { "Cache-Control": "public, max-age=240" },
-  });
+  res.setHeader("Cache-Control", "public, max-age=240");
+  res.json({ mints, updated: new Date().toISOString() });
 };
